@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "yugioh-deck-drafter"
+version = "0.1.0"
+description = "\"Python app for drafting custom apps with the Ygoprodeck API.\""
+authors = ["DK <davidakasakaitis@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+pyqt6 = "^6.6.0"
+requests-cache = "^1.1.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
