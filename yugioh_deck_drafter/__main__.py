@@ -1,26 +1,28 @@
 import logging
 import sys
 from pathlib import Path
-import typing
+from typing import Optional
 import json
 from pprint import pprint
 from datetime import date, datetime
 from collections import OrderedDict
-from PyQt6 import QtCore
+from PyQt6 import QtCore, QtGui
 # import random
 
 
-from PyQt6.QtCore import (
-    Qt
-)
+from PyQt6.QtCore import (Qt, QRectF, QPointF, QCoreApplication)
 from PyQt6.QtWidgets import (QApplication, QLineEdit, QPushButton, QWidget,
                              QComboBox, QVBoxLayout, QListWidget, QSlider,
                              QHBoxLayout, QListWidgetItem, QDialog,
-                             QGridLayout)
+                             QGridLayout, QToolButton, QSizePolicy)
 
-from PyQt6.QtGui import (QIntValidator)
+from PyQt6.QtGui import (QIntValidator, QPixmapCache, QPixmap, QPainter,
+                         QPaintEvent, QResizeEvent)
+
+from yugioh_deck_drafter import util
 
 import requests_cache
+import requests
 
 NAME = "YU-GI-OH Deck Creator"
 
@@ -33,6 +35,7 @@ class YugiObj:
         self.card_set = self.get_card_set()
 
     def get_card_set(self) -> list:
+        """Collects all card sets for selection."""
         CARD_SET = r"https://db.ygoprodeck.com/api/v7/cardsets.php"
         request = self.CACHE.get(CARD_SET)
         if request.status_code != 200:
@@ -52,18 +55,53 @@ class YugiObj:
         return new_set
 
     def get_card_set_info(self, card_set: str) -> list:
-        INFO = f"https://db.ygoprodeck.com/api/v7/cardinfo.php?cardset={card_set}"
-        request = self.CACHE.get(INFO)
-        if request.status_code != 200:
+        """Returns the cards contained with in the given card set."""
+        URL = f"https://db.ygoprodeck.com/api/v7/cardinfo.php?cardset={card_set}"
+        request = self.CACHE.get(URL)
+        data = request.json()
+        if request.status_code != 200 or not isinstance(data, dict):
             logging.critical("Failed to fetch Card Sets. Exiting!")
             logging.critical(request.status_code)
             sys.exit()
-        return request.json()
 
-    def get_cards(self, card_set: int) -> list:
-        CARD_SET = "https://db.ygoprodeck.com/api/v7/cardinfo.php?banlist=tcg&level=4&sort=name"
-        data = []
-        return
+        return data["data"]
+
+    def get_card_art(self, card_art_id: int) -> QPixmap:
+        """Collects and stores card art for the given piece."""
+        image_store = Path(r"data\images\card_art")
+        image_path = image_store / str(str(card_art_id) + ".jpg")
+
+        if image_path.exists():
+            return util.get_or_insert(image_path)
+
+        URL = f"https://images.ygoprodeck.com/images/cards/{card_art_id}.jpg"
+        request = requests.get(URL)
+        if request.status_code != 200:
+            # Add a default image here in the future.
+            logging.critical("Failed to fetch card image. Skipping!")
+            logging.critical(request.status_code)
+            sys.exit()
+
+        data = request.content
+        with image_path.open("wb") as image_file:
+            image_file.write(data)
+
+        image = util.get_or_insert(image_path, data=data)
+
+        return image
+
+    def card_arche_types(self, card_arche: str) -> list | None:
+        URL = "https://db.ygoprodeck.com/api/v7/cardinfo.php?archetype={}"
+
+        request = self.CACHE.get(URL.format(int))
+
+        if request.status_code != 200:
+            # Add a default image here in the future.
+            logging.critical("Failed to fetch card image. Skipping!")
+            logging.critical(request.status_code)
+            return None
+
+        return request.json()
 
 
 class MainWindow(QWidget):
@@ -71,6 +109,8 @@ class MainWindow(QWidget):
     def __init__(self, parent: QWidget | None, flags=Qt.WindowType.Widget):
         super(MainWindow, self).__init__(parent, flags)
         self.YU_GI = YugiObj()
+
+        QPixmapCache.setCacheLimit(5000)
 
         self.setWindowTitle(NAME)
         self.selected_sets = {}
@@ -138,6 +178,9 @@ class MainWindow(QWidget):
         self.no_packs.setValue(int(value))
 
     def start_creating(self):
+        if not self.selected_sets:
+            logging.error("Select some sets to open.")
+            return
         dialog = SelectioDialog(self)
         if dialog.exec() == 1:
             # Save the deck here
@@ -145,7 +188,7 @@ class MainWindow(QWidget):
 
     def reset_selection(self):
         logging.info("Resetting app to defaults.")
-
+        self.selected_sets = {}
         self.selected_cards = []
         self.selected_side = []
 
@@ -156,6 +199,13 @@ class SelectioDialog(QDialog):
 
     def __init__(self, parent: MainWindow, flags=Qt.WindowType.Dialog):
         super(SelectioDialog, self).__init__(parent, flags)
+
+        p_size = QApplication.primaryScreen().availableGeometry()
+
+        self.setMinimumSize(p_size.width() // 2, p_size.height() // 2)
+
+        self.button_size = p_size.width() // 12
+
         self.setWindowTitle("Card Selector")
 
         self.deck = parent.selected_sets
@@ -164,6 +214,7 @@ class SelectioDialog(QDialog):
         self.main_layout = QVBoxLayout()
 
         self.card_layout = QGridLayout()
+        self.main_layout.addLayout(self.card_layout)
 
         self.button_layout = QHBoxLayout()
         self.cancel_button = QPushButton("Cancel")
@@ -184,10 +235,89 @@ class SelectioDialog(QDialog):
         self.open_pack(test_set_key, self.deck[test_set_key])
 
     def open_pack(self, card_set_name: str, card_set: tuple):
-        print(card_set)
         data = self.data_requests.get_card_set_info(card_set_name)
-        # card_set[1]["set_code"]
-        pprint(data)
+        CARD_PER_PACK = 9
+        self.cards = []
+
+        test_path = Path(r"data\set_data.json")
+
+        # with test_path.open("w") as file:
+        #     d = json.dumps(data)
+        #     file.write(d)
+
+        row = 0
+        for column, item in enumerate(data):
+            row = 0
+            # if column + 1 == CARD_PER_PACK:
+            #     row = 1
+            if column % 2 != 0:
+                row = 2
+                column -= 1
+
+            card_id = item["id"]
+            name = item["name"]
+            desc = item["desc"]
+
+            pix = self.data_requests.get_card_art(card_id)
+
+            card = CardButton(self, pix)
+
+            card.setAccessibleName(name)
+            card.setToolTip(desc)
+
+            self.cards.append(card)
+
+            # if column + 1 == CARD_PER_PACK:
+            #     self.card_layout.addWidget(card, row, column, 1, 2)
+            #     break
+
+            self.card_layout.addWidget(card, row, column, 1, 2)
+
+            if column > 9:
+                break
+
+
+class CardButton(QToolButton):
+    def __init__(self, parent: SelectioDialog, image: QPixmap):
+        super(CardButton, self).__init__(parent)
+        # self.setMinimumWidth(parent.button_size)
+        self.setObjectName("card_button")
+
+        style_sheet = "background: transparent;"
+        QSP = QSizePolicy.Policy
+
+        self.setStyleSheet(style_sheet)
+        self.setSizePolicy(QSP.MinimumExpanding, QSP.MinimumExpanding)
+        self.setCheckable(True)
+
+        self.image = image
+
+    def paintEvent(self, event: QPaintEvent | None):
+        if event is None:
+            return
+
+        CARD_RATIO = 1.4575645756
+        rect = event.rect()
+
+        height = rect.height()
+        width = height - (height * CARD_RATIO)
+
+        image = self.image.scaledToHeight(height, Qt.TransformationMode.SmoothTransformation)
+
+        painter = QPainter(self)
+        HINT = QPainter.RenderHint
+        painter.setRenderHints(HINT.LosslessImageRendering | HINT.Antialiasing)
+
+        pt = QPointF(rect.x(), rect.y())
+        new_rect = QRectF(rect.x(), rect.y(), image.width(), image.height())
+
+        painter.drawPixmap(pt, image, new_rect)
+
+        return super().paintEvent(event)
+
+    def resizeEvent(self, event: QResizeEvent | None) -> None:
+        self.repaint()
+        return super().resizeEvent(event)
 
 
 def main():
@@ -198,6 +328,9 @@ def main():
 
     app = QApplication(sys.argv)
     main_window = MainWindow(None)
+    with open(r"yugioh_deck_drafter\style\stylesheet.qss", "r") as style:
+        main_window.setStyleSheet(style.read())
+
     main_window.show()
 
     sys.exit(app.exec())

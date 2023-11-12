@@ -1,0 +1,11 @@
+QToolButton:checked#card_button {
+    border-color: red;
+    border-width: 5px;
+    border-style: inset;
+}
+
+QToolButton:hover#card_button {
+    border-color: yellow;
+    border-width: 2px;
+    border-style: solid;
+}
