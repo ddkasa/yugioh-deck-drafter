@@ -7,6 +7,10 @@ from pprint import pprint
 from datetime import date, datetime
 from collections import OrderedDict
 from dataclasses import dataclass, field
+
+from functools import partial
+
+import re
 import random
 
 from itertools import groupby
@@ -120,6 +124,9 @@ class YugiObj:
 
         return request.json()
 
+    def grab_card(self, card: str):
+        URL = 
+
     def to_ydk_format(self, cards: list):
         pass
 
@@ -230,19 +237,21 @@ class SelectioDialog(QDialog):
     def __init__(self, parent: MainWindow, flags=Qt.WindowType.Dialog):
         super(SelectioDialog, self).__init__(parent, flags)
 
+        self.setWindowTitle("Card Selector")
+
         self.main_deck = {}
         self.extra_deck = {}
         self.side_deck = {}
 
         self.opened_packs = 0
 
+        self.selection_per_card = 2
+
         p_size = QApplication.primaryScreen().availableGeometry()
 
         self.setMinimumSize(p_size.width() // 2, p_size.height() // 2)
 
         self.button_size = p_size.width() // 12
-
-        self.setWindowTitle("Card Selector")
 
         self.sets = {}
         self.data_requests = parent.YU_GI
@@ -259,7 +268,7 @@ class SelectioDialog(QDialog):
         self.cancel_button.pressed.connect(self.reject)
         self.button_layout.addWidget(self.cancel_button)
 
-        self.button_layout.addStretch(80)
+        self.button_layout.addStretch(60)
 
         self.accept_button = QPushButton("Next")
         self.accept_button.pressed.connect(self.sel_next_set)
@@ -316,6 +325,9 @@ class SelectioDialog(QDialog):
                 if card_set["set_name"] != card_set_name:
                     continue
                 rarity_name = card_set["set_rarity"]
+
+                card["set_rarity"] = rarity_name
+
                 rarity = round(PROB.get(rarity_name, 2.8571428571) * 10)
 
                 for _ in range(rarity):
@@ -324,9 +336,8 @@ class SelectioDialog(QDialog):
         return probabilities
 
     def open_pack(self, card_set: list, probablities: list):
-
         CARD_PER_PACK = 9
-        
+
         cards_set = QButtonGroup()
         cards_set.buttonToggled.connect(self.update_selection)
 
@@ -362,7 +373,7 @@ class CardButton(QToolButton):
         super(CardButton, self).__init__(parent)
         self.data = data
 
-        card_id = data["id"]
+        self.card_id = data["id"]
         name = data["name"]
         desc = data["desc"]
 
@@ -385,7 +396,16 @@ class CardButton(QToolButton):
                            QSP.Preferred)
         self.setCheckable(True)
 
-        self.image = parent.data_requests.get_card_art(card_id)
+        self.assocc = self.filter_assocciated()
+        print(self.assocc)
+
+        self.image = parent.data_requests.get_card_art(self.card_id)
+
+    def filter_assocciated(self) -> list:
+        pattern = r'(?<!\\)"(.*?[^\\])"'
+        matches = re.findall(pattern, self.accessibleDescription())
+
+        return matches
 
     def paintEvent(self, event: QPaintEvent | None):
         if event is None:
@@ -413,13 +433,37 @@ class CardButton(QToolButton):
         pos = QCursor().pos()
         menu = QMenu(self)
 
-        menu.addSection(self.accessibleName())
-        archetype = self.data.get("archetype")
+        race = self.data['race']
+        race_type = menu.addAction(f"Search for {race}")
+        (race_type.triggered  # type: ignore
+         .connect(lambda: self.add_card(race)))
+        attribute = self.data.get("attribute")
+        if attribute is not None:
+            attribute_type = menu.addAction(f"Search for {attribute}.")
+            (attribute_type.triggered  # type: ignore
+             .connect(lambda: self.search_type(attribute)))
 
+        archetype = self.data.get("archetype")
         if archetype is not None:
-            type_action = menu.addAction(archetype)
+            type_action = menu.addAction(f"Search for {archetype}.")
+            (type_action.triggered  # type: ignore
+             .connect(lambda: self.search_type(archetype)))
+
+        if self.data["type"] == "Fusion Monster":
+            menu.addAction("Add Polymerization")
+            menu.addAction("Add Fusion Parts")
+
+        for item in self.assocc:
+            menu.addAction(f"Add {item}")
 
         menu.exec(pos)
+
+    def add_card(self, card_name: str):
+        pass
+
+    def search_type(self, attribute: str):
+        pass
+
 
 def main():
     FMT = "%(levelname)s | %(module)s\\%(funcName)s:%(lineno)d -> %(message)s"
