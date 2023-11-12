@@ -1,23 +1,27 @@
 import logging
 import sys
 from pathlib import Path
-from typing import Optional
-import json
+from typing import Optional, NamedTuple
+from json import dumps
 from pprint import pprint
 from datetime import date, datetime
 from collections import OrderedDict
-from PyQt6 import QtCore, QtGui
-# import random
+from dataclasses import dataclass, field
+import random
 
+from itertools import groupby
+from PyQt6 import QtGui
 
-from PyQt6.QtCore import (Qt, QRectF, QPointF, QCoreApplication)
+from PyQt6.QtCore import (QObject, Qt, QRectF, QPointF, QCoreApplication)
 from PyQt6.QtWidgets import (QApplication, QLineEdit, QPushButton, QWidget,
                              QComboBox, QVBoxLayout, QListWidget, QSlider,
                              QHBoxLayout, QListWidgetItem, QDialog,
-                             QGridLayout, QToolButton, QSizePolicy)
+                             QGridLayout, QToolButton, QSizePolicy,
+                             QMenu, QButtonGroup, QSpinBox)
 
 from PyQt6.QtGui import (QIntValidator, QPixmapCache, QPixmap, QPainter,
-                         QPaintEvent, QResizeEvent)
+                         QPaintEvent, QResizeEvent, QContextMenuEvent,
+                         QCursor)
 
 from yugioh_deck_drafter import util
 
@@ -25,6 +29,19 @@ import requests_cache
 import requests
 
 NAME = "YU-GI-OH Deck Creator"
+
+
+
+
+@dataclass
+class SelectedSet:
+    set_name: str
+    set_code: str
+    data: date
+    card_count: int = field(default=1)
+    count: int = field(default=1)
+    card_set: list = field(default_factory=lambda: [])
+    probabilities: list = field(default_factory=lambda: [])
 
 
 class YugiObj:
@@ -93,7 +110,7 @@ class YugiObj:
     def card_arche_types(self, card_arche: str) -> list | None:
         URL = "https://db.ygoprodeck.com/api/v7/cardinfo.php?archetype={}"
 
-        request = self.CACHE.get(URL.format(int))
+        request = self.CACHE.get(URL.format(card_arche))
 
         if request.status_code != 200:
             # Add a default image here in the future.
@@ -102,6 +119,9 @@ class YugiObj:
             return None
 
         return request.json()
+
+    def to_ydk_format(self, cards: list):
+        pass
 
 
 class MainWindow(QWidget):
@@ -113,12 +133,9 @@ class MainWindow(QWidget):
         QPixmapCache.setCacheLimit(5000)
 
         self.setWindowTitle(NAME)
-        self.selected_sets = {}
+        self.selected_packs: dict[str, SelectedSet] = {}
         self.main_layout = QVBoxLayout()
         self.setLayout(self.main_layout)
-
-        self.selected_cards = []
-        self.side_deck = {}
 
         self.select_layout = QHBoxLayout()
         self.main_layout.addLayout(self.select_layout)
@@ -129,16 +146,21 @@ class MainWindow(QWidget):
         self.select_layout.addWidget(self.select_pack, 50)
         self.select_layout.addStretch(10)
 
+        PACK_MAX = 40
+
         self.no_packs = QSlider()
-        self.no_packs.setTickPosition(QSlider.TickPosition.NoTicks)
-        self.no_packs.setTickInterval(5)
+        self.no_packs.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.no_packs.setTickInterval(10)
         self.no_packs.setOrientation(Qt.Orientation.Horizontal)
         self.no_packs.setMinimum(1)
-        self.no_packs.setMaximum(40)
+        self.no_packs.setValue(1)
+        self.no_packs.setMaximum(PACK_MAX)
         self.select_layout.addWidget(self.no_packs, 50)
 
-        self.no_pack_indi = QLineEdit("0")
-        self.no_pack_indi.setValidator(QIntValidator())
+        self.no_pack_indi = QSpinBox()
+        self.no_pack_indi.setValue(1)
+        self.no_pack_indi.setMinimum(1)
+        self.no_pack_indi.setMaximum(PACK_MAX)
         self.select_layout.addWidget(self.no_pack_indi, 1)
 
         self.list_widget = QListWidget()
@@ -156,29 +178,37 @@ class MainWindow(QWidget):
 
         self.select_pack.currentIndexChanged.connect(self.add_item)
         self.no_packs.valueChanged[int].connect(self.update_indi)
-        self.no_pack_indi.textChanged[str].connect(self.update_indi)
+        self.no_pack_indi.valueChanged[int].connect(self.update_indi)
         self.start_button.pressed.connect(self.start_creating)
 
         self.show()
 
     def add_item(self):
         label = self.select_pack.currentText()
+        if label in self.selected_packs:
+            return
+
         index = self.select_pack.currentIndex()
-        cnt = max(int(self.no_pack_indi.text()), 1)
+        data = self.YU_GI.card_set[index]
+
+        cnt = self.no_pack_indi.value()
 
         item = QListWidgetItem(f"{cnt}x {label}")
         self.list_widget.addItem(item)
 
-        self.selected_sets[label] = (cnt, self.YU_GI.card_set[index])
+        data = SelectedSet(label, data["set_code"], data["tcg_date"],
+                           data["num_of_cards"], cnt)
 
-    def update_indi(self, value: int | str):
-        if isinstance(value, int):
-            self.no_pack_indi.setText(str(value))
-            return
-        self.no_packs.setValue(int(value))
+        self.selected_packs[label] = data
+
+    def update_indi(self, value: int):
+        self.no_packs.blockSignals(True)
+        self.no_packs.setValue(value)
+        self.no_pack_indi.setValue(value)
+        self.no_packs.blockSignals(False)
 
     def start_creating(self):
-        if not self.selected_sets:
+        if not self.selected_packs:
             logging.error("Select some sets to open.")
             return
         dialog = SelectioDialog(self)
@@ -188,7 +218,7 @@ class MainWindow(QWidget):
 
     def reset_selection(self):
         logging.info("Resetting app to defaults.")
-        self.selected_sets = {}
+        self.selected_packs = {}
         self.selected_cards = []
         self.selected_side = []
 
@@ -200,6 +230,12 @@ class SelectioDialog(QDialog):
     def __init__(self, parent: MainWindow, flags=Qt.WindowType.Dialog):
         super(SelectioDialog, self).__init__(parent, flags)
 
+        self.main_deck = {}
+        self.extra_deck = {}
+        self.side_deck = {}
+
+        self.opened_packs = 0
+
         p_size = QApplication.primaryScreen().availableGeometry()
 
         self.setMinimumSize(p_size.width() // 2, p_size.height() // 2)
@@ -208,7 +244,7 @@ class SelectioDialog(QDialog):
 
         self.setWindowTitle("Card Selector")
 
-        self.deck = parent.selected_sets
+        self.sets = {}
         self.data_requests = parent.YU_GI
 
         self.main_layout = QVBoxLayout()
@@ -216,12 +252,20 @@ class SelectioDialog(QDialog):
         self.card_layout = QGridLayout()
         self.main_layout.addLayout(self.card_layout)
 
+        self.cards = []  # Contains the card widgets.
+
         self.button_layout = QHBoxLayout()
         self.cancel_button = QPushButton("Cancel")
         self.cancel_button.pressed.connect(self.reject)
         self.button_layout.addWidget(self.cancel_button)
 
         self.button_layout.addStretch(80)
+
+        self.accept_button = QPushButton("Next")
+        self.accept_button.pressed.connect(self.sel_next_set)
+        self.button_layout.addWidget(self.accept_button)
+
+        self.button_layout.addStretch(20)
 
         self.accept_button = QPushButton("Accept")
         self.accept_button.pressed.connect(self.accept)
@@ -231,78 +275,128 @@ class SelectioDialog(QDialog):
 
         self.setLayout(self.main_layout)
 
-        test_set_key = list(self.deck.keys())[0]
-        self.open_pack(test_set_key, self.deck[test_set_key])
+        self.sel_next_set()
 
-    def open_pack(self, card_set_name: str, card_set: tuple):
-        data = self.data_requests.get_card_set_info(card_set_name)
+    def sel_next_set(self):
+        sel_packs = self.parent().selected_packs
+        if len(self.parent().selected_packs) == self.opened_packs:
+            logging.error("Selection complete!")
+            return
+
+        next_key = list(sel_packs.keys())[self.opened_packs]
+        data = sel_packs[next_key]
+        if data.count == 0:
+            self.opened_packs += 1
+            return self.sel_next_set()
+
+        if not data.probabilities:
+            card_data = self.data_requests.get_card_set_info(next_key)
+            data.card_set = card_data
+            probabilities = self.generate_probab(next_key, card_data)
+            data.probabilities = probabilities
+
+        self.open_pack(data.card_set, data.probabilities)
+
+        data.count -= 1
+
+    def generate_probab(self, card_set_name: str, data: list) -> list:
+        PROB = {
+            "Common": 80,
+            "Rare": 16.6667,
+            "Super Rare": 8.3334,
+            "Ultra Rare": 4.3478260870,
+            "Secret": 2.8571428571,
+        }
+
+        probabilities = []
+
+        for index, card in enumerate(data):
+            card_sets = card["card_sets"]
+            for card_set in card_sets:
+                if card_set["set_name"] != card_set_name:
+                    continue
+                rarity_name = card_set["set_rarity"]
+                rarity = round(PROB.get(rarity_name, 2.8571428571) * 10)
+
+                for _ in range(rarity):
+                    probabilities.append(index)
+
+        return probabilities
+
+    def open_pack(self, card_set: list, probablities: list):
+
         CARD_PER_PACK = 9
-        self.cards = []
-
-        test_path = Path(r"data\set_data.json")
-
-        # with test_path.open("w") as file:
-        #     d = json.dumps(data)
-        #     file.write(d)
+        
+        cards_set = QButtonGroup()
+        cards_set.buttonToggled.connect(self.update_selection)
 
         row = 0
-        for column, item in enumerate(data):
+        for column in range(CARD_PER_PACK):
             row = 0
-            # if column + 1 == CARD_PER_PACK:
-            #     row = 1
             if column % 2 != 0:
                 row = 2
                 column -= 1
 
-            card_id = item["id"]
-            name = item["name"]
-            desc = item["desc"]
-
-            pix = self.data_requests.get_card_art(card_id)
-
-            card = CardButton(self, pix)
-
-            card.setAccessibleName(name)
-            card.setToolTip(desc)
+            random_int = random.randint(0, len(probablities) - 1)
+            pick = probablities[random_int]
+            item = card_set[pick]
+            card = CardButton(item, self)
 
             self.cards.append(card)
-
-            # if column + 1 == CARD_PER_PACK:
-            #     self.card_layout.addWidget(card, row, column, 1, 2)
-            #     break
-
+            cards_set.addButton(card)
             self.card_layout.addWidget(card, row, column, 1, 2)
 
-            if column > 9:
-                break
+    def update_selection(self):
+        pass
+
+    def parent(self) -> MainWindow:
+        return super().parent()  # type: ignore
+
+    def accept(self):
+        self.parent().reset_selection()
+        return super().accept()
 
 
 class CardButton(QToolButton):
-    def __init__(self, parent: SelectioDialog, image: QPixmap):
+    def __init__(self, data: dict, parent: SelectioDialog):
         super(CardButton, self).__init__(parent)
-        # self.setMinimumWidth(parent.button_size)
+        self.data = data
+
+        card_id = data["id"]
+        name = data["name"]
+        desc = data["desc"]
+
+        self.setAccessibleDescription(desc)
+
+        desc = util.new_line_text(desc, 100)
+
+        self.setAccessibleName(name)
+        self.setToolTip(desc)
         self.setObjectName("card_button")
 
         style_sheet = "background: transparent;"
         QSP = QSizePolicy.Policy
 
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(self.show_menu)
+
         self.setStyleSheet(style_sheet)
-        self.setSizePolicy(QSP.MinimumExpanding, QSP.MinimumExpanding)
+        self.setSizePolicy(QSP.Preferred,
+                           QSP.Preferred)
         self.setCheckable(True)
 
-        self.image = image
+        self.image = parent.data_requests.get_card_art(card_id)
 
     def paintEvent(self, event: QPaintEvent | None):
         if event is None:
             return
-
-        CARD_RATIO = 1.4575645756
         rect = event.rect()
-
         height = rect.height()
-        width = height - (height * CARD_RATIO)
 
-        image = self.image.scaledToHeight(height, Qt.TransformationMode.SmoothTransformation)
+        transform_mode = Qt.TransformationMode
+        image = self.image.scaledToHeight(height,
+                                          transform_mode.SmoothTransformation)
+        self.setMaximumWidth(image.width())
 
         painter = QPainter(self)
         HINT = QPainter.RenderHint
@@ -315,10 +409,17 @@ class CardButton(QToolButton):
 
         return super().paintEvent(event)
 
-    def resizeEvent(self, event: QResizeEvent | None) -> None:
-        self.repaint()
-        return super().resizeEvent(event)
+    def show_menu(self):
+        pos = QCursor().pos()
+        menu = QMenu(self)
 
+        menu.addSection(self.accessibleName())
+        archetype = self.data.get("archetype")
+
+        if archetype is not None:
+            type_action = menu.addAction(archetype)
+
+        menu.exec(pos)
 
 def main():
     FMT = "%(levelname)s | %(module)s\\%(funcName)s:%(lineno)d -> %(message)s"
@@ -337,5 +438,4 @@ def main():
 
 
 if __name__ == "__main__":
-
     main()
