@@ -46,3 +46,4 @@ class DateSerializer(JSONEncoder):
         if isinstance(obj, date):
             return obj.isoformat()
         return super().default(obj)
+    

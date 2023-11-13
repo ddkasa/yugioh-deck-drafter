@@ -7,6 +7,7 @@ from pprint import pprint
 from datetime import date, datetime
 from collections import OrderedDict
 from dataclasses import dataclass, field
+from urllib.parse import quote
 
 from functools import partial
 
@@ -55,9 +56,6 @@ class YGOCard(NamedTuple):
     card_type: str
     rarity: str = "Common"
     card_set: Optional[SelectedSet] = None
-
-    def __hash__(self) -> int:
-        return self.id
 
 
 
@@ -139,6 +137,7 @@ class YugiObj:
         return request.json()["data"]
 
     def grab_card(self, name: str) -> dict:
+        name = quote(name, safe="/:?&")
         URL = f"https://db.ygoprodeck.com/api/v7/cardinfo.php?name={name}"
 
         request = self.CACHE.get(URL)
@@ -155,15 +154,19 @@ class YugiObj:
         rarity = "Common"
 
         if isinstance(set_data, SelectedSet):
-            card_sets = data["card_sets"]
+            try:
+                card_sets = data["card_sets"]
+            except TypeError as t:
+                print(t, data)
+                sys.exit()
             for card_set in card_sets:
                 card_set_code = card_set["set_code"]
                 if set_data.set_code in card_set_code:
                     rarity = card_set["set_rarity"]
                     break
 
-        card = YGOCard(data["name"], data["id"], data["type"], 
-                       rarity,  set_data)
+        card = YGOCard(data["name"], data["id"], data["type"], rarity,
+                       set_data)
 
         return card
 
@@ -314,12 +317,17 @@ class SelectionDialog(QDialog):
         self.cancel_button.pressed.connect(self.reject)
         self.button_layout.addWidget(self.cancel_button)
 
+        self.button_layout.addStretch(40)
+
+        self.card_picks_left = QLabel("0")
+        self.button_layout.addWidget(self.card_picks_left)
+
         self.button_layout.addStretch(20)
 
-        self.pack_count = QLabel()
-        self.button_layout.addWidget(self.pack_count)
+        self.cards_picked = QLabel("0")
+        self.button_layout.addWidget(self.cards_picked)
 
-        self.button_layout.addStretch(60)
+        self.button_layout.addStretch(40)
 
         self.accept_button = QPushButton("Next")
         self.accept_button.pressed.connect(self.sel_next_set)
@@ -331,6 +339,8 @@ class SelectionDialog(QDialog):
         self.accept_button.pressed.connect(self.accept)
         self.button_layout.addWidget(self.accept_button)
 
+        self.picked_cards: list[CardButton] = []
+
         self.main_layout.addLayout(self.button_layout)
 
         self.setLayout(self.main_layout)
@@ -338,12 +348,24 @@ class SelectionDialog(QDialog):
         self.sel_next_set()
 
     def sel_next_set(self):
-        self.main_deck.extend(self.picked_cards)
+        if self.selection_per_pack > 0:
+            logging.error("Select at least 2 cards to open the next pack.")
+            return
+
+        if self.picked_cards:
+            data = [item.card_model for item in self.picked_cards]
+            self.main_deck.extend(data)
+
+        self.update_counter_label()
 
         sel_packs = self.parent().selected_packs
         if len(self.parent().selected_packs) == self.opened_packs:
             logging.error("Selection complete!")
             return
+
+        self.clean_layout()
+
+
 
         next_key = list(sel_packs.keys())[self.opened_packs]
         set_data = sel_packs[next_key]
@@ -359,7 +381,6 @@ class SelectionDialog(QDialog):
 
         self.open_pack(set_data.card_set, set_data.probabilities, set_data)
 
-        self.picked_cards = []
 
         set_data.count -= 1
 
@@ -395,22 +416,50 @@ class SelectionDialog(QDialog):
 
         return probabilities
 
+    def clean_layout(self):
+        for i in range(self.card_layout.count()):
+            item = self.card_layout.itemAt(i)
+            if item is None:
+                continue
+
+            widget: CardButton = item.widget()  # type: ignore
+            if widget is None:
+                continue
+            widget.deleteLater()
+            try:
+                idx = self.picked_cards.index(widget)
+                self.picked_cards.pop(idx)
+            except ValueError:
+                pass
+            try:
+                idx = self.card_buttons.index(widget)
+                self.card_buttons.pop(idx)
+            except ValueError:
+                pass
+
+            widget.setParent(None)
+
+        self.picked_cards = []
+        self.card_buttons = []
+
     def open_pack(self,
                   card_set: list,
                   probablities: list,
                   set_data: SelectedSet):
-        logging.debug(f"Opening a pack from {set_data.set_name}.")
+        (logging.debug(f"Opening a pack from {set_data.set_name}."
+                       .center(60,"-")))
 
-        # for card in self.card_buttons:
-            # card.deleteLater()
-            # card.setParent(None)
+
 
         self.selection_per_pack += 2
+        logging.debug(f"{self.selection_per_pack} Cards Plus Available.")
+        self.update_counter_label()
 
         CARD_PER_PACK = 9
 
-        row = 0
+        row = 0        
         for column in range(CARD_PER_PACK):
+            print(column)
             if column == 8:
                 prob = self.generate_probab(set_data.set_name, card_set,
                                             extra=True)
@@ -422,15 +471,15 @@ class SelectionDialog(QDialog):
 
             row = 0
             if column % 2 != 0:
-                row = 2
+                row = 1
                 column -= 1
 
-            item = card_set[pick]
-            card = CardButton(item, set_data, self)
+            card_data = card_set[pick]
+            card = CardButton(card_data, set_data, self)
 
             self.card_buttons.append(card)
             card.toggled.connect(self.update_selection)
-            self.card_layout.addWidget(card, row, column, 1, 2)
+            self.card_layout.addWidget(card, row, column, 1, 1)
 
     def parent(self) -> MainWindow:
         return super().parent()  # type: ignore
@@ -444,30 +493,38 @@ class SelectionDialog(QDialog):
 
         for item in self.card_buttons:
             item.blockSignals(True)
-            c_model = item.card_model
+            item_in = item in self.picked_cards
 
-            print(self.selection_per_pack)
-            print(item.isChecked(), self.selection_per_pack > 0)   
-            print(c_model in self.picked_cards, "sel")
+            fus_monster = item.card_model.card_type == "Fusion Monster"
 
-            if item.isChecked() and self.selection_per_pack > 0 and c_model not in self.picked_cards:
-                print("adding card")
-                self.picked_cards.append(c_model)
-                if c_model.card_type != "Fusion Monster":
-                    self.selection_per_pack -= 1    
+            print(item_in, item.accessibleName())
 
-            elif c_model in self.picked_cards:
-                if not item.isChecked():
-                    print("removing card")
+            if item.isChecked() and (self.selection_per_pack > 0 or fus_monster):
+                if not item_in:
+                    print(f"adding card {item.accessibleName()}")
+                    self.picked_cards.append(item)
+                    if not fus_monster:
+                        self.selection_per_pack -= 1
 
-                    index = self.picked_cards.index(c_model)
-                    self.picked_cards.pop(index)
-                    if c_model.card_type != "Fusion Monster":
-                        self.selection_per_pack += 1
-            elif c_model not in self.picked_cards:
+            elif not item.isChecked() and item_in:
+                print(f"removing card {item.accessibleName()}")
+                index = self.picked_cards.index(item)
+                self.picked_cards.pop(index)
+                if not fus_monster:
+                    self.selection_per_pack += 1
+
+            elif not item_in and not fus_monster:
                 item.setChecked(False)
 
+            self.update_counter_label()
+
             item.blockSignals(False)
+
+    def update_counter_label(self):
+        remaining = f"Remaining Picks: {self.selection_per_pack}"
+        self.card_picks_left.setText(remaining)
+        picked = len(self.main_deck)
+        self.cards_picked.setText(f"Card Total: {picked}")
 
 
 class CardButton(QToolButton):
@@ -487,7 +544,7 @@ class CardButton(QToolButton):
 
         desc = util.new_line_text(desc, 100)
         self.setAccessibleName(name)
-        self.setToolTip(desc)
+        self.setToolTip(name + "\n" + desc)
         self.setObjectName("card_button")
 
         QSP = QSizePolicy.Policy
@@ -508,7 +565,9 @@ class CardButton(QToolButton):
 
         return matches
 
-    def paintEvent(self, event: QPaintEvent):
+    def paintEvent(self, event: QPaintEvent | None):
+        if event is None:
+            return super().paintEvent(event)
         rect = event.rect()
         height = rect.height()
 
@@ -577,20 +636,22 @@ class CardButton(QToolButton):
         if isinstance(card_name, (list, set)):
             for item in card_name:
                 self.get_card(item)
-
             return
 
-        logging.info(f"Adding {card_name} to selection.")
         data = self.parent().data_requests.grab_card(card_name)
+        if data is None:
+            return
+        logging.info(f"Adding {card_name} to selection.")
 
-        c_mdl = self.parent().data_requests.create_card(data, self.card_set)
+        c_mdl = self.parent().data_requests.create_card(data[0], self.card_set)
 
         self.add_card(c_mdl)
 
     def add_card(self, card: YGOCard):
         self.parent().main_deck.append(card)
         if card.card_type != "Fusion Monster":
-            self.parent().selection_per_pack += 1
+            self.parent().selection_per_pack -= 1
+        self.parent().update_counter_label()
 
     # def search_type(self, attribute: str, subtype: str = "archetype"):
     #     dialog = SearchDialog(attribute, subtype, self.parent())
