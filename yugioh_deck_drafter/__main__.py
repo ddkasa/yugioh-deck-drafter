@@ -9,7 +9,7 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 from urllib.parse import quote
 
-from functools import partial
+from functools import partial, cache
 
 import re
 import random
@@ -154,11 +154,7 @@ class YugiObj:
         rarity = "Common"
 
         if isinstance(set_data, SelectedSet):
-            try:
-                card_sets = data["card_sets"]
-            except TypeError as t:
-                print(t, data)
-                sys.exit()
+            card_sets = data["card_sets"]
             for card_set in card_sets:
                 card_set_code = card_set["set_code"]
                 if set_data.set_code in card_set_code:
@@ -353,10 +349,7 @@ class SelectionDialog(QDialog):
             return
 
         if self.picked_cards:
-            data = [item.card_model for item in self.picked_cards]
-            self.main_deck.extend(data)
-
-        self.update_counter_label()
+            self.add_card_to_deck()
 
         sel_packs = self.parent().selected_packs
         if len(self.parent().selected_packs) == self.opened_packs:
@@ -364,8 +357,6 @@ class SelectionDialog(QDialog):
             return
 
         self.clean_layout()
-
-
 
         next_key = list(sel_packs.keys())[self.opened_packs]
         set_data = sel_packs[next_key]
@@ -381,8 +372,18 @@ class SelectionDialog(QDialog):
 
         self.open_pack(set_data.card_set, set_data.probabilities, set_data)
 
-
         set_data.count -= 1
+
+    def add_card_to_deck(self):
+        for cardbutton in self.picked_cards:
+            card = cardbutton.card_model
+
+            if self.check_fusion_monster(card):
+                self.extra_deck.append(card)
+
+            self.main_deck.append(card)
+
+        self.update_counter_label()
 
     def generate_probab(self, card_set_name: str, data: list,
                         extra: bool = False) -> list:
@@ -495,7 +496,7 @@ class SelectionDialog(QDialog):
             item.blockSignals(True)
             item_in = item in self.picked_cards
 
-            fus_monster = item.card_model.card_type == "Fusion Monster"
+            fus_monster = self.check_fusion_monster(item.card_model)
 
             print(item_in, item.accessibleName())
 
@@ -525,6 +526,11 @@ class SelectionDialog(QDialog):
         self.card_picks_left.setText(remaining)
         picked = len(self.main_deck)
         self.cards_picked.setText(f"Card Total: {picked}")
+
+    def check_fusion_monster(self, card: YGOCard) -> bool:
+        return card.card_type == "Fusion Monster"
+    
+    
 
 
 class CardButton(QToolButton):
@@ -589,6 +595,9 @@ class CardButton(QToolButton):
         super().paintEvent(event)
 
     def show_menu(self):
+        if self.parent().selection_per_pack < 1:
+            return
+
         pos = QCursor().pos()
         menu = QMenu(self)
 
