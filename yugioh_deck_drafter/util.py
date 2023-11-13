@@ -6,6 +6,8 @@ from datetime import date
 
 from PyQt6.QtGui import QPixmap, QPixmapCache
 
+from PyQt6.QtWidgets import QLayout
+
 
 def get_or_insert(pixmap_path: str | Path, format: str = ".jpg",
                   data: Optional[bytes] = None) -> QPixmap:
@@ -41,9 +43,20 @@ def new_line_text(text: str, max_line_length: int) -> str:
     return name_processed
 
 
+def clean_layout(layout: QLayout):
+    for i in range(layout.count()):
+        item = layout.itemAt(i)
+        if item is None:
+            continue
+        widget = item.widget()
+        if widget is None:
+            continue
+        widget.deleteLater()
+        widget.setParent(None)
+
+
 class DateSerializer(JSONEncoder):
     def default(self, obj):
         if isinstance(obj, date):
             return obj.isoformat()
         return super().default(obj)
-    
