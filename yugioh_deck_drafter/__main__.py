@@ -86,7 +86,7 @@ class YugiObj:
             item["tcg_date"] = datetime.strptime(d, '%Y-%m-%d').date()
             new_set.append(item)
 
-        new_set.sort(key=lambda x: x["tcg_date"])
+        new_set.sort(key=lambda x: x["set_name"])
         return new_set
 
     def get_card_set_info(self, card_set: SelectedSet) -> list[YGOCard]:
@@ -177,10 +177,30 @@ class YugiObj:
         return card
 
     def to_ygodk_format(self,
-                        main: list,
-                        extra: list,
-                        bonus: list,
+                        main: list[YGOCard],
+                        extra: list[YGOCard],
+                        side: list[YGOCard],
                         path: Path) -> bool:
+
+        def create_text(data: list[YGOCard]) -> str:
+            cards = [str(item.card_id) for item in data]
+            mn_text = "\n".join(cards)
+            return mn_text
+
+        main_ids = create_text(main)
+        extra_ids = create_text(extra)
+        side_ids = create_text(side)
+
+        text = "#main\n"
+        text += main_ids + "\n"
+        text += "#extra\n"
+        text += extra_ids + "\n"
+        text += "!side\n"
+        text += side_ids + "\n"
+
+        with path.open("w", encoding="utf-8") as file:
+            file.write(text)
+
         return True
 
 
@@ -202,6 +222,7 @@ class MainWindow(QWidget):
 
         self.select_pack = QComboBox()
         names = [item["set_name"] for item in self.YU_GI.card_set]
+
         self.select_pack.addItems(names)
         self.select_layout.addWidget(self.select_pack, 50)
         self.select_layout.addStretch(10)
@@ -298,6 +319,7 @@ class SelectionDialog(QDialog):
         self.side_deck = []
 
         self.opened_packs = 0
+        self.total_packs = 0
 
         self.selection_per_pack = 0
 
@@ -327,6 +349,12 @@ class SelectionDialog(QDialog):
 
         self.button_layout.addStretch(40)
 
+        self.check_deck_button = QPushButton("Check Deck")
+        self.button_layout.addWidget(self.check_deck_button)
+        self.check_deck_button.pressed.connect(self.check_deck)
+
+        self.button_layout.addStretch(20)
+
         self.card_picks_left = QLabel("0")
         self.button_layout.addWidget(self.card_picks_left)
 
@@ -334,6 +362,11 @@ class SelectionDialog(QDialog):
 
         self.cards_picked = QLabel("0")
         self.button_layout.addWidget(self.cards_picked)
+
+        self.button_layout.addStretch(20)
+
+        self.packs_opened = QLabel("1")
+        self.button_layout.addWidget(self.packs_opened)
 
         self.button_layout.addStretch(40)
 
@@ -367,19 +400,31 @@ class SelectionDialog(QDialog):
             self.add_card_to_deck()
 
         main_deck_len = len(self.main_deck)
+
         if (any(main_deck_len >= x for x in {20, 30, 40, 50})
-           and self.discard_stage_cnt < 4):
+           and self.discard_stage_cnt < 4) and self.total_packs % 10 == 0:
             self.discard_stage()
 
-        sel_packs = self.parent().selected_packs
         if len(self.parent().selected_packs) == self.opened_packs:
             logging.error("Selection complete!")
-            return
+            path = Path(r"data\saves\test.ydk")
+            self.data_requests.to_ygodk_format(self.main_deck,
+                                               self.extra_deck,
+                                               self.side_deck,
+                                               path)
+            return self.accept()
 
-        self.clean_layout()
+        sel_packs = self.parent().selected_packs
 
         next_key = list(sel_packs.keys())[self.opened_packs]
         set_data = sel_packs[next_key]
+
+
+        self.clean_layout()
+
+        self.total_packs += 1
+        self.packs_opened.setText(f"Packs Opened: {self.total_packs}")
+
         if set_data.count == 0:
             self.opened_packs += 1
             return self.sel_next_set()
@@ -529,14 +574,23 @@ class SelectionDialog(QDialog):
         return card.card_type == "Fusion Monster"
 
     def discard_stage(self):
-        dialog = DeckViewer(self, discard=10)
+        discard = round(len(self.main_deck), -1) - 8
+        print(discard)
+        dialog = DeckViewer(self, discard=discard)
 
         dialog.setWindowTitle("Card Removal Stage")
 
         if dialog.exec() == 1:
-            pass
+            self.main_deck = dialog.new_deck
+            self.extra_deck = dialog.new_extra
+            self.side_deck = dialog.new_sideg
 
-        self.discard_stage_cnt += 1
+            self.discard_stage_cnt += 1
+
+    def check_deck(self):
+        deck = DeckViewer(self)
+        if deck == deck.exec():
+            pass
 
 
 class CardButton(QToolButton):
@@ -684,6 +738,11 @@ class CardButton(QToolButton):
             (fusion.triggered  # type: ignore
              .connect(lambda: self.get_card(self.assocc)))
 
+            for item in self.assocc:
+                acc = menu.addAction(f"Add {item}")
+                (acc.triggered  # type: ignore
+                 .connect(partial(self.get_card, item)))
+
         else:
             for item in self.assocc:
                 acc = menu.addAction(f"Add {item}")
@@ -776,9 +835,9 @@ class DeckViewer(QDialog):
         self.side_deck_widget = DeckSlider(self)
         self.main_layout.addWidget(self.side_deck_widget, 20)
 
-        self.fill_deck(parent.extra_deck,
+        self.fill_deck(parent.side_deck,
                        self.extra_deck_widget.main_widget.blayout,
-                       self.extra)
+                       self.side)
 
         self.button_layout = QHBoxLayout()
 
@@ -786,12 +845,18 @@ class DeckViewer(QDialog):
             self.cancel_button = QPushButton()
             self.cancel_button.pressed.connect(self.reject)
             self.button_layout.addWidget(self.cancel_button)
+        else:
+            self.removal_counter = QLabel()
+            self.removal_count()
+            self.button_layout.addWidget(self.removal_counter)
 
         self.button_layout.addStretch(50)
 
         self.accept_button = QPushButton("Accept")
         self.accept_button.pressed.connect(self.accept)
         self.button_layout.addWidget(self.accept_button)
+
+        self.main_layout.addLayout(self.button_layout)
 
         self.setLayout(self.main_layout)
 
@@ -805,9 +870,6 @@ class DeckViewer(QDialog):
         row = 0
         column = 0
         while cards:
-            # print(cards)
-            # if not cards:
-            #     break
             if column % MAX_COLUMNS == 0 and column:
                 row += 1
                 column = 0
@@ -822,16 +884,18 @@ class DeckViewer(QDialog):
             card = cards.pop(0)
 
             card_button = CardButton(card, self.parent(), self)
+            card_button.toggled.connect(self.removal_count)
             card_button.setChecked(check)
 
             card_button.setSizePolicy(QSP.MinimumExpanding,
-                                      QSP.MinimumExpanding)  
+                                      QSP.MinimumExpanding)
             card_button.acceptDrops()
             container.append(card_button)
             if isinstance(layout, QHBoxLayout):
                 layout.addWidget(card_button,
                                  alignment=Qt.AlignmentFlag.AlignLeft)
                 continue
+
             layout.addWidget(card_button, row, column, 1, 1)
 
     def mv_card(self, card: CardButton, deck: Literal["main", "side"]):
@@ -870,11 +934,27 @@ class DeckViewer(QDialog):
         return super().keyPressEvent(event)
 
     def count(self) -> int:
-        return len(self.deck) + len(self.side)
+        count = 0
+        for item in self.deck:
+            if not item.isChecked():
+                count += 1
 
-    def allowed_count(self) -> int:
-        allowed_count = len(self.deck) + (len(self.deck) // 5)
-        return allowed_count
+        for item in self.side:
+            if not item.isChecked():
+                count += 1
+
+        return count
+
+    # def allowed_count(self) -> int:
+    #     closest_ten = round(len(self.deck), -1)
+
+    #     allowed_count = (closest_ten - 10) + (closest_ten // 5)
+    #     return allowed_count
+
+    @pyqtSlot()
+    def removal_count(self):
+        c = self.count() - self.discard
+        self.removal_counter.setText(f"Remove: {c}")
 
     def accept(self):
 
@@ -882,9 +962,11 @@ class DeckViewer(QDialog):
             for item in source:
                 if not item.isChecked():
                     container.append(item.card_model)
+                    continue
+                item.deleteLater()
 
-        if self.count() != self.allowed_count():
-            cnt = self.allowed_count() - self.count()
+        if self.count() == self.discard:
+            cnt = (self.count() - self.discard)
             QMessageBox.warning(self, "Remove More Cards",
                                 f"Remove {cnt} more card(s)",
                                 QMessageBox.StandardButton.Ok)
