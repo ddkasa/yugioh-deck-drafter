@@ -3,15 +3,15 @@
 } */
 
 QToolButton {
-    background: transparent;
+    background-color: transparent;
 }
 
 QToolButton#card_button {
-    background: transparent;
+    background-color: transparent;
 }
 
 QToolButton:checked#card_button {
-    background: transparent;
+    background-color: transparent;
     border-color: red;
     border-width: 10px;
     border-style: inset;
@@ -19,7 +19,7 @@ QToolButton:checked#card_button {
 }
 
 QToolButton:hover:checked#card_button {
-    background: transparent;
+    background-color: transparent;
     border-color: darkyellow;
     border-width: 10px;
     border-style: inset;
@@ -27,7 +27,7 @@ QToolButton:hover:checked#card_button {
 }
 
 QToolButton:hover#card_button {
-    background: transparent;
+    background-color: transparent;
     border-color: yellow;
     border-width: 5px;
     border-style: solid;

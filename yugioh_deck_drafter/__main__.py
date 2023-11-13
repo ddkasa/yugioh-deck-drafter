@@ -15,22 +15,24 @@ import re
 import random
 
 from itertools import groupby
-from PyQt6 import QtCore, QtGui
+from PyQt6 import QtCore
 
 import requests_cache
 import requests
 
-from PyQt6.QtCore import (QObject, Qt, QRectF, QPointF, QCoreApplication)
+from PyQt6.QtCore import (QObject, Qt, QRectF, QPointF, QCoreApplication,
+                          pyqtSignal, pyqtSlot)
+
 from PyQt6.QtWidgets import (QApplication, QLineEdit, QPushButton, QWidget,
                              QComboBox, QVBoxLayout, QListWidget, QSlider,
                              QHBoxLayout, QListWidgetItem, QDialog,
                              QGridLayout, QToolButton, QSizePolicy,
                              QMenu, QButtonGroup, QSpinBox, QCompleter,
-                             QScrollArea, QLabel)
+                             QScrollArea, QLabel, QStyle)
 
 from PyQt6.QtGui import (QIntValidator, QPixmapCache, QPixmap, QPainter,
                          QPaintEvent, QResizeEvent, QContextMenuEvent,
-                         QCursor)
+                         QCursor, QPalette, QDragEnterEvent, QDropEvent)
 
 
 
@@ -56,7 +58,6 @@ class YGOCard(NamedTuple):
     card_type: str
     rarity: str = "Common"
     card_set: Optional[SelectedSet] = None
-
 
 
 class YugiObj:
@@ -291,6 +292,8 @@ class SelectionDialog(QDialog):
 
         self.selection_per_pack = 0
 
+        self.discard_stage_cnt = 0
+
         p_size = QApplication.primaryScreen().availableGeometry()
 
         self.setMinimumSize(p_size.width() // 2, p_size.height() // 2)
@@ -350,6 +353,10 @@ class SelectionDialog(QDialog):
 
         if self.picked_cards:
             self.add_card_to_deck()
+
+        if (len(self.main_deck) in {20, 30, 40, 50}
+           and self.discard_stage_cnt < 4):
+            self.discard_stage()
 
         sel_packs = self.parent().selected_packs
         if len(self.parent().selected_packs) == self.opened_packs:
@@ -500,7 +507,8 @@ class SelectionDialog(QDialog):
 
             print(item_in, item.accessibleName())
 
-            if item.isChecked() and (self.selection_per_pack > 0 or fus_monster):
+            if (item.isChecked()
+               and (self.selection_per_pack > 0 or fus_monster)):
                 if not item_in:
                     print(f"adding card {item.accessibleName()}")
                     self.picked_cards.append(item)
@@ -529,14 +537,21 @@ class SelectionDialog(QDialog):
 
     def check_fusion_monster(self, card: YGOCard) -> bool:
         return card.card_type == "Fusion Monster"
-    
-    
+
+    def discard_stage(self):
+        dialog = DeckViewer(self)
+
+        if dialog.exec() == 1:
+            pass
+
+        self.discard_stage_cnt += 1
 
 
 class CardButton(QToolButton):
     def __init__(self, data: dict, card_set: Optional[SelectedSet],
                  parent: SelectionDialog):
-        super(CardButton, self).__init__(parent)
+        super(CardButton, self).__init__()
+        self.setStyle(None)
 
         self.card_set = card_set
         self.card_model = parent.data_requests.create_card(data, card_set)
@@ -574,6 +589,7 @@ class CardButton(QToolButton):
     def paintEvent(self, event: QPaintEvent | None):
         if event is None:
             return super().paintEvent(event)
+
         rect = event.rect()
         height = rect.height()
 
@@ -662,23 +678,109 @@ class CardButton(QToolButton):
             self.parent().selection_per_pack -= 1
         self.parent().update_counter_label()
 
-    # def search_type(self, attribute: str, subtype: str = "archetype"):
-    #     dialog = SearchDialog(attribute, subtype, self.parent())
-
-    #     if dialog.exec() == 1:
-    #         self.add_card(dialog.selected_item)
 
     def parent(self) -> SelectionDialog:
         return super().parent()  # type: ignore
 
-    # def resizeEvent(self, event: QResizeEvent | None) -> None:
-    #     size = self.parent().size()
-    #     width = size.width() // 10
-    #     height = size.height() // 10
 
-    #     self.resize(width, height)
+class DeckViewer(QDialog):
 
-    #     return super().resizeEvent(event)
+    def __init__(self,
+                 parent: SelectionDialog) -> None:
+        super(DeckViewer, self).__init__(parent)
+
+        self.deck = []
+        self.extra_deck = []
+        self.side_deck = []
+
+        self.main_layout = QVBoxLayout()
+        self.deck_area = QScrollArea()
+        self.deck_area.setWidgetResizable(True)
+
+        self.deck_area_widget = QWidget()
+        self.deck_area.setWidget(self.deck_area_widget)
+        self.deck_layout = QGridLayout()
+        self.deck_area_widget.setLayout(self.deck_layout)
+
+        for card in parent.main_deck:
+            cards = CardButton()
+
+        self.main_layout.addWidget(self.deck_area, 60)
+
+        self.extra_deck_widget = DeckSlider(self)
+        self.main_layout.addWidget(self.extra_deck_widget, 20)
+
+        self.side_deck_widget = DeckSlider(self)
+        self.main_layout.addWidget(self.side_deck_widget, 20)
+
+        self.button_layout = QHBoxLayout()
+
+        self.cancel_button = QPushButton()
+        self.button_layout.addWidget(self.cancel_button)
+
+        self.setLayout(self.main_layout)
+
+
+class DeckSlider(QScrollArea):
+
+    def __init__(self, parent: DeckViewer) -> None:
+        super().__init__(parent)
+
+        self.setWidgetResizable(True)
+
+        self.main_widget = DragWidget(Qt.Orientation.Horizontal)
+
+        self.setWidget(self.main_widget)
+
+
+class DragWidget(QWidget):
+    orderChanged = pyqtSignal()
+
+    def __init__(self, orientation=Qt.Orientation.Vertical):
+        super().__init__()
+        self.setAcceptDrops(True)
+        self.orientation = orientation
+
+        QSP = QSizePolicy.Policy
+        self.setSizePolicy(QSP.Preferred, QSP.Preferred)
+
+        if self.orientation == Qt.Orientation.Vertical:
+            self.blayout = QVBoxLayout()
+        else:
+            self.blayout = QHBoxLayout()
+
+        self.setLayout(self.blayout)
+
+    def add_drag_widget(self, card: CardButton):
+        self.blayout.addWidget(card)
+
+    def dragEnterEvent(self, event: QDragEnterEvent):
+        event.accept()
+
+    def dropEvent(self, event: QDropEvent):
+        """Checks for a drop event and the position in order to choose where
+           to put it."""
+        pos = event.position()
+        widget: CardButton = event.source()  # type: ignore
+
+        for n in range(self.blayout.count()):
+            w = self.blayout.itemAt(n).widget()
+            if self.orientation == Qt.Orientation.Vertical:
+                drop_here = pos.y() < w.y() + w.size().height() // 2
+            else:
+                drop_here = pos.x() < w.x() + w.size().width() // 2
+
+            if drop_here:
+                self.blayout.insertWidget(n - 1, widget)
+                self.orderChanged.emit()
+                break
+
+        event.accept()
+
+    @pyqtSlot(int)
+    def delete_widget(self, widget: CardButton):
+        widget.setParent(None)  # type: ignore
+        self.orderChanged.emit()
 
 
 class SearchDialog(QDialog):
@@ -775,8 +877,8 @@ def main():
     logging.info(f"Starting {NAME}!")
 
     app = QApplication(sys.argv)
-    # app.setStyle('Fusion')
     main_window = MainWindow(None)
+
     with open(r"yugioh_deck_drafter\style\stylesheet.qss", "r") as style:
         main_window.setStyleSheet(style.read())
 
