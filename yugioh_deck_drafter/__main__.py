@@ -16,7 +16,7 @@ import requests_cache
 import requests
 
 from PyQt6.QtCore import (Qt, QRectF, pyqtSignal, pyqtSlot, QTimer, QSize,
-                          QPoint)
+                          QPoint, QElapsedTimer)
 
 from PyQt6.QtWidgets import (QApplication, QLineEdit, QPushButton, QWidget,
                              QComboBox, QVBoxLayout, QListWidget, QSlider,
@@ -320,6 +320,9 @@ class MainWindow(QWidget):
             return
         row = self.list_widget.row(item)
         removed_item = self.list_widget.takeItem(row)
+        label = removed_item.text().split("x ")[-1]
+        self.selected_packs.pop(label)
+
         del removed_item
 
     def update_indi(self, value: int):
@@ -331,8 +334,12 @@ class MainWindow(QWidget):
     @pyqtSlot()
     def start_creating(self):
         if not self.selected_packs:
-            logging.error("Select some sets to open.")
+            logging.info("Select some sets to open.")
+            QMessageBox.information(
+                self, "Select Card Set",
+                "Select at least one set to start drafting.")
             return
+
         logging.info("Opening Selection Dialog.")
         dialog = SelectionDialog(self)
 
@@ -346,7 +353,7 @@ class MainWindow(QWidget):
             self.YU_GI.to_ygodk_format(dialog.main_deck, dialog.extra_deck,
                                        dialog.side_deck, path)
 
-            QMessageBox.information(self, "File was saved.",
+            QMessageBox.information(self, "File Saved",
                                     f"File was saved to {path}!",
                                     QMessageBox.StandardButton.Ok)
             return
@@ -389,6 +396,8 @@ class SelectionDialog(QDialog):
         self.data_requests = parent.YU_GI
 
         self.main_layout = QVBoxLayout()
+        self.main_layout.addStretch(1)
+        self.stretch = self.main_layout.itemAt(0)
 
         self.card_layout = QGridLayout()
         self.card_layout.setContentsMargins(1, 1, 1, 1)
@@ -424,7 +433,7 @@ class SelectionDialog(QDialog):
 
         self.button_layout.addStretch(40)
 
-        self.next_button = QPushButton("Next")
+        self.next_button = QPushButton("Start")
         self.next_button.pressed.connect(self.sel_next_set)
         self.button_layout.addWidget(self.next_button)
 
@@ -434,7 +443,8 @@ class SelectionDialog(QDialog):
 
         self.setLayout(self.main_layout)
 
-        self.sel_next_set()
+    def exec(self) -> int:
+        return super().exec()
 
     def sel_next_set(self):
         """
@@ -442,6 +452,9 @@ class SelectionDialog(QDialog):
         >>> Might need some refactor in the futureto split it apart into
             multiple functions.
         """
+        self.main_layout.removeItem(self.stretch)
+        self.next_button.setText("Next")
+
         if self.selection_per_pack > 0:
             text = f"Select at least {self.selection_per_pack} more cards."
             logging.error(text)
@@ -453,7 +466,6 @@ class SelectionDialog(QDialog):
             self.add_card_to_deck()
 
         self.clean_layout()
-
 
         if self.total_packs % 10 == 0 and self.total_packs != 0:
             self.discard_stage()
@@ -489,8 +501,11 @@ class SelectionDialog(QDialog):
         if not set_data.probabilities:
             card_data = self.data_requests.get_card_set_info(set_data)
             set_data.card_set = card_data
-            probabilities = self.generate_probab(next_key, card_data)
+            probabilities = self.generate_weights(next_key, card_data)
             set_data.probabilities = probabilities
+
+        if self.total_packs % 10 == 0 and self.total_packs != 0:
+            self.next_button.setText("Side & Discard")
 
         self.open_pack(set_data.card_set, set_data.probabilities, set_data)
 
@@ -511,8 +526,15 @@ class SelectionDialog(QDialog):
 
         self.update_counter_label()
 
-    def generate_probab(self, card_set_name: str, data: list[YGOCard],
-                        extra: bool = False) -> list:
+    def generate_weights(self, card_set_name: str, data: list[YGOCard],
+                         extra: bool = False) -> list[int]:
+        """
+        >>> Generate a list of integers depeding on the weight denoting the
+            index of an item inside the set cards.
+        >>> The Extra[bool] value is if you want to skip the common cards in
+            order to weight the last card in a pack.
+        """
+
         PROB = {
             "Common": 80,
             "Rare": 16.6667,
@@ -536,7 +558,7 @@ class SelectionDialog(QDialog):
 
                 card["set_rarity"] = rarity_name
 
-                rarity = round(PROB.get(rarity_name, 2.8571428571) * 10)
+                rarity = round(PROB.get(rarity_name, 2.8571428571) * 100)
 
                 for _ in range(rarity):
                     probabilities.append(index)
@@ -545,14 +567,23 @@ class SelectionDialog(QDialog):
         return probabilities
 
     def clean_layout(self):
+        """
+        >>> Cleans the pack Card Layout in order to add the open the next pack.
+        >>> *Might have to look a the function in the in order to determine
+            if I am not having a issues with this approach.
+        >>> *Could also be combined with the adding cards function in order to
+            make a smoother operation.
+        """
         util.clean_layout(self.card_layout)
 
         for _ in range(len(self.picked_cards)):
             card = self.picked_cards.pop(0)
+            card.deleteLater()
             del card
 
         for _ in range(len(self.card_buttons)):
             card = self.card_buttons.pop(0)
+            card.deleteLater()
             del card
 
     def open_pack(self,
@@ -566,13 +597,24 @@ class SelectionDialog(QDialog):
         logging.debug(f"{self.selection_per_pack} Cards Plus Available.")
         self.update_counter_label()
 
-        CARD_PER_PACK = 9
+        CARDS_PER_PACK = 9
+        progress_title = "Opening {0} pack {1}"
+        progress = QProgressDialog(progress_title.format(set_data.set_name,
+                                                         self.packs_opened),
+                                   None, 0, CARDS_PER_PACK + 1, self)
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setValue(0)
+        progress.setAutoClose(False)
+        progress.setModal(True)
+        progress.show()
+
+        self.close_progress(progress)
 
         row = 0
-        for column in range(CARD_PER_PACK):
-
+        for column in range(CARDS_PER_PACK):
+            print(progress.value())
             if column == 8:
-                prob = self.generate_probab(set_data.set_name, card_set,
+                prob = self.generate_weights(set_data.set_name, card_set,
                                             extra=True)
                 random_int = random.randint(0, len(prob) - 1)
                 pick = prob[random_int]
@@ -580,19 +622,41 @@ class SelectionDialog(QDialog):
                 random_int = random.randint(0, len(probablities) - 1)
                 pick = probablities[random_int]
 
+            progress.setValue(column + 1)
+
             row = 0
             if column % 2 != 0:
                 row = 1
                 column -= 1
 
             card_data = card_set[pick]
+
+            progress.setLabelText(f"Loading {card_data.name}.")
+
+            QApplication.processEvents()
+
             card = CardButton(card_data, self)
 
             self.card_buttons.append(card)
             card.toggled.connect(self.update_selection)
             self.card_layout.addWidget(card, row, column, 1, 1)
 
+        print(progress.value(), progress.maximum())
+        # progress.setValue()
+
         self.repaint()
+
+        QApplication.processEvents()
+
+    @pyqtSlot(QProgressDialog, int)
+    def close_progress(self, progress: QProgressDialog, re: int = 1):
+        if progress.value() + 1 == progress.maximum():
+            progress.close()
+            return
+
+        TIMER = 800
+        TIMER //= re
+        QTimer.singleShot(TIMER, lambda: self.close_progress(progress, re=2))
 
     def parent(self) -> MainWindow:
         return super().parent()  # type: ignore
@@ -699,7 +763,7 @@ class CardButton(QToolButton):
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self.show_menu)
 
-        self.setSizePolicy(QSP.Expanding, QSP.Preferred)
+        self.setSizePolicy(QSP.Preferred, QSP.Preferred)
         self.setCheckable(True)
 
         self.assocc = self.filter_assocciated()
