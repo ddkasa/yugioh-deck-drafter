@@ -2,18 +2,15 @@ import logging
 import sys
 from pathlib import Path
 from typing import Optional, NamedTuple, Final, Any, Literal
-from json import dumps
-from pprint import pprint
+
 from datetime import date, datetime
-from collections import OrderedDict
 from dataclasses import dataclass, field
 from urllib.parse import quote
 
-from functools import partial, cache
+from functools import partial
 
 import re
 import random
-from PyQt6 import QtGui
 
 import requests_cache
 import requests
@@ -28,11 +25,9 @@ from PyQt6.QtWidgets import (QApplication, QLineEdit, QPushButton, QWidget,
                              QScrollArea, QLabel, QStyle, QLayout,
                              QStyleOptionButton, QMessageBox)
 
-from PyQt6.QtGui import (QPen, QPixmapCache, QPixmap, QPainter,
-                         QPaintEvent, QResizeEvent, QContextMenuEvent,
-                         QCursor, QBrush, QDragEnterEvent, QDropEvent,
-                         QMouseEvent, QDrag, QKeyEvent)
-
+from PyQt6.QtGui import (QPen, QPixmapCache, QPixmap, QPainter, QDrag,
+                         QPaintEvent, QResizeEvent, QCursor, QBrush,
+                         QDragEnterEvent, QDropEvent, QMouseEvent, QKeyEvent)
 
 
 from yugioh_deck_drafter import util
@@ -206,8 +201,8 @@ class YugiObj:
 
 class MainWindow(QWidget):
 
-    def __init__(self, parent: QWidget | None, flags=Qt.WindowType.Widget):
-        super(MainWindow, self).__init__(parent, flags)
+    def __init__(self):
+        super(MainWindow, self).__init__()
         self.YU_GI = YugiObj()
 
         QPixmapCache.setCacheLimit(200000)
@@ -294,8 +289,8 @@ class MainWindow(QWidget):
             logging.error("Select some sets to open.")
             return
         dialog = SelectionDialog(self)
+        print(self.children())
         if dialog.exec() == 1:
-            # Save the deck here
             pass
 
     def reset_selection(self):
@@ -355,17 +350,17 @@ class SelectionDialog(QDialog):
 
         self.button_layout.addStretch(20)
 
-        self.card_picks_left = QLabel("0")
+        self.card_picks_left = QLabel("Cards: 0")
         self.button_layout.addWidget(self.card_picks_left)
 
         self.button_layout.addStretch(20)
 
-        self.cards_picked = QLabel("0")
+        self.cards_picked = QLabel("Cards In Deck: 0")
         self.button_layout.addWidget(self.cards_picked)
 
         self.button_layout.addStretch(20)
 
-        self.packs_opened = QLabel("1")
+        self.packs_opened = QLabel("Packs Open: 1")
         self.button_layout.addWidget(self.packs_opened)
 
         self.button_layout.addStretch(40)
@@ -405,7 +400,7 @@ class SelectionDialog(QDialog):
 
         if len(self.parent().selected_packs) == self.opened_packs:
             logging.error("Selection complete!")
-            path = Path(r"data\saves\test.ydk")
+            path = Path(r"data\saves\deck.ydk")
             self.data_requests.to_ygodk_format(self.main_deck,
                                                self.extra_deck,
                                                self.side_deck,
@@ -532,7 +527,6 @@ class SelectionDialog(QDialog):
         return super().parent()  # type: ignore
 
     def accept(self):
-        self.parent().reset_selection()
         return super().accept()
 
     def update_selection(self):
@@ -1145,7 +1139,7 @@ def main():
 
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
-    main_window = MainWindow(None)
+    main_window = MainWindow()
 
     with open(r"yugioh_deck_drafter\style\stylesheet.qss", "r") as style:
         main_window.setStyleSheet(style.read())
