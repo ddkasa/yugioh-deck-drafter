@@ -32,3 +32,18 @@ QToolButton:hover#card_button {
     border-width: 5px;
     border-style: solid;
 }
+
+/* QFrame[isScrollArea="true"] {
+	outline-color: lightgray;
+} */
+
+QScrollArea { 
+    border: 1px solid gray;
+    border-radius: 2px;
+}
+
+QLabel#indicator {
+    color: white;
+    border: 1px solid gray;
+    border-radius: 2px;
+}

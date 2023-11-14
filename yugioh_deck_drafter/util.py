@@ -4,6 +4,8 @@ from pathlib import Path
 from json import JSONEncoder
 from datetime import date
 
+import math
+
 from PyQt6.QtGui import QPixmap, QPixmapCache
 
 from PyQt6.QtWidgets import QLayout, QHBoxLayout
@@ -62,6 +64,11 @@ def get_operation(number: int) -> tuple[str, int]:
         number *= -1
 
     return operation, number
+
+
+def round_down_int(value: int, multiple: int = 10):
+    """Rounds down a value[integer] to the closest multiple[int]"""
+    return math.floor(value / multiple) * multiple
 
 
 class DateSerializer(JSONEncoder):
