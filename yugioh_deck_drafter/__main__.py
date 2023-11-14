@@ -15,7 +15,8 @@ import random
 import requests_cache
 import requests
 
-from PyQt6.QtCore import (Qt, QRectF, pyqtSignal, pyqtSlot, QTimer, QSize)
+from PyQt6.QtCore import (Qt, QRectF, pyqtSignal, pyqtSlot, QTimer, QSize,
+                          QPoint)
 
 from PyQt6.QtWidgets import (QApplication, QLineEdit, QPushButton, QWidget,
                              QComboBox, QVBoxLayout, QListWidget, QSlider,
@@ -24,7 +25,7 @@ from PyQt6.QtWidgets import (QApplication, QLineEdit, QPushButton, QWidget,
                              QMenu, QButtonGroup, QSpinBox, QCompleter,
                              QScrollArea, QLabel, QStyle, QLayout, QFileDialog,
                              QStyleOptionButton, QMessageBox, QSpacerItem,
-                             QScrollBar)
+                             QProgressDialog)
 
 from PyQt6.QtGui import (QPen, QPixmapCache, QPixmap, QPainter, QDrag,
                          QPaintEvent, QResizeEvent, QCursor, QBrush,
@@ -59,6 +60,10 @@ class YGOCard(NamedTuple):
 
 
 class YugiObj:
+    """
+    >>> Object for managing requests from YGOPRODECK, creating Models and 
+        generating cardmodels themselves.
+    """
 
     def __init__(self) -> None:
         self.CACHE = requests_cache.CachedSession("cache\\ygoprodeck.sqlite",
@@ -246,12 +251,19 @@ class MainWindow(QWidget):
         self.select_layout.addWidget(self.no_pack_indi, 1)
 
         self.list_widget = QListWidget()
+        (self.list_widget
+         .setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu))
+        (self.list_widget.customContextMenuRequested
+         .connect(self.list_context_menu))
         self.main_layout.addWidget(self.list_widget)
 
         self.button_layout = QHBoxLayout()
+
         self.start_button = QPushButton("START")
         self.button_layout.addWidget(self.start_button)
+
         self.button_layout.addStretch(20)
+
         self.reset_button = QPushButton("RESET")
         self.button_layout.addWidget(self.reset_button)
         self.reset_button.pressed.connect(self.reset_selection)
@@ -271,6 +283,16 @@ class MainWindow(QWidget):
         for item in TEST_DATA:
             self.select_pack.setCurrentText(item)
 
+    def list_context_menu(self):
+        pos = QCursor().pos()
+
+        menu = QMenu(self.list_widget)
+
+        remove_item = menu.addAction("Remove Item")
+        remove_item.triggered.connect(lambda: self.remove_item(pos))  # type: ignore
+
+        menu.exec(pos)
+
     def add_item(self):
         label = self.select_pack.currentText()
         if label in self.selected_packs:
@@ -288,6 +310,17 @@ class MainWindow(QWidget):
                           data["num_of_cards"], cnt)
 
         self.selected_packs[label] = data
+
+    def remove_item(self, pos: QPoint):
+        pos = self.list_widget.mapFromGlobal(pos)
+        item = self.list_widget.itemAt(pos)
+        DEBUG_MSG = "Bad position for removal."
+        if item is None:
+            logging.debug(DEBUG_MSG)
+            return
+        row = self.list_widget.row(item)
+        removed_item = self.list_widget.takeItem(row)
+        del removed_item
 
     def update_indi(self, value: int):
         self.no_packs.blockSignals(True)
@@ -404,6 +437,11 @@ class SelectionDialog(QDialog):
         self.sel_next_set()
 
     def sel_next_set(self):
+        """
+        >>> Selects the next pack and also manages the session in general.
+        >>> Might need some refactor in the futureto split it apart into
+            multiple functions.
+        """
         if self.selection_per_pack > 0:
             text = f"Select at least {self.selection_per_pack} more cards."
             logging.error(text)
@@ -414,13 +452,25 @@ class SelectionDialog(QDialog):
         if self.picked_cards:
             self.add_card_to_deck()
 
+        self.clean_layout()
+
+
         if self.total_packs % 10 == 0 and self.total_packs != 0:
             self.discard_stage()
             self.selection_per_pack = 0
 
         if len(self.parent().selected_packs) == self.opened_packs:
             logging.error("Selection complete!")
-            self.check_deck()
+            MSG_CLASS = QMessageBox
+            MBUTTON = MSG_CLASS.StandardButton
+            ms_box = MSG_CLASS.information(
+                self,
+                "Deck Drafting Complete",
+                "Would you like to preview the deck?",
+                (MBUTTON.No | MBUTTON.Yes))
+
+            if ms_box == MBUTTON.Yes:
+                self.check_deck()
 
             return self.accept()
 
@@ -428,8 +478,6 @@ class SelectionDialog(QDialog):
 
         next_key = list(sel_packs.keys())[self.opened_packs]
         set_data = sel_packs[next_key]
-
-        self.clean_layout()
 
         self.total_packs += 1
         self.packs_opened.setText(f"Packs Opened: {self.total_packs}")
@@ -576,7 +624,6 @@ class SelectionDialog(QDialog):
                 self.picked_cards.pop(index)
                 if not fus_monster:
                     self.selection_per_pack += 1
-
             elif not item_in and not fus_monster:
                 item.setChecked(False)
 
