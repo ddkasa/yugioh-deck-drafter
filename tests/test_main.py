@@ -38,14 +38,14 @@ def test_dialog(main_window_fill: main.MainWindow, qtbot):
 
     dia = main_window.start_creating()
 
-    assert dia == 1
+    assert isinstance(dia, main.SelectionDialog)
 
 
 def test_card_picks(main_window_fill: main.MainWindow, qtbot):
     main_window = main_window_fill
     main_window.show()
 
-    dialog = main.SelectionDialog(main_window)
+    dialog = main.SelectionDialog(main_window, Qt.WindowType.Widget)
     qtbot.addWidget(dialog)
     dialog.show()
 
@@ -63,9 +63,12 @@ def test_card_picks(main_window_fill: main.MainWindow, qtbot):
             if b_clicks == 2:
                 break
 
-        qtbot.addWidget(dialog.accept_button)
+        # qtbot.addWidget(dialog.accept_button)
         dialog.next_button.click()
+
+    print(dialog.children())
 
     main_deck_len = len(dialog.main_deck)
 
-    assert main_deck_len == 12
+
+    assert main_deck_len == PACK_COUNT * 2 - 8

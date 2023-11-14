@@ -253,6 +253,8 @@ class MainWindow(QWidget):
         self.button_layout.addWidget(self.reset_button)
         self.reset_button.pressed.connect(self.reset_selection)
 
+
+
         self.main_layout.addLayout(self.button_layout)
 
         self.select_pack.currentIndexChanged.connect(self.add_item)
@@ -261,6 +263,12 @@ class MainWindow(QWidget):
         self.start_button.pressed.connect(self.start_creating)
 
         self.show()
+
+        TEST_DATA = ("Legend of Blue Eyes White Dragon", "Pharaoh's Servant",
+                     "Spell Ruler", "Magic Ruler")
+
+        for item in TEST_DATA:
+            self.select_pack.setCurrentText(item)
 
     def add_item(self):
         label = self.select_pack.currentText()
@@ -293,9 +301,14 @@ class MainWindow(QWidget):
             return
         logging.info("Opening Selection Dialog.")
         dialog = SelectionDialog(self)
+
         if self.debug:
             dialog.setWindowModality(Qt.WindowModality.NonModal)
-        return dialog.exec()
+            dialog.show()
+            return dialog
+
+        if dialog.exec():
+            return
 
     @pyqtSlot()
     def reset_selection(self):
@@ -580,7 +593,11 @@ class SelectionDialog(QDialog):
 
         dialog.setWindowTitle("Card Removal Stage")
 
-        if dialog.exec() == 1:
+        if self.parent().debug:
+            dialog.show()
+            return dialog
+
+        elif dialog.exec():
             self.main_deck = dialog.new_deck
             self.extra_deck = dialog.new_extra
             self.side_deck = dialog.new_side
@@ -964,8 +981,7 @@ class DeckViewer(QDialog):
 
         print("deck cards: ", len(self.deck))
         print("extra cards: ", len(self.extra))
-        print("new_cards: ", len(self.side))
-
+        print("side_cards: ", len(self.side))
 
         if self.count() != self.discard:
             cnt = (self.count() - self.discard)
