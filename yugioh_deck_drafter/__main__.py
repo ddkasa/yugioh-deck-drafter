@@ -135,8 +135,8 @@ class YugiObj:
 
         if request.status_code != 200:
             # Add a default image here in the future.
-            logging.critical("Failed to fetch card arche_types. Skipping!")
-            logging.critical(request.status_code)
+            logging.warning("Failed to fetch card arche_types. Skipping!")
+            logging.warning(request.status_code)
             return None
 
         return request.json()["data"]
@@ -149,8 +149,8 @@ class YugiObj:
 
         if request.status_code != 200:
             # Add a default image here in the future.
-            logging.critical(f"Failed to grab {name}. Skipping!")
-            logging.critical(request.status_code)
+            logging.warning(f"Failed to grab {name}. Skipping!")
+            logging.warning(request.status_code)
             return None
 
         return request.json()["data"]
@@ -201,8 +201,10 @@ class YugiObj:
 
 class MainWindow(QWidget):
 
-    def __init__(self):
+    def __init__(self, debug: bool = False):
         super(MainWindow, self).__init__()
+        self.debug = debug
+
         self.YU_GI = YugiObj()
 
         QPixmapCache.setCacheLimit(200000)
@@ -284,15 +286,18 @@ class MainWindow(QWidget):
         self.no_pack_indi.setValue(value)
         self.no_packs.blockSignals(False)
 
+    @pyqtSlot()
     def start_creating(self):
         if not self.selected_packs:
             logging.error("Select some sets to open.")
             return
+        logging.info("Opening Selection Dialog.")
         dialog = SelectionDialog(self)
-        print(self.children())
-        if dialog.exec() == 1:
-            pass
+        if self.debug:
+            dialog.setWindowModality(Qt.WindowModality.NonModal)
+        return dialog.exec()
 
+    @pyqtSlot()
     def reset_selection(self):
         logging.info("Resetting app to defaults.")
         self.selected_packs = {}
@@ -365,9 +370,9 @@ class SelectionDialog(QDialog):
 
         self.button_layout.addStretch(40)
 
-        self.accept_button = QPushButton("Next")
-        self.accept_button.pressed.connect(self.sel_next_set)
-        self.button_layout.addWidget(self.accept_button)
+        self.next_button = QPushButton("Next")
+        self.next_button.pressed.connect(self.sel_next_set)
+        self.button_layout.addWidget(self.next_button)
 
         self.button_layout.addStretch(20)
 
