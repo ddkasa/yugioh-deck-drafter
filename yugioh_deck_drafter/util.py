@@ -6,7 +6,7 @@ from datetime import date
 
 from PyQt6.QtGui import QPixmap, QPixmapCache
 
-from PyQt6.QtWidgets import QLayout
+from PyQt6.QtWidgets import QLayout, QHBoxLayout
 
 
 def get_or_insert(pixmap_path: str | Path, format: str = ".jpg",
@@ -55,8 +55,26 @@ def clean_layout(layout: QLayout):
         widget.setParent(None)
 
 
+def get_operation(number: int) -> tuple[str, int]:
+    operation = "Remove"
+    if number < 0:
+        operation = "Add"
+        number *= -1
+
+    return operation, number
+
+
 class DateSerializer(JSONEncoder):
     def default(self, obj):
         if isinstance(obj, date):
             return obj.isoformat()
         return super().default(obj)
+
+if __name__ == "__main__":
+
+    layout = QHBoxLayout()
+
+    layout.addStretch(1)
+
+
+    print(type(layout.itemAt(0)))

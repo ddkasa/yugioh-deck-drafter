@@ -15,7 +15,7 @@ import random
 import requests_cache
 import requests
 
-from PyQt6.QtCore import (Qt, QRectF, pyqtSignal, pyqtSlot, QMimeData, QSize)
+from PyQt6.QtCore import (Qt, QRectF, pyqtSignal, pyqtSlot, QTimer, QSize)
 
 from PyQt6.QtWidgets import (QApplication, QLineEdit, QPushButton, QWidget,
                              QComboBox, QVBoxLayout, QListWidget, QSlider,
@@ -23,7 +23,7 @@ from PyQt6.QtWidgets import (QApplication, QLineEdit, QPushButton, QWidget,
                              QGridLayout, QToolButton, QSizePolicy,
                              QMenu, QButtonGroup, QSpinBox, QCompleter,
                              QScrollArea, QLabel, QStyle, QLayout,
-                             QStyleOptionButton, QMessageBox)
+                             QStyleOptionButton, QMessageBox, QSpacerItem)
 
 from PyQt6.QtGui import (QPen, QPixmapCache, QPixmap, QPainter, QDrag,
                          QPaintEvent, QResizeEvent, QCursor, QBrush,
@@ -228,17 +228,19 @@ class MainWindow(QWidget):
         DEFAULT_PACK_COUNT: Final[int] = 10
 
         self.no_packs = QSlider()
+        self.no_packs.setSingleStep(5)
         self.no_packs.setTickPosition(QSlider.TickPosition.TicksBelow)
         self.no_packs.setTickInterval(10)
         self.no_packs.setOrientation(Qt.Orientation.Horizontal)
         self.no_packs.setMinimum(1)
         self.no_packs.setValue(DEFAULT_PACK_COUNT)
         self.no_packs.setMaximum(PACK_MAX)
-        self.select_layout.addWidget(self.no_packs, 50)
+        self.select_layout.addWidget(self.no_packs, 40)
 
         self.no_pack_indi = QSpinBox()
         self.no_pack_indi.setValue(DEFAULT_PACK_COUNT)
-        self.no_pack_indi.setMinimum(1)
+        self.no_pack_indi.setSingleStep(5)
+        self.no_pack_indi.setMinimum(5)
         self.no_pack_indi.setMaximum(PACK_MAX)
         self.select_layout.addWidget(self.no_pack_indi, 1)
 
@@ -308,6 +310,13 @@ class MainWindow(QWidget):
             return dialog
 
         if dialog.exec():
+            path = Path(r"data\saves\deck.ydk")
+            self.YU_GI.to_ygodk_format(dialog.main_deck, dialog.extra_deck,
+                                       dialog.side_deck, path)
+
+            QMessageBox.information(self, "File was saved.",
+                                    f"File was saved to {path}!",
+                                    QMessageBox.StandardButton.Ok)
             return
 
     @pyqtSlot()
@@ -418,15 +427,8 @@ class SelectionDialog(QDialog):
 
         if len(self.parent().selected_packs) == self.opened_packs:
             logging.error("Selection complete!")
-            path = Path(r"data\saves\deck.ydk")
-            self.data_requests.to_ygodk_format(self.main_deck,
-                                               self.extra_deck,
-                                               self.side_deck,
-                                               path)
+            self.check_deck(self.parent())
 
-            QMessageBox.information(self, "File was saved.",
-                                    f"File was saved to {path}!",
-                                    QMessageBox.StandardButton.Ok)
             return self.accept()
 
         sel_packs = self.parent().selected_packs
@@ -439,7 +441,7 @@ class SelectionDialog(QDialog):
         self.total_packs += 1
         self.packs_opened.setText(f"Packs Opened: {self.total_packs}")
 
-        if set_data.count == 0:
+        if set_data.count == 1:
             self.opened_packs += 1
             return self.sel_next_set()
 
@@ -604,11 +606,12 @@ class SelectionDialog(QDialog):
 
             self.discard_stage_cnt += 1
 
-    def check_deck(self):
+    def check_deck(self, parent: Optional[QWidget] = None):
+        # parent = self if parent is None else parent
+        deck = DeckViewer(self, 0)  # type ignore
 
-        deck = DeckViewer(self)
-        if deck == deck.exec():
-            pass
+        if deck.exec():
+            return 
 
 
 class CardButton(QToolButton):
@@ -707,12 +710,11 @@ class CardButton(QToolButton):
                              new_rect.topRight())
 
     def show_menu(self):
-        parent = self.parent()
-
         pos = QCursor().pos()
         menu = QMenu(self)
 
         if isinstance(self.viewer, DeckViewer):
+
             mv_deck = self.viewer.mv_card
 
             if self in self.viewer.deck:
@@ -726,7 +728,6 @@ class CardButton(QToolButton):
                 move_to_main.triggered.connect(lambda: mv_deck(self, "main"))
 
             return menu.exec(pos)
-
 
         if self.parent().selection_per_pack < 1:
             return
@@ -748,13 +749,18 @@ class CardButton(QToolButton):
         # #      .connect(lambda: self.search_type(archetype)))
 
         if self.card_model.card_type == "Fusion Monster":
-            poly = menu.addAction("Add Polymerization")
-            (poly.triggered  # type: ignore
-             .connect(lambda: self.get_card("Polymerization")))
+            poly = "Polymerization"
 
-            fusion = menu.addAction("Add Fusion Parts")
-            (fusion.triggered  # type: ignore
-             .connect(lambda: self.get_card(self.assocc)))
+            if self.parent().selection_per_pack > 1:
+                fusion = menu.addAction("Add All Fusion Parts")
+                items = list(self.assocc)
+                items.append(poly)
+                (fusion.triggered  # type: ignore
+                 .connect(lambda: self.get_card(self.assocc)))
+
+            poly_add = menu.addAction("Add Polymerization")
+            (poly_add.triggered  # type: ignore
+             .connect(lambda: self.get_card(poly)))
 
             for item in self.assocc:
                 acc = menu.addAction(f"Add {item}")
@@ -803,20 +809,19 @@ class CardButton(QToolButton):
     def parent(self) -> SelectionDialog:
         return super().parent()  # type: ignore
 
-    def mouseMoveEvent(self, event: QMouseEvent):
-        if event.buttons() == Qt.MouseButton.LeftButton:
-            drag = QDrag(self)
-            mime = QMimeData()
-            drag.setMimeData(mime)
+    # def mouseMoveEvent(self, event: QMouseEvent):
+    #     if event.buttons() == Qt.MouseButton.LeftButton:
+    #         drag = QDrag(self)
+    #         mime = QMimeData()
+    #         drag.setMimeData(mime)
 
-            pixmap = QPixmap(self.size())
-            self.render(pixmap)
-            drag.setPixmap(pixmap)
+    #         pixmap = QPixmap(self.size())
+    #         self.render(pixmap)
+    #         drag.setPixmap(pixmap)
 
-            drag.exec(Qt.DropAction.MoveAction)
+    #         drag.exec(Qt.DropAction.MoveAction)
 
     def resizeEvent(self, event: QResizeEvent | None) -> None:
-
         return super().resizeEvent(event)
 
 
@@ -824,7 +829,14 @@ class DeckViewer(QDialog):
 
     def __init__(self, parent: SelectionDialog, discard: int = 0):
         super(DeckViewer, self).__init__(parent)
+        size = QApplication.primaryScreen().availableGeometry()
+        w, h = round(size.width() // 1.5), round(size.height() // 1.5)
+        self.resize(w, h)
+
         self.discard = discard
+        self.side_length = len(parent.side_deck) + 2
+
+        self.setWindowTitle("Deck Viewer")
 
         self.deck: list[CardButton] = []
         self.extra: list[CardButton] = []
@@ -832,6 +844,8 @@ class DeckViewer(QDialog):
 
         self.main_layout = QVBoxLayout()
         self.deck_area = QScrollArea()
+
+        scroll = self.deck_area.verticalScrollBar()
         # self.deck_area.ensurePolished()
         # self.deck_area.setWidgetResizable(True)
         # self.deck_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
@@ -857,7 +871,7 @@ class DeckViewer(QDialog):
         self.main_layout.addWidget(self.side_deck_widget, 20)
 
         self.fill_deck(parent.side_deck,
-                       self.extra_deck_widget.main_widget.blayout,
+                       self.side_deck_widget.main_widget.blayout,
                        self.side)
 
         self.button_layout = QHBoxLayout()
@@ -880,6 +894,14 @@ class DeckViewer(QDialog):
     def fill_deck(self, cards: list, layout: QLayout, container: list,
                   check: bool = False):
         # util.clean_layout(layout)
+
+        cards = cards.copy()
+
+        if isinstance(layout, QHBoxLayout):
+            for i in range(layout.count()):
+                item = layout.itemAt(i)
+                if isinstance(item, QSpacerItem):
+                    layout.removeItem(item)
 
         MAX_COLUMNS: Final[int] = 10
 
@@ -907,29 +929,32 @@ class DeckViewer(QDialog):
                 card_button.toggled.connect(self.removal_count)
                 card_button.setChecked(check)
 
-            card_button.setSizePolicy(QSP.MinimumExpanding,
-                                      QSP.MinimumExpanding)
+            card_button.setSizePolicy(QSP.Minimum,
+                                      QSP.Minimum)
             card_button.acceptDrops()
             container.append(card_button)
             if isinstance(layout, QHBoxLayout):
-                layout.addWidget(card_button,
-                                 alignment=Qt.AlignmentFlag.AlignLeft)
+                layout.addWidget(card_button)
                 continue
 
             layout.addWidget(card_button, row, column, 1, 1)
 
+        if isinstance(layout, QHBoxLayout):
+            layout.insertStretch(-1, 1)
+
+
     def mv_card(self, card: CardButton, deck: Literal["main", "side"]):
+        card.deleteLater()
+
         if deck == "main":
             side_idx = self.side.index(card)
             item = self.side.pop(side_idx)
-            self.deck.append(card)
             self.fill_deck([item.card_model], self.deck_layout, self.deck,
                            card.isChecked())
             return
 
         main_idx = self.deck.index(card)
         item = self.deck.pop(main_idx)
-        self.side.append(card)
         self.fill_deck([item.card_model], self.side_deck_widget.main_layout,
                        self.side, card.isChecked())
 
@@ -970,7 +995,8 @@ class DeckViewer(QDialog):
 
     def accept(self):
         if not self.discard:
-            return super().accept()
+            self.deleteLater()
+            return self.hide()
 
         def filter_items(container: list, source: list[CardButton]):
             for item in list(source):
@@ -978,15 +1004,28 @@ class DeckViewer(QDialog):
                     container.append(item.card_model)
                     continue
                 item.deleteLater()
+        side_len = len(self.side) 
+        logging.debug("Deck Cards: %s" % len(self.deck))
+        logging.debug("Extra Cards: %s" % len(self.extra))
+        logging.debug("Side Cards: %s" % side_len)
+        count = self.count()
+        logging.debug("Actual Count: %s" % count)
 
-        print("deck cards: ", len(self.deck))
-        print("extra cards: ", len(self.extra))
-        print("side_cards: ", len(self.side))
+        if count != self.discard:
+            cnt = count - self.discard
 
-        if self.count() != self.discard:
-            cnt = (self.count() - self.discard)
-            QMessageBox.warning(self, "Remove More Cards",
-                                f"Remove {cnt} more card(s)",
+            operation, cnt = util.get_operation(cnt)
+
+            QMessageBox.warning(self, f"{operation} More Cards",
+                                f"{operation} {cnt} more card(s)",
+                                QMessageBox.StandardButton.Ok)
+            return
+        elif side_len != self.side_length:
+            cnt = side_len - self.side_length
+            operation, cnt = util.get_operation(cnt)
+
+            msg = f"{operation} {cnt} more card(s) to the Side Deck"
+            QMessageBox.warning(self, "Adjust Side Deck", msg,
                                 QMessageBox.StandardButton.Ok)
             return
 
@@ -1003,7 +1042,7 @@ class DeckViewer(QDialog):
 
 class DeckSlider(QScrollArea):
 
-    def __init__(self, parent: DeckViewer) -> None:
+    def __init__(self   , parent: DeckViewer) -> None:
         super().__init__(parent)
 
         self.setWidgetResizable(True)
@@ -1155,7 +1194,7 @@ class SearchDialog(QDialog):
 def main():
     FMT = "%(levelname)s | %(module)s\\%(funcName)s:%(lineno)d -> %(message)s"
 
-    logging.basicConfig(stream=sys.stderr, level=logging.INFO, format=FMT)
+    logging.basicConfig(stream=sys.stderr, level=logging.DEBUG, format=FMT)
     logging.info(f"Starting {NAME}!")
 
     app = QApplication(sys.argv)
