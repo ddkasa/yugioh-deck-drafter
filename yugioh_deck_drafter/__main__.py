@@ -22,8 +22,9 @@ from PyQt6.QtWidgets import (QApplication, QLineEdit, QPushButton, QWidget,
                              QHBoxLayout, QListWidgetItem, QDialog,
                              QGridLayout, QToolButton, QSizePolicy,
                              QMenu, QButtonGroup, QSpinBox, QCompleter,
-                             QScrollArea, QLabel, QStyle, QLayout,
-                             QStyleOptionButton, QMessageBox, QSpacerItem)
+                             QScrollArea, QLabel, QStyle, QLayout, QFileDialog,
+                             QStyleOptionButton, QMessageBox, QSpacerItem,
+                             QScrollBar)
 
 from PyQt6.QtGui import (QPen, QPixmapCache, QPixmap, QPainter, QDrag,
                          QPaintEvent, QResizeEvent, QCursor, QBrush,
@@ -37,7 +38,7 @@ NAME = "YU-GI-OH Deck Creator"
 
 
 @dataclass
-class SelectedSet:
+class YGOCardSet:
     set_name: str
     set_code: str
     data: date
@@ -54,13 +55,13 @@ class YGOCard(NamedTuple):
     card_type: str
     raw_data: dict[str, Any]
     rarity: str = "Common"
-    card_set: Optional[SelectedSet] = None
+    card_set: Optional[YGOCardSet] = None
 
 
 class YugiObj:
 
     def __init__(self) -> None:
-        self.CACHE = requests_cache.CachedSession("cache\\decks.sqlite",
+        self.CACHE = requests_cache.CachedSession("cache\\ygoprodeck.sqlite",
                                                   backend="sqlite")
         self.card_set = self.get_card_set()
 
@@ -84,7 +85,7 @@ class YugiObj:
         new_set.sort(key=lambda x: x["set_name"])
         return new_set
 
-    def get_card_set_info(self, card_set: SelectedSet) -> list[YGOCard]:
+    def get_card_set_info(self, card_set: YGOCardSet) -> list[YGOCard]:
         """Returns the cards contained with in the given card set."""
         URL = "https://db.ygoprodeck.com/api/v7/cardinfo.php?cardset={0}"
         request = self.CACHE.get(URL.format(card_set.set_name))
@@ -155,10 +156,10 @@ class YugiObj:
 
         return request.json()["data"]
 
-    def create_card(self, data: dict, set_data: SelectedSet | None) -> YGOCard:
+    def create_card(self, data: dict, set_data: YGOCardSet | None) -> YGOCard:
         rarity = "Common"
 
-        if isinstance(set_data, SelectedSet):
+        if isinstance(set_data, YGOCardSet):
             card_sets = data["card_sets"]
             for card_set in card_sets:
                 card_set_code = card_set["set_code"]
@@ -210,7 +211,7 @@ class MainWindow(QWidget):
         QPixmapCache.setCacheLimit(200000)
 
         self.setWindowTitle(NAME)
-        self.selected_packs: dict[str, SelectedSet] = {}
+        self.selected_packs: dict[str, YGOCardSet] = {}
         self.main_layout = QVBoxLayout()
         self.setLayout(self.main_layout)
 
@@ -255,8 +256,6 @@ class MainWindow(QWidget):
         self.button_layout.addWidget(self.reset_button)
         self.reset_button.pressed.connect(self.reset_selection)
 
-
-
         self.main_layout.addLayout(self.button_layout)
 
         self.select_pack.currentIndexChanged.connect(self.add_item)
@@ -285,8 +284,8 @@ class MainWindow(QWidget):
         item = QListWidgetItem(f"{cnt}x {label}")
         self.list_widget.addItem(item)
 
-        data = SelectedSet(label, data["set_code"], data["tcg_date"],
-                           data["num_of_cards"], cnt)
+        data = YGOCardSet(label, data["set_code"], data["tcg_date"],
+                          data["num_of_cards"], cnt)
 
         self.selected_packs[label] = data
 
@@ -396,12 +395,6 @@ class SelectionDialog(QDialog):
         self.next_button.pressed.connect(self.sel_next_set)
         self.button_layout.addWidget(self.next_button)
 
-        self.button_layout.addStretch(20)
-
-        self.accept_button = QPushButton("Accept")
-        self.accept_button.pressed.connect(self.accept)
-        self.button_layout.addWidget(self.accept_button)
-
         self.picked_cards: list[CardButton] = []
 
         self.main_layout.addLayout(self.button_layout)
@@ -427,7 +420,7 @@ class SelectionDialog(QDialog):
 
         if len(self.parent().selected_packs) == self.opened_packs:
             logging.error("Selection complete!")
-            self.check_deck(self.parent())
+            self.check_deck()
 
             return self.accept()
 
@@ -456,10 +449,13 @@ class SelectionDialog(QDialog):
         set_data.count -= 1
 
     def add_card_to_deck(self):
-        for cardbutton in self.picked_cards:
-            card = cardbutton.card_model
+        for cardbutton in list(self.picked_cards):
+            self.card_layout.removeWidget(cardbutton)
 
-            if self.check_fusion_monster(card):
+            card = cardbutton.card_model
+            cardbutton.deleteLater()
+
+            if self.check_extra_monster(card):
                 self.extra_deck.append(card)
                 continue
 
@@ -503,13 +499,18 @@ class SelectionDialog(QDialog):
     def clean_layout(self):
         util.clean_layout(self.card_layout)
 
-        self.picked_cards = []
-        self.card_buttons = []
+        for _ in range(len(self.picked_cards)):
+            card = self.picked_cards.pop(0)
+            del card
+
+        for _ in range(len(self.card_buttons)):
+            card = self.card_buttons.pop(0)
+            del card
 
     def open_pack(self,
                   card_set: list,
                   probablities: list,
-                  set_data: SelectedSet):
+                  set_data: YGOCardSet):
         (logging
          .debug(f"Opening a pack from {set_data.set_name}.".center(60,"-")))
 
@@ -543,6 +544,8 @@ class SelectionDialog(QDialog):
             card.toggled.connect(self.update_selection)
             self.card_layout.addWidget(card, row, column, 1, 1)
 
+        self.repaint()
+
     def parent(self) -> MainWindow:
         return super().parent()  # type: ignore
 
@@ -552,11 +555,12 @@ class SelectionDialog(QDialog):
     def update_selection(self):
         logging.debug("Updating Selection")
 
-        for item in self.card_buttons:
+        for item in list(self.card_buttons):
             item.blockSignals(True)
+
             item_in = item in self.picked_cards
 
-            fus_monster = self.check_fusion_monster(item.card_model)
+            fus_monster = self.check_extra_monster(item.card_model)
 
             if (item.isChecked()
                and (self.selection_per_pack > 0 or fus_monster)):
@@ -586,7 +590,7 @@ class SelectionDialog(QDialog):
         picked = len(self.main_deck) + len(self.side_deck)
         self.cards_picked.setText(f"Card Total: {picked}")
 
-    def check_fusion_monster(self, card: YGOCard) -> bool:
+    def check_extra_monster(self, card: YGOCard) -> bool:
         return card.card_type == "Fusion Monster"
 
     def discard_stage(self):
@@ -606,12 +610,11 @@ class SelectionDialog(QDialog):
 
             self.discard_stage_cnt += 1
 
-    def check_deck(self, parent: Optional[QWidget] = None):
-        # parent = self if parent is None else parent
-        deck = DeckViewer(self, 0)  # type ignore
+    def check_deck(self):
+        deck = DeckViewer(self)
 
         if deck.exec():
-            return 
+            return
 
 
 class CardButton(QToolButton):
@@ -621,6 +624,8 @@ class CardButton(QToolButton):
                  viewer: Optional['DeckViewer'] = None):
         super(CardButton, self).__init__()
         self.ASPECT_RATIO: Final[float] = 0.6776859504
+
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
         self.viewer = viewer
 
@@ -845,16 +850,12 @@ class DeckViewer(QDialog):
         self.main_layout = QVBoxLayout()
         self.deck_area = QScrollArea()
 
-        scroll = self.deck_area.verticalScrollBar()
-        # self.deck_area.ensurePolished()
-        # self.deck_area.setWidgetResizable(True)
-        # self.deck_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
-
         self.deck_area_widget = QWidget()
         self.deck_layout = QGridLayout()
         self.deck_area_widget.setLayout(self.deck_layout)
 
-        self.fill_deck(parent.main_deck, self.deck_layout, self.deck)
+        self.fill_deck(parent.main_deck, self.deck_layout, self.deck,
+                       self.deck_area)
 
         self.deck_area.setWidget(self.deck_area_widget)
 
@@ -865,14 +866,14 @@ class DeckViewer(QDialog):
 
         self.fill_deck(parent.extra_deck,
                        self.extra_deck_widget.main_widget.blayout,
-                       self.extra)
+                       self.extra, self.extra_deck_widget)
 
         self.side_deck_widget = DeckSlider(self)
         self.main_layout.addWidget(self.side_deck_widget, 20)
 
         self.fill_deck(parent.side_deck,
                        self.side_deck_widget.main_widget.blayout,
-                       self.side)
+                       self.side, self.side_deck_widget)
 
         self.button_layout = QHBoxLayout()
 
@@ -891,9 +892,9 @@ class DeckViewer(QDialog):
 
         self.setLayout(self.main_layout)
 
-    def fill_deck(self, cards: list, layout: QLayout, container: list,
-                  check: bool = False):
-        # util.clean_layout(layout)
+    def fill_deck(self, cards: list[YGOCard], layout: QLayout, container: list,
+                  scroll_bar: 'QScrollArea | DeckSlider', check: bool = False):
+        """Fills the deck with the list of given YGOCards."""
 
         cards = cards.copy()
 
@@ -923,6 +924,15 @@ class DeckViewer(QDialog):
             card = cards.pop(0)
 
             card_button = CardButton(card, self.parent(), self)
+
+            if isinstance(scroll_bar, QScrollArea):
+                vscroll = scroll_bar.verticalScrollBar()
+                if vscroll is not None:
+                    vscroll.valueChanged.connect(card_button.repaint)
+                hscroll = scroll_bar.horizontalScrollBar()
+                if hscroll is not None:
+                    hscroll.valueChanged.connect(card_button.repaint)
+
             if not self.discard:
                 card_button.setCheckable(False)
             else:
@@ -944,19 +954,21 @@ class DeckViewer(QDialog):
 
 
     def mv_card(self, card: CardButton, deck: Literal["main", "side"]):
+        """Moves a card[CardButton] between the side and main deck."""
         card.deleteLater()
 
         if deck == "main":
             side_idx = self.side.index(card)
             item = self.side.pop(side_idx)
+
             self.fill_deck([item.card_model], self.deck_layout, self.deck,
-                           card.isChecked())
+                           self.deck_area, card.isChecked())
             return
 
         main_idx = self.deck.index(card)
         item = self.deck.pop(main_idx)
         self.fill_deck([item.card_model], self.side_deck_widget.main_layout,
-                       self.side, card.isChecked())
+                       self.side, self.side_deck_widget, card.isChecked())
 
     def parent(self) -> SelectionDialog:
         return super().parent()  # type: ignore
