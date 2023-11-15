@@ -1,5 +1,6 @@
 import logging
 import sys
+import traceback
 from pathlib import Path
 from typing import Optional, NamedTuple, Final, Any, Literal
 
@@ -11,12 +12,13 @@ from functools import partial
 
 import re
 import random
+from PyQt6 import QtCore, QtGui
 
 import requests_cache
 import requests
 
 from PyQt6.QtCore import (Qt, QRectF, pyqtSignal, pyqtSlot, QTimer, QSize,
-                          QPoint, QElapsedTimer)
+                          QPoint, QElapsedTimer, qFatal)
 
 from PyQt6.QtWidgets import (QApplication, QLineEdit, QPushButton, QWidget,
                              QComboBox, QVBoxLayout, QListWidget, QSlider,
@@ -25,11 +27,12 @@ from PyQt6.QtWidgets import (QApplication, QLineEdit, QPushButton, QWidget,
                              QMenu, QButtonGroup, QSpinBox, QCompleter,
                              QScrollArea, QLabel, QStyle, QLayout, QFileDialog,
                              QStyleOptionButton, QMessageBox, QSpacerItem,
-                             QProgressDialog)
+                             QProgressDialog,)
 
 from PyQt6.QtGui import (QPen, QPixmapCache, QPixmap, QPainter, QDrag,
-                         QPaintEvent, QResizeEvent, QCursor, QBrush,
-                         QDragEnterEvent, QDropEvent, QMouseEvent, QKeyEvent)
+                         QPaintEvent, QResizeEvent, QCursor, QBrush, QFont,
+                         QDragEnterEvent, QDropEvent, QMouseEvent, QKeyEvent,
+                         QImage)
 
 
 from yugioh_deck_drafter import util
@@ -213,7 +216,7 @@ class MainWindow(QWidget):
 
         self.YU_GI = YugiObj()
 
-        QPixmapCache.setCacheLimit(200000)
+        QPixmapCache.setCacheLimit(100000)
 
         self.setWindowTitle(NAME)
         self.selected_packs: dict[str, YGOCardSet] = {}
@@ -265,7 +268,7 @@ class MainWindow(QWidget):
 
         self.button_layout.addStretch(20)
 
-        self.pack_count = QLabel()
+        self.pack_count = QLabel(f"Pack Count: {self.p_count}")
         self.pack_count.setObjectName("indicator")
         self.button_layout.addWidget(self.pack_count)
 
@@ -285,6 +288,13 @@ class MainWindow(QWidget):
         self.start_button.pressed.connect(self.start_creating)
 
         self.show()
+
+        TEST_DATA = ("Legend of Blue Eyes White Dragon", "Pharaoh's Servant",
+                     "Spell Ruler", "Magic Ruler")
+
+        for item in TEST_DATA:
+            self.select_pack.setCurrentText(item)
+
 
     def list_context_menu(self):
         pos = QCursor().pos()
@@ -387,14 +397,14 @@ class SelectionDialog(QDialog):
     >>> Dialog for opening packs and managing drafting in general, as it has a
         core function that cycles and keep track of whats been added and
         removed in the meanwhile.
-    >>> *Future refactor might include seperating UI functions and calculations
+    >>> *Future refactor might include seperating UI & calculations functions
         into their own objects.
     """
 
     def __init__(self, parent: MainWindow, flags=Qt.WindowType.Dialog):
         super(SelectionDialog, self).__init__(parent, flags)
 
-        self.setWindowTitle("Card Selector")
+        self.setWindowTitle("Card Pack Opener")
 
         self.main_deck: list[YGOCard] = []
         self.extra_deck: list[YGOCard] = []
@@ -407,11 +417,8 @@ class SelectionDialog(QDialog):
 
         self.discard_stage_cnt = 0
 
-        p_size = QApplication.primaryScreen().availableGeometry()
-
-        self.setMinimumSize(p_size.width() // 2, p_size.height() // 2)
-
-        self.button_size = p_size.width() // 12
+        w, h = 1344, 824  # Base on 1080 screen width sizes
+        self.setMinimumSize(w, h)
 
         self.sets = {}
         self.data_requests = parent.YU_GI
@@ -421,23 +428,18 @@ class SelectionDialog(QDialog):
         self.stretch = self.main_layout.itemAt(0)
 
         self.card_layout = QGridLayout()
-        self.card_layout.setContentsMargins(1, 1, 1, 1)
+        self.card_layout.setAlignment(Qt.AlignmentFlag.AlignAbsolute)
         self.main_layout.addLayout(self.card_layout)
 
         self.card_buttons: list[CardButton] = []  # Contains the card widgets.
 
         self.button_layout = QHBoxLayout()
-        self.cancel_button = QPushButton("Cancel")
-        self.cancel_button.pressed.connect(self.reject)
-        self.button_layout.addWidget(self.cancel_button)
 
-        self.button_layout.addStretch(40)
-
-        self.check_deck_button = QPushButton("Check Deck")
+        self.check_deck_button = QPushButton("View Deck")
         self.button_layout.addWidget(self.check_deck_button)
         self.check_deck_button.pressed.connect(self.check_deck)
 
-        self.button_layout.addStretch(40)
+        self.button_layout.addStretch(60)
 
         self.card_picks_left = QLabel()
         self.card_picks_left.setObjectName("indicator")
@@ -453,11 +455,11 @@ class SelectionDialog(QDialog):
 
         self.button_layout.addStretch(2)
 
-        self.packs_opened = QLabel("Packs Open: 0")
+        self.packs_opened = QLabel("Pack No.: 0")
         self.packs_opened.setObjectName("indicator")
         self.button_layout.addWidget(self.packs_opened, 20)
 
-        self.button_layout.addStretch(40)
+        self.button_layout.addStretch(60)
 
         self.next_button = QPushButton("Start")
         self.next_button.pressed.connect(self.sel_next_set)
@@ -477,6 +479,7 @@ class SelectionDialog(QDialog):
         >>> Might need some refactor in the future to split it apart into
             multiple functions.
         """
+        print(self.size())
         self.main_layout.removeItem(self.stretch)
 
         if self.selection_per_pack > 0:
@@ -488,8 +491,6 @@ class SelectionDialog(QDialog):
 
         if self.picked_cards:
             self.add_card_to_deck()
-
-        self.clean_layout()
 
         if self.total_packs % 10 == 0 and self.total_packs != 0:
             self.discard_stage()
@@ -512,13 +513,15 @@ class SelectionDialog(QDialog):
 
             return self.accept()
 
+        self.clean_layout()
+
         sel_packs = self.parent().selected_packs
 
         next_key = list(sel_packs.keys())[self.opened_set_packs]
         set_data = sel_packs[next_key]
 
         self.total_packs += 1
-        self.packs_opened.setText(f"Packs Opened: {self.total_packs}")
+        self.packs_opened.setText(f"Pack No.: {self.total_packs}")
 
         if set_data.count == 0:
             self.opened_set_packs += 1
@@ -612,6 +615,7 @@ class SelectionDialog(QDialog):
             del card
 
         self.repaint()
+        QApplication.processEvents()
 
     def open_pack(self,
                   card_set: list,
@@ -639,24 +643,19 @@ class SelectionDialog(QDialog):
 
             row = 0
             if column % 2 != 0:
-                QApplication.processEvents()
                 row = 1
                 column -= 1
 
             card_data = card_set[pick]
-
             card = CardButton(card_data, self)
+            self.update()
+            QApplication.processEvents()
 
             self.card_buttons.append(card)
             card.toggled.connect(self.update_selection)
             self.card_layout.addWidget(card, row, column, 1, 1)
 
-        # print(progress.value(), progress.maximum())
-        # progress.setValue()
-
         self.repaint()
-
-        QApplication.processEvents()
 
     def parent(self) -> MainWindow:
         return super().parent()  # type: ignore
@@ -701,7 +700,11 @@ class SelectionDialog(QDialog):
         remaining = f"Remaining Picks: {self.selection_per_pack}"
         self.card_picks_left.setText(remaining)
         picked = len(self.main_deck) + len(self.side_deck)
-        self.cards_picked.setText(f"Card Total: {picked}")
+        self.cards_picked.setText(f"Deck Total: {picked}")
+        tip = f"Main Deck: {len(self.main_deck)}\n"
+        tip += f"Extra Deck: {len(self.extra_deck)}\n"
+        tip += f"Side Deck: {len(self.side_deck)}"
+        self.cards_picked.setToolTip(tip)
 
     def check_extra_monster(self, card: YGOCard) -> bool:
         return card.card_type == "Fusion Monster"
@@ -752,8 +755,21 @@ class SelectionDialog(QDialog):
         if deck.exec():
             return
 
+    def keyPressEvent(self, event: QKeyEvent | None) -> None:
+        if event is None:
+            return super().keyPressEvent(event)
+        KEY = Qt.Key
+        if (event.key() in {KEY.Key_Escape, KEY.Key_Space}):
+            return
 
-class CardButton(QToolButton):
+        return super().keyPressEvent(event)
+
+    def resizeEvent(self, event: QResizeEvent | None):
+        QApplication.processEvents()
+        return super().resizeEvent(event)
+
+
+class CardButton(QPushButton):
     """
     >>> Card class used for displaying, deleting and containg cards.
     >>> Has some functions to search and locate assocciated cards aswell.
@@ -762,21 +778,15 @@ class CardButton(QToolButton):
     >>> *Also draggable functionality still in progress as I need to implement
          that.
     """
-
-    base_size = QSize(164, 242)
+    BASE_SIZE = QSize(164, 242)
 
     def __init__(self, data: YGOCard, parent: SelectionDialog,
                  viewer: Optional['DeckViewer'] = None):
-        super(CardButton, self).__init__()
-        self.ASPECT_RATIO: Final[float] = 0.6776859504
-
+        super().__init__()
+        self.ASPECT_RATIO: Final[float] = 1.4756097561  # Height to Width
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
         self.viewer = viewer
-
-        self.setBaseSize(self.base_size)
-        self.setMinimumSize(round(self.base_size.width() * self.ASPECT_RATIO),
-                            round(self.base_size.height() * self.ASPECT_RATIO))
 
         self.card_set = data.card_set
         self.card_model = data
@@ -785,9 +795,8 @@ class CardButton(QToolButton):
         self.setAccessibleName(data.name)
         self.setAccessibleDescription(data.description)
 
+        self.setBaseSize(self.BASE_SIZE)
         desc = util.new_line_text(data.description, 100)
-
-        self.heightForWidth(False)
 
         self.setToolTip(data.name + "\n" + desc)
         self.setObjectName("card_button")
@@ -797,12 +806,23 @@ class CardButton(QToolButton):
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self.show_menu)
 
-        self.setSizePolicy(QSP.Preferred, QSP.Preferred)
+        self.setSizePolicy(QSP.Expanding, QSP.Expanding)
         self.setCheckable(True)
 
         self.assocc = self.filter_assocciated()
 
         self.image = parent.data_requests.get_card_art(self.card_id)
+
+    def minimumSize(self) -> QSize:
+        return self.BASE_SIZE
+
+    def sizeHint(self) -> QSize:
+        width = self.minimumSize().width()
+        size = QSize(width, self.heightForWidth(width))
+        return size
+
+    def heightForWidth(self, width: int) -> int:
+        return round(width * self.ASPECT_RATIO)
 
     def filter_assocciated(self) -> set:
         pattern = r'(?<!\\)"(.*?[^\\])"'
@@ -824,20 +844,25 @@ class CardButton(QToolButton):
         HINT = QPainter.RenderHint
         painter.setRenderHints(HINT.LosslessImageRendering |
                                HINT.Antialiasing)
+        image = self.image.scaled(self.width(), self.height(),
+                                  Qt.AspectRatioMode.KeepAspectRatio,
+                                  Qt.TransformationMode.SmoothTransformation)
 
-        tform_mode = Qt.TransformationMode
-        image = self.image.scaledToHeight(self.height(),
-                                          tform_mode.SmoothTransformation)
+        if not self.isEnabled():
+            image = image.toImage()
+            grayscale = image.convertToFormat(QImage.Format.Format_Grayscale8)
+            image = QPixmap.fromImage(grayscale)
 
         brush = QBrush(image)
         painter.setBrush(brush)
 
         # RADIUS = 10
 
-        PEN_WIDTH = 6
+        PEN_WIDTH = 5
+        assert PEN_WIDTH % 2 != 0
         PEN_HALF = PEN_WIDTH / 2
-        new_rect = QRectF(rect.x() + (PEN_HALF / 2), rect.y() + (PEN_HALF / 2),
-                          image.width() - PEN_HALF, image.height() - PEN_HALF)
+        new_rect = QRectF(rect.x(), rect.y() + PEN_HALF,
+                          image.width(), image.height())
         if self.isChecked():
             PEN_WIDTH *= 1.25
             pen = QPen(Qt.GlobalColor.red)
@@ -849,6 +874,7 @@ class CardButton(QToolButton):
             pen.setWidth(PEN_WIDTH)
             painter.setPen(pen)
         elif self.card_model.rarity != "Common":
+            painter.setOpacity(0.8)
             pen = QPen(Qt.GlobalColor.darkMagenta)
             pen.setCosmetic(True)
             pen.setWidth(PEN_WIDTH)
@@ -857,10 +883,13 @@ class CardButton(QToolButton):
             painter.setPen(Qt.PenStyle.NoPen)
 
         painter.drawRect(new_rect)
+        painter.setOpacity(1)
+
 
         if not self.isChecked():
             return
         if isinstance(self.viewer, DeckViewer) and self.viewer.discard:
+            rect = self.rect()
             painter.drawLine(rect.topLeft(), rect.bottomRight())
             painter.drawLine(rect.bottomLeft(), rect.topRight())
 
@@ -869,6 +898,8 @@ class CardButton(QToolButton):
         menu = QMenu(self)
 
         if isinstance(self.viewer, DeckViewer):
+            if not self.viewer.discard:
+                return
 
             mv_deck = self.viewer.mv_card
 
@@ -887,31 +918,12 @@ class CardButton(QToolButton):
         if self.parent().selection_per_pack < 1:
             return
 
-        # race = self.data['race']
-        # race_type = menu.addAction(f"Search for {race}")
-        # (race_type.triggered  # type: ignore
-        #  .connect(lambda: self.search_type(race, "race")))
-        # attribute = self.data.get("attribute")
-        # if attribute is not None:
-        #     attribute_type = menu.addAction(f"Search for {attribute}.")
-        #     (attribute_type.triggered  # type: ignore
-        #      .connect(lambda: self.search_type(attribute, "attribute")))
-
-        # # archetype = self.data.get("archetype")
-        # # if archetype is not None:
-        # #     type_action = menu.addAction(f"Search for {archetype}.")
-        # #     (type_action.triggered  # type: ignore
-        # #      .connect(lambda: self.search_type(archetype)))
-
         if self.card_model.card_type == "Fusion Monster":
             poly = "Polymerization"
 
             if self.parent().selection_per_pack > 1:
                 fusion = menu.addAction("Add All Fusion Parts")
-                items = list(self.assocc)
-                items.append(poly)
-                (fusion.triggered  # type: ignore
-                 .connect(lambda: self.get_card(self.assocc)))
+                fusion.triggered.connect(self.add_all_assocc)  # type: ignore
 
             poly_add = menu.addAction("Add Polymerization")
             (poly_add.triggered  # type: ignore
@@ -929,12 +941,22 @@ class CardButton(QToolButton):
                  .connect(partial(self.get_card, item)))
             if self.assocc:
                 acc = menu.addAction("Add all Assocciated")
-                (acc.triggered  # type: ignore
-                 .connect(lambda: self.get_card(self.assocc)))
+                acc.triggered.connect(self.add_all_assocc)  # type: ignore
             else:
                 return
 
         menu.exec(pos)
+
+    def add_all_assocc(self):
+        self.setChecked(True)
+        self.setDisabled(True)
+
+        items = list(self.assocc)
+        if self.card_model.card_type == "Fusion Monster":
+            poly = "Polymerization"
+            items.append(poly)
+
+        self.get_card(self.assocc)
 
     def get_card(self, card_name: str | list | set):
 
@@ -981,19 +1003,18 @@ class CardButton(QToolButton):
     #         drag.exec(Qt.DropAction.MoveAction)
 
     def resizeEvent(self, event: QResizeEvent | None) -> None:
+        self.setMinimumSize(self.sizeHint())
         return super().resizeEvent(event)
 
 
 class DeckViewer(QDialog):
     """
-    >>> Main Dialog use for viewing and discard additonal cards from the deck.
+    >>> Main Dialog use for viewing and discard additional cards from the deck.
     """
 
     def __init__(self, parent: SelectionDialog, discard: int = 0):
         super(DeckViewer, self).__init__(parent)
-        size = QApplication.primaryScreen().availableGeometry()
-        w, h = round(size.width() // 1.5), round(size.height() // 1.5)
-        self.resize(w, h)
+        self.resize(1745, 860)  # Base on 1080 ratio
 
         self.discard = discard
         self.side_length = len(parent.side_deck) + 2
@@ -1005,32 +1026,18 @@ class DeckViewer(QDialog):
         self.side: list[CardButton] = []
 
         self.main_layout = QVBoxLayout()
-        self.deck_area = QScrollArea()
 
-        self.deck_area_widget = QWidget()
-        self.deck_layout = QGridLayout()
-        self.deck_area_widget.setLayout(self.deck_layout)
-
-        self.fill_deck(parent.main_deck, self.deck_layout, self.deck,
-                       self.deck_area)
-
-        self.deck_area.setWidget(self.deck_area_widget)
-
+        self.deck_area = DeckSlider("Main Deck", self)
         self.main_layout.addWidget(self.deck_area, 60)
+        self.fill_deck(parent.main_deck, self.deck, self.deck_area)
 
-        self.extra_deck_widget = DeckSlider(self)
+        self.extra_deck_widget = DeckSlider("Extra Deck", self)
         self.main_layout.addWidget(self.extra_deck_widget, 20)
+        self.fill_deck(parent.extra_deck, self.extra, self.extra_deck_widget)
 
-        self.fill_deck(parent.extra_deck,
-                       self.extra_deck_widget.main_widget.blayout,
-                       self.extra, self.extra_deck_widget)
-
-        self.side_deck_widget = DeckSlider(self)
+        self.side_deck_widget = DeckSlider("Side Deck", self)
         self.main_layout.addWidget(self.side_deck_widget, 20)
-
-        self.fill_deck(parent.side_deck,
-                       self.side_deck_widget.main_widget.blayout,
-                       self.side, self.side_deck_widget)
+        self.fill_deck(parent.side_deck, self.side, self.side_deck_widget)
 
         self.button_layout = QHBoxLayout()
 
@@ -1063,14 +1070,14 @@ class DeckViewer(QDialog):
 
         self.setLayout(self.main_layout)
 
-    def fill_deck(self, cards: list[YGOCard], layout: QLayout, container: list,
-                  scroll_bar: 'QScrollArea | DeckSlider', check: bool = False):
+    def fill_deck(self, cards: list[YGOCard], container: list,
+                  scroll_bar: 'DeckSlider', check: bool = False):
         """
         >>> Fills the deck preview with the list of given list[YGOCards].
         >>> Also checks if an item has been previously checked as the func
             is used for moving cards between main and side decks as well.
         """
-
+        layout = scroll_bar.main_layout
         cards = cards.copy()
         if isinstance(layout, QHBoxLayout):
             for i in range(layout.count()):
@@ -1081,6 +1088,7 @@ class DeckViewer(QDialog):
         MAX_COLUMNS: Final[int] = 10
 
         QSP = QSizePolicy.Policy
+        QAF = Qt.AlignmentFlag
         row = 0
         column = 0
         while cards:
@@ -1113,14 +1121,14 @@ class DeckViewer(QDialog):
                 card_button.toggled.connect(self.removal_count)
                 card_button.setChecked(check)
 
-            card_button.setSizePolicy(QSP.Minimum, QSP.Minimum)
-            card_button.acceptDrops()
+            card_button.setSizePolicy(QSP.Fixed, QSP.Fixed)
             container.append(card_button)
             if isinstance(layout, QHBoxLayout):
                 layout.addWidget(card_button)
                 continue
 
-            layout.addWidget(card_button, row, column, 1, 1)
+            layout.addWidget(card_button, row, column, QAF.AlignJustify)
+            column += 1
 
         if isinstance(layout, QHBoxLayout):
             layout.insertStretch(-1, 1)
@@ -1133,15 +1141,14 @@ class DeckViewer(QDialog):
             side_idx = self.side.index(card)
             item = self.side.pop(side_idx)
 
-            self.fill_deck([item.card_model], self.deck_layout, self.deck,
-                           self.deck_area, card.isChecked())
+            self.fill_deck([item.card_model], self.deck, self.deck_area,
+                           card.isChecked())
 
         elif deck == "side":
             main_idx = self.deck.index(card)
             item = self.deck.pop(main_idx)
-            self.fill_deck([item.card_model],
-                           self.side_deck_widget.main_layout,
-                           self.side, self.side_deck_widget, card.isChecked())
+            self.fill_deck([item.card_model], self.side, self.side_deck_widget,
+                           card.isChecked())
 
         if self.discard:
             self.removal_count()
@@ -1153,7 +1160,8 @@ class DeckViewer(QDialog):
         if event is None:
             return super().keyPressEvent(event)
 
-        if (event.key() == Qt.Key.Key_Escape and self.discard):
+        KEY = Qt.Key
+        if (event.key() in {KEY.Key_Escape, KEY.Key_Space} and self.discard):
             return
 
         return super().keyPressEvent(event)
@@ -1208,10 +1216,9 @@ class DeckViewer(QDialog):
                     continue
                 item.deleteLater()
 
-        side_len = len(self.side) 
         logging.debug("Deck Cards: %s" % len(self.deck))
         logging.debug("Extra Cards: %s" % len(self.extra))
-        logging.debug("Side Cards: %s" % side_len)
+        logging.debug("Side Cards: %s" % len(self.side))
         count = self.count()
         logging.debug("Actual Count: %s" % count)
 
@@ -1224,11 +1231,12 @@ class DeckViewer(QDialog):
                                 QMessageBox.StandardButton.Ok)
             return
 
-        elif side_len != self.side_length:
-            cnt = side_len - self.side_length
+        elif self.count("side") != self.side_length:
+            cnt = self.count("side") - self.side_length
             operation, cnt = util.get_operation(cnt)
-
             msg = f"{operation} {cnt} more card(s) to the Side Deck"
+            if operation == "Remove":
+                msg = f"{operation} {cnt} more card(s) from the Side Deck"
             QMessageBox.warning(self, "Adjust Side Deck", msg,
                                 QMessageBox.StandardButton.Ok)
             return
@@ -1246,38 +1254,90 @@ class DeckViewer(QDialog):
 
 class DeckSlider(QScrollArea):
 
-    def __init__(self   , parent: DeckViewer) -> None:
-        super().__init__(parent)
+    def __init__(self, deck_type: str, parent: DeckViewer):
+        super(DeckSlider, self).__init__(parent)
 
-        self.setWidgetResizable(True)
+        QAF = Qt.AlignmentFlag
+        SBP = Qt.ScrollBarPolicy
+        self.setHorizontalScrollBarPolicy(SBP.ScrollBarAsNeeded)
 
-        self.main_widget = DragWidget(Qt.Orientation.Horizontal)
+        if deck_type != "Main Deck":
+            self.main_widget = DeckDragWidget(deck_type, self)
+            self.main_layout = self.main_widget.main_layout
 
-        self.main_layout = self.main_widget.blayout
+            self.setWidgetResizable(True)
+            self.setVerticalScrollBarPolicy(SBP.ScrollBarAlwaysOff)
+
+        else:
+            self.setVerticalScrollBarPolicy(SBP.ScrollBarAlwaysOn)
+            self.main_widget = DeckWidget(deck_type, self)
+            self.main_layout = QGridLayout(self)
+            self.main_layout.setAlignment(QAF.AlignTop | QAF.AlignLeft)
+            self.main_widget.setLayout(self.main_layout)
+            self.setWidgetResizable(True)
 
         self.setWidget(self.main_widget)
 
+        vscroll = self.verticalScrollBar()
+        if vscroll is not None:
+            vscroll.valueChanged.connect(self.main_widget.repaint)
+        hscroll = self.horizontalScrollBar()
+        if hscroll is not None:
+            hscroll.valueChanged.connect(self.main_widget.repaint)
 
-class DragWidget(QWidget):
+
+class DeckWidget(QWidget):
+
+    def __init__(self, deck_type: str, parent: DeckSlider):
+        super(DeckWidget, self).__init__(parent)
+        self.name = deck_type
+        QSP = QSizePolicy.Policy
+
+        self.setSizePolicy(QSP.Minimum, QSP.Minimum)
+
+    def paintEvent(self, event: QPaintEvent | None):
+        super().paintEvent(event)
+        if event is None:
+            return
+
+
+        r = event.rect()
+        painter = QPainter(self)
+        font = QFont()
+        font.setItalic(True)
+        font.setPixelSize(36)
+        painter.setOpacity(0.1)
+        painter.setFont(font)
+        painter.setPen(Qt.GlobalColor.white)
+        painter.drawText(r, (Qt.TextFlag.TextWordWrap
+                         | Qt.AlignmentFlag.AlignCenter),
+                         self.name)
+
+    def resizeEvent(self, event: QResizeEvent | None) -> None:
+        return super().resizeEvent(event)
+
+
+class DeckDragWidget(DeckWidget):
     orderChanged = pyqtSignal()
 
-    def __init__(self, orientation=Qt.Orientation.Vertical):
-        super().__init__()
+    def __init__(self, deck_type: str, parent: DeckSlider,
+                 orientation=Qt.Orientation.Horizontal):
+        super(DeckDragWidget, self).__init__(deck_type, parent)
+        self.name = deck_type
         # self.setAcceptDrops(True)
         self.orientation = orientation
 
-        QSP = QSizePolicy.Policy
-        # self.setSizePolicy(QSP.Preferred, QSP.Preferred)
-
         if self.orientation == Qt.Orientation.Vertical:
-            self.blayout = QVBoxLayout()
+            self.main_layout = QVBoxLayout()
+            self.main_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         else:
-            self.blayout = QHBoxLayout()
+            self.main_layout = QHBoxLayout()
+            self.main_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
-        self.setLayout(self.blayout)
+        self.setLayout(self.main_layout)
 
     def add_drag_widget(self, card: CardButton):
-        self.blayout.addWidget(card)
+        self.main_layout.addWidget(card)
 
     def dragEnterEvent(self, event: QDragEnterEvent):
         event.accept()
@@ -1288,15 +1348,15 @@ class DragWidget(QWidget):
         pos = event.position()
         widget: CardButton = event.source()  # type: ignore
 
-        for n in range(self.blayout.count()):
-            w = self.blayout.itemAt(n).widget()
+        for n in range(self.main_layout.count()):
+            w = self.main_layout.itemAt(n).widget()
             if self.orientation == Qt.Orientation.Vertical:
                 drop_here = pos.y() < w.y() + w.size().height() // 2
-            else:
+            else:   
                 drop_here = pos.x() < w.x() + w.size().width() // 2
 
             if drop_here:
-                self.blayout.insertWidget(n - 1, widget)
+                self.main_layout.insertWidget(n - 1, widget)
                 self.orderChanged.emit()
                 break
 
@@ -1306,6 +1366,10 @@ class DragWidget(QWidget):
     def delete_widget(self, widget: CardButton):
         widget.setParent(None)  # type: ignore
         self.orderChanged.emit()
+
+    def resizeEvent(self, event: QResizeEvent | None) -> None:
+        # self.resize(self.parent().size())
+        return super().resizeEvent(event)
 
 
 class SearchDialog(QDialog):
@@ -1397,6 +1461,13 @@ class SearchDialog(QDialog):
 
 def main():
     FMT = "%(levelname)s | %(module)s\\%(funcName)s:%(lineno)d -> %(message)s"
+
+    def excepthook(type_, value, traceback_):
+        traceback.print_exception(type_, value, traceback_)
+        qFatal(traceback_)
+        sys.exit(1)
+
+    sys.excepthook = excepthook
 
     logging.basicConfig(stream=sys.stderr, level=logging.DEBUG, format=FMT)
     logging.info(f"Starting {NAME}!")
