@@ -50,7 +50,7 @@ def test_card_picks(main_window_fill: main.MainWindow, qtbot):
     dialog.show()
 
     PACK_COUNT = 10
-    for _ in range(PACK_COUNT):
+    for i in range(PACK_COUNT):
         b_clicks = 0
 
         for button in dialog.card_buttons:
@@ -63,12 +63,34 @@ def test_card_picks(main_window_fill: main.MainWindow, qtbot):
             if b_clicks == 2:
                 break
 
-        # qtbot.addWidget(dialog.accept_button)
-        dialog.next_button.click()
+        if i + 1 != 10:
+            dialog.next_button.click()
 
-    print(dialog.children())
+    discard_stage: main.DeckViewer = dialog.discard_stage()  # type: ignore
+
+    for item in discard_stage.deck:
+        item.click()
+        if discard_stage.removal_counter.text() == "Remove: 0":
+            break
+
+    move_cnt = 0
+    for item in discard_stage.deck:
+        if item.isChecked():
+            continue
+        discard_stage.mv_card(item, "side")
+        move_cnt += 1
+        if move_cnt == 2:
+            break
+
+    discard_stage.accept()
+
+
+    dialog.main_deck = discard_stage.new_deck
+    dialog.extra_deck = discard_stage.new_extra
+    dialog.side_deck = discard_stage.new_side
+
+
+    qtbot.addWidget(discard_stage)
 
     main_deck_len = len(dialog.main_deck)
-
-
-    assert main_deck_len == PACK_COUNT * 2 - 8
+    assert main_deck_len == PACK_COUNT

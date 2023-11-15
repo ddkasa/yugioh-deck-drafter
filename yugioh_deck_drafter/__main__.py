@@ -461,11 +461,10 @@ class SelectionDialog(QDialog):
     def sel_next_set(self):
         """
         >>> Selects the next pack and also manages the session in general.
-        >>> Might need some refactor in the futureto split it apart into
+        >>> Might need some refactor in the future to split it apart into
             multiple functions.
         """
         self.main_layout.removeItem(self.stretch)
-        self.next_button.setText("Next")
 
         if self.selection_per_pack > 0:
             text = f"Select at least {self.selection_per_pack} more cards."
@@ -483,7 +482,9 @@ class SelectionDialog(QDialog):
             self.discard_stage()
             self.selection_per_pack = 0
 
-        if len(self.parent().selected_packs) == self.opened_set_packs:
+        self.next_button.setText("Next")
+
+        if self.discard_stage_cnt == 4:
             logging.error("Selection complete!")
             MSG_CLASS = QMessageBox
             MBUTTON = MSG_CLASS.StandardButton
@@ -503,8 +504,6 @@ class SelectionDialog(QDialog):
         next_key = list(sel_packs.keys())[self.opened_set_packs]
         set_data = sel_packs[next_key]
 
-        set_data.count -= 1
-
         self.total_packs += 1
         self.packs_opened.setText(f"Packs Opened: {self.total_packs}")
 
@@ -519,9 +518,10 @@ class SelectionDialog(QDialog):
             set_data.probabilities = probabilities
 
         if self.total_packs % 10 == 0 and self.total_packs != 0:
-            self.next_button.setText("Side & Discard")
+            self.next_button.setText("Discard Stage")
 
         self.open_pack(set_data.card_set, set_data.probabilities, set_data)
+        set_data.count -= 1
 
     def add_card_to_deck(self):
         for cardbutton in list(self.picked_cards):
@@ -597,6 +597,8 @@ class SelectionDialog(QDialog):
             card = self.card_buttons.pop(0)
             card.deleteLater()
             del card
+
+        self.repaint()
 
     def open_pack(self,
                   card_set: list,
@@ -810,16 +812,21 @@ class CardButton(QToolButton):
             pen = QPen(Qt.GlobalColor.yellow)
             pen.setWidth(PEN_WIDTH)
             painter.setPen(pen)
+        elif self.card_model.rarity != "Common":
+            pen = QPen(Qt.GlobalColor.darkMagenta)
+            pen.setCosmetic(True)
+            pen.setWidth(PEN_WIDTH)
+            painter.setPen(pen)
+        else:
+            painter.setPen(Qt.PenStyle.NoPen)
 
         painter.drawRect(new_rect)
 
         if not self.isChecked():
             return
         if isinstance(self.viewer, DeckViewer) and self.viewer.discard:
-            painter.drawLine(rect.topLeft().toPointF(),
-                             new_rect.bottomRight())
-            painter.drawLine(rect.bottomLeft().toPointF(),
-                             new_rect.topRight())
+            painter.drawLine(rect.topLeft(), rect.bottomRight())
+            painter.drawLine(rect.bottomLeft(), rect.topRight())
 
     def show_menu(self):
         pos = QCursor().pos()
@@ -1141,13 +1148,13 @@ class DeckViewer(QDialog):
             self.removal_counter.setText(f"Remove: {discardcount}")
 
         mcount = self.count("main")
-        self.main_deck_count.setText("Main Deck Count: %s" % mcount)
+        self.main_deck_count.setText("Main Deck: %s" % mcount)
 
         extra = len(self.extra)
-        self.extra_deck_count.setText("Extra Deck Count %s" % extra)
+        self.extra_deck_count.setText("Extra Deck: %s" % extra)
 
         side = self.count("side")
-        self.side_deck_count.setText(f"Side Deck Count: %s" % side)
+        self.side_deck_count.setText("Side Deck: %s" % side)
 
     def accept(self):
         if not self.discard:
