@@ -4,7 +4,6 @@ from PyQt6.QtCore import Qt
 
 from yugioh_deck_drafter import __main__ as main
 
-
 @pytest.fixture()
 def main_window_fill():
     main_window = main.MainWindow(debug=True)
@@ -42,6 +41,15 @@ def test_dialog(main_window_fill: main.MainWindow, qtbot):
 
 
 def test_card_picks(main_window_fill: main.MainWindow, qtbot):
+    pack_count = 40
+
+    def find_dialog(children: list):
+        for item in children:
+            if isinstance(item, main.DeckViewer):
+                return item
+        else:
+            raise ValueError("No DeckViewer dialog present in children.")
+
     main_window = main_window_fill
     main_window.show()
 
@@ -49,48 +57,49 @@ def test_card_picks(main_window_fill: main.MainWindow, qtbot):
     qtbot.addWidget(dialog)
     dialog.show()
 
-    PACK_COUNT = 10
-    for i in range(PACK_COUNT):
-        b_clicks = 0
+    stages = pack_count // 40
+    for stage in range(stages):
+        for i in range(10):
+            b_clicks = 0
+            for button in dialog.card_buttons:
 
-        for button in dialog.card_buttons:
+                if button.card_model.card_type == "Fusion Monster":
+                    continue
+                button.toggle()
+                b_clicks += 1
 
-            if button.card_model.card_type == "Fusion Monster":
-                continue
-            button.toggle()
-            b_clicks += 1
+                if b_clicks == 2:
+                    break
 
-            if b_clicks == 2:
-                break
-
-        if i + 1 != 10:
             dialog.next_button.click()
 
-    discard_stage: main.DeckViewer = dialog.discard_stage()  # type: ignore
+        discard_stage: main.DeckViewer = find_dialog(dialog.children())
 
-    for item in discard_stage.deck:
-        item.click()
-        if discard_stage.removal_counter.text() == "Remove: 0":
-            break
+        qtbot.addWidget(discard_stage)
 
-    move_cnt = 0
-    for item in discard_stage.deck:
-        if item.isChecked():
-            continue
-        discard_stage.mv_card(item, "side")
-        move_cnt += 1
-        if move_cnt == 2:
-            break
+        for item in discard_stage.deck:
+            item.click()
+            if discard_stage.removal_counter.text() == "Remove: 0":
+                break
 
-    discard_stage.accept()
+        move_cnt = 0
+        for item in discard_stage.deck:
+            if item.isChecked():
+                continue
+            discard_stage.mv_card(item, "side")
+            move_cnt += 1
+            if move_cnt == 2:
+                break
 
+        qtbot.addWidget(discard_stage.accept_button)
+        discard_stage.accept_button.click()
 
-    dialog.main_deck = discard_stage.new_deck
-    dialog.extra_deck = discard_stage.new_extra
-    dialog.side_deck = discard_stage.new_side
+        dialog.main_deck = discard_stage.new_deck
+        dialog.extra_deck = discard_stage.new_extra
+        dialog.side_deck = discard_stage.new_side
 
+        stage += 1
+        assert len(dialog.main_deck) == 10 * stage
+        assert len(dialog.side_deck) == 2 * stage
 
-    qtbot.addWidget(discard_stage)
-
-    main_deck_len = len(dialog.main_deck)
-    assert main_deck_len == PACK_COUNT
+        discard_stage.close()

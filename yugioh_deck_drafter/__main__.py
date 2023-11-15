@@ -700,6 +700,7 @@ class SelectionDialog(QDialog):
         dialog.setWindowTitle("Card Removal Stage")
 
         if self.parent().debug:
+            dialog.setModal(False)
             dialog.show()
             return dialog
 

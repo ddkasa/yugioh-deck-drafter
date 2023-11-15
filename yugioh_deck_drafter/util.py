@@ -11,6 +11,7 @@ from PyQt6.QtGui import QPixmap, QPixmapCache
 from PyQt6.QtWidgets import QLayout, QHBoxLayout
 
 
+
 def get_or_insert(pixmap_path: str | Path, format: str = ".jpg",
                   data: Optional[bytes] = None) -> QPixmap:
     if isinstance(pixmap_path, Path):
