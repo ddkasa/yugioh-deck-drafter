@@ -1,8 +1,8 @@
 import pytest
-
 from PyQt6.QtCore import Qt
 
 from yugioh_deck_drafter import __main__ as main
+
 
 @pytest.fixture()
 def main_window_fill():
@@ -68,7 +68,7 @@ def test_card_picks(main_window_fill: main.MainWindow, qtbot):
                 button.toggle()
                 b_clicks += 1
 
-                if b_clicks == 2:
+                if dialog.selection_per_pack <= 0:
                     break
 
             dialog.next_button.click()

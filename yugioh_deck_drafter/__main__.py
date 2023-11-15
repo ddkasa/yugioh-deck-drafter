@@ -217,6 +217,7 @@ class MainWindow(QWidget):
 
         self.setWindowTitle(NAME)
         self.selected_packs: dict[str, YGOCardSet] = {}
+        self.p_count: int = 0
         self.main_layout = QVBoxLayout()
         self.setLayout(self.main_layout)
 
@@ -230,24 +231,24 @@ class MainWindow(QWidget):
         self.select_layout.addWidget(self.select_pack, 50)
         self.select_layout.addStretch(10)
 
-        PACK_MAX: Final[int] = 40
+        self.PACK_MAX: Final[int] = 40
         DEFAULT_PACK_COUNT: Final[int] = 10
 
         self.no_packs = QSlider()
-        self.no_packs.setSingleStep(5)
+        self.no_packs.setSingleStep(10)
         self.no_packs.setTickPosition(QSlider.TickPosition.TicksBelow)
         self.no_packs.setTickInterval(10)
         self.no_packs.setOrientation(Qt.Orientation.Horizontal)
-        self.no_packs.setMinimum(1)
+        self.no_packs.setMinimum(10)
         self.no_packs.setValue(DEFAULT_PACK_COUNT)
-        self.no_packs.setMaximum(PACK_MAX)
+        self.no_packs.setMaximum(self.PACK_MAX)
         self.select_layout.addWidget(self.no_packs, 40)
 
         self.no_pack_indi = QSpinBox()
         self.no_pack_indi.setValue(DEFAULT_PACK_COUNT)
         self.no_pack_indi.setSingleStep(5)
         self.no_pack_indi.setMinimum(5)
-        self.no_pack_indi.setMaximum(PACK_MAX)
+        self.no_pack_indi.setMaximum(self.PACK_MAX)
         self.select_layout.addWidget(self.no_pack_indi, 1)
 
         self.list_widget = QListWidget()
@@ -264,6 +265,14 @@ class MainWindow(QWidget):
 
         self.button_layout.addStretch(20)
 
+        self.pack_count = QLabel()
+        self.pack_count.setObjectName("indicator")
+        self.button_layout.addWidget(self.pack_count)
+
+        self.update_pack_count()
+
+        self.button_layout.addStretch(20)
+
         self.reset_button = QPushButton("RESET")
         self.button_layout.addWidget(self.reset_button)
         self.reset_button.pressed.connect(self.reset_selection)
@@ -276,12 +285,6 @@ class MainWindow(QWidget):
         self.start_button.pressed.connect(self.start_creating)
 
         self.show()
-
-        TEST_DATA = ("Legend of Blue Eyes White Dragon", "Pharaoh's Servant",
-                     "Spell Ruler", "Magic Ruler")
-
-        for item in TEST_DATA:
-            self.select_pack.setCurrentText(item)
 
     def list_context_menu(self):
         pos = QCursor().pos()
@@ -312,6 +315,8 @@ class MainWindow(QWidget):
 
         self.selected_packs[label] = data
 
+        self.update_pack_count()
+
     def remove_item(self, pos: QPoint):
         pos = self.list_widget.mapFromGlobal(pos)
         item = self.list_widget.itemAt(pos)
@@ -326,19 +331,27 @@ class MainWindow(QWidget):
 
         del removed_item
 
+        self.update_pack_count()
+
     def update_indi(self, value: int):
         self.no_packs.blockSignals(True)
         self.no_packs.setValue(value)
         self.no_pack_indi.setValue(value)
         self.no_packs.blockSignals(False)
 
+    def update_pack_count(self):
+        self.p_count = 0
+        for pack in self.selected_packs.values():
+            self.p_count += pack.count
+
+        self.pack_count.setText(f"Pack Count: {self.p_count}")
+
     @pyqtSlot()
     def start_creating(self):
-        if not self.selected_packs:
-            logging.info("Select some sets to open.")
-            QMessageBox.information(
-                self, "Select Card Set",
-                "Select at least one set to start drafting.")
+        if self.p_count != self.PACK_MAX:
+            msg = "Make sure you have {0} packs selected."
+            QMessageBox.information(self, "Not Enough Packs",
+                                    msg.format(self.PACK_MAX))
             return
 
         logging.info("Opening Selection Dialog.")
@@ -383,9 +396,9 @@ class SelectionDialog(QDialog):
 
         self.setWindowTitle("Card Selector")
 
-        self.main_deck = []
-        self.extra_deck = []
-        self.side_deck = []
+        self.main_deck: list[YGOCard] = []
+        self.extra_deck: list[YGOCard] = []
+        self.side_deck: list[YGOCard] = []
 
         self.opened_set_packs = 0
         self.total_packs = 0
@@ -660,8 +673,10 @@ class SelectionDialog(QDialog):
             item_in = item in self.picked_cards
 
             fus_monster = self.check_extra_monster(item.card_model)
+            three = self.check_dup_card_count(item.card_model) == 3
 
             if (item.isChecked()
+               and not three
                and (self.selection_per_pack > 0 or fus_monster)):
                 if not item_in:
                     logging.debug(f"Adding card {item.accessibleName()}")
@@ -675,11 +690,11 @@ class SelectionDialog(QDialog):
                 self.picked_cards.pop(index)
                 if not fus_monster:
                     self.selection_per_pack += 1
+
             elif not item_in and not fus_monster:
                 item.setChecked(False)
 
             self.update_counter_label()
-
             item.blockSignals(False)
 
     def update_counter_label(self):
@@ -690,6 +705,26 @@ class SelectionDialog(QDialog):
 
     def check_extra_monster(self, card: YGOCard) -> bool:
         return card.card_type == "Fusion Monster"
+
+    def check_dup_card_count(self, card: YGOCard) -> int:
+        count = 0
+
+        def count_cards(card, deck) -> int:
+            count = 0
+            for item in deck:
+                if item.name == card.name:
+                    count += 1
+            return count
+
+        count += count_cards(card, self.main_deck)
+        count += count_cards(card, self.extra_deck)
+        count += count_cards(card, self.side_deck)
+
+        for item in self.picked_cards:
+            if item.accessibleName() == card.name:
+                count += 1
+
+        return count
 
     def discard_stage(self):
         """Calculates the amount to be discard and starts the dialog."""
@@ -921,6 +956,10 @@ class CardButton(QToolButton):
         self.add_card(c_mdl)
 
     def add_card(self, card: YGOCard):
+        if self.parent().check_dup_card_count(card) == 3:
+            logging.error(f"Three {card.name} in deck.")
+            return
+
         self.parent().main_deck.append(card)
         if card.card_type != "Fusion Monster":
             self.parent().selection_per_pack -= 1
