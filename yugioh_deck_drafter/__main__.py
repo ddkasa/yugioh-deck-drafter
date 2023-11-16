@@ -16,22 +16,20 @@ import random
 import requests_cache
 import requests
 
-from PyQt6.QtCore import (Qt, QRectF, pyqtSignal, pyqtSlot, QTimer, QSize,
-                          QPoint, QElapsedTimer, qFatal)
+from PyQt6.QtCore import (Qt, QRectF, pyqtSignal, pyqtSlot, QSize, QPoint,
+                          qFatal)
 
 from PyQt6.QtWidgets import (QApplication, QLineEdit, QPushButton, QWidget,
                              QComboBox, QVBoxLayout, QListWidget, QSlider,
-                             QHBoxLayout, QListWidgetItem, QDialog,
-                             QGridLayout, QToolButton, QSizePolicy,
-                             QMenu, QButtonGroup, QSpinBox, QCompleter,
-                             QScrollArea, QLabel, QStyle, QLayout, QFileDialog,
+                             QHBoxLayout, QListWidgetItem, QDialog, QSpinBox,
+                             QGridLayout, QSizePolicy, QMenu, QButtonGroup,
+                             QScrollArea, QLabel, QStyle, QFileDialog,
                              QStyleOptionButton, QMessageBox, QSpacerItem,
-                             QProgressDialog)
+                             QCompleter, QInputDialog)
 
-from PyQt6.QtGui import (QPen, QPixmapCache, QPixmap, QPainter, QDrag,
-                         QPaintEvent, QResizeEvent, QCursor, QBrush, QFont,
-                         QDragEnterEvent, QDropEvent, QMouseEvent, QKeyEvent,
-                         QImage, QAction)
+from PyQt6.QtGui import (QPen, QPixmapCache, QPixmap, QPainter, QPaintEvent,
+                         QResizeEvent, QCursor, QBrush, QFont, QDragEnterEvent,
+                         QDropEvent, QKeyEvent, QImage)
 
 
 from yugioh_deck_drafter import util
@@ -59,6 +57,14 @@ class YGOCard(NamedTuple):
     raw_data: dict[str, Any]
     rarity: str = "Common"
     card_set: Optional[YGOCardSet] = None
+
+
+@dataclass
+class DeckModel:
+    name: str = "Deck"
+    main: list[YGOCard] = field(default_factory=lambda: [])
+    extra: list[YGOCard] = field(default_factory=lambda: [])
+    side: list[YGOCard] = field(default_factory=lambda: [])
 
 
 class YugiObj:
@@ -180,9 +186,7 @@ class YugiObj:
         return card
 
     def to_ygodk_format(self,
-                        main: list[YGOCard],
-                        extra: list[YGOCard],
-                        side: list[YGOCard],
+                        deck: DeckModel,
                         path: Path) -> bool:
 
         def create_text(data: list[YGOCard]) -> str:
@@ -190,9 +194,9 @@ class YugiObj:
             mn_text = "\n".join(cards)
             return mn_text
 
-        main_ids = create_text(main)
-        extra_ids = create_text(extra)
-        side_ids = create_text(side)
+        main_ids = create_text(deck.main)
+        extra_ids = create_text(deck.extra)
+        side_ids = create_text(deck.side)
 
         text = "#main\n"
         text += main_ids + "\n"
@@ -211,7 +215,12 @@ class MainWindow(QWidget):
 
     def __init__(self, debug: bool = False):
         super(MainWindow, self).__init__()
+        omega_path = Path(r"C:\Program Files (x86)\YGO Omega")
+        self.default_location = omega_path / r"YGO Omega_Data\Files\Imports"
+
         self.debug = debug
+
+        self.deck_name = "Deck"
 
         self.YU_GI = YugiObj()
 
@@ -284,7 +293,7 @@ class MainWindow(QWidget):
         self.select_pack.currentIndexChanged.connect(self.add_item)
         self.no_packs.valueChanged[int].connect(self.update_indi)
         self.no_pack_indi.valueChanged[int].connect(self.update_indi)
-        self.start_button.pressed.connect(self.start_creating)
+        self.start_button.pressed.connect(self.start_drafting)
 
         self.show()
 
@@ -293,7 +302,6 @@ class MainWindow(QWidget):
 
         for item in TEST_DATA:
             self.select_pack.setCurrentText(item)
-
 
     def list_context_menu(self):
         pos = QCursor().pos()
@@ -356,12 +364,22 @@ class MainWindow(QWidget):
         self.pack_count.setText(f"Pack Count: {self.p_count}")
 
     @pyqtSlot()
-    def start_creating(self):
+    def start_drafting(self):
         if self.p_count != self.PACK_MAX:
             msg = "Make sure you have {0} packs selected."
             QMessageBox.information(self, "Not Enough Packs",
                                     msg.format(self.PACK_MAX))
             return
+
+        if self.deck_name == "Deck":
+            name_dia = QInputDialog(self)
+            name_dia.setWindowTitle("Deck Name")
+            name_dia.setLabelText("Choose a name for your deck.")
+
+            if not name_dia.exec():
+                return
+            else:
+                self.deck_name = name_dia.textValue()
 
         logging.info("Opening Selection Dialog.")
         dialog = SelectionDialog(self)
@@ -372,14 +390,30 @@ class MainWindow(QWidget):
             return dialog
 
         if dialog.exec():
-            path = Path(r"data\saves\deck.ydk")
-            self.YU_GI.to_ygodk_format(dialog.main_deck, dialog.extra_deck,
-                                       dialog.side_deck, path)
+            if self.default_location.exists():
+                path = self.default_location
+            else:
+                file_dia = QFileDialog(self)
+                file_dia.setWindowTitle("Select a Folder")
+                while True:
+                    if file_dia.exec():
+                        if file_dia.directory().exists():
+                            break
+
+                path = Path(str(file_dia.directory()))
+
+            self.save__deck_dialog(dialog.deck, path)
 
             QMessageBox.information(self, "File Saved",
                                     f"File was saved to {path}!",
                                     QMessageBox.StandardButton.Ok)
             return
+
+    def save__deck_dialog(self, deck: DeckModel, path: Path):
+        deck_name = util.sanitize_file_path(self.deck_name)
+        file_name = Path(f"{deck_name}.ydk")
+        p = path / file_name
+        self.YU_GI.to_ygodk_format(deck, p)
 
     @pyqtSlot()
     def reset_selection(self):
@@ -638,7 +672,6 @@ class SelectionDialog(QDialog):
                                              extra=True)
                 card_data = random.choices(rare_cards, weights=prob, k=1)
             else:
-                print(len(card_set), len(probablities))
                 card_data = random.choices(card_set, weights=probablities, k=1)
 
             row = 0
@@ -656,11 +689,14 @@ class SelectionDialog(QDialog):
             self.card_layout.addWidget(card, row, column, 1, 1)
 
         self.repaint()
-        
+
     def parent(self) -> MainWindow:
         return super().parent()  # type: ignore
 
     def accept(self):
+        self.deck = DeckModel(self.parent().deck_name, self.main_deck,
+                              self.extra_deck, self.side_deck)
+
         return super().accept()
 
     def update_selection(self):
@@ -929,18 +965,18 @@ class CardButton(QPushButton):
 
             poly_add = menu.addAction("Add Polymerization")
             (poly_add.triggered  # type: ignore
-             .connect(lambda: self.get_card(poly)))
+             .connect(lambda: self.add_assocc(poly)))
 
             for item in self.assocc:
                 acc = menu.addAction(f"Add {item}")
                 (acc.triggered  # type: ignore
-                 .connect(partial(self.get_card, item)))
+                 .connect(partial(self.add_assocc, item)))
 
         else:
             for item in self.assocc:
                 acc = menu.addAction(f"Add {item}")
                 (acc.triggered  # type: ignore
-                 .connect(partial(self.get_card, item)))
+                 .connect(partial(self.add_assocc, item)))
             if self.assocc:
                 acc = menu.addAction("Add all Assocciated")
                 acc.triggered.connect(self.add_all_assocc)  # type: ignore
@@ -959,6 +995,11 @@ class CardButton(QPushButton):
             items.append(poly)
 
         self.get_card(self.assocc)
+
+    def add_assocc(self, card_name: str):
+        self.setChecked(True)
+        self.setDisabled(True)
+        self.get_card(card_name)
 
     def get_card(self, card_name: str | list | set):
 

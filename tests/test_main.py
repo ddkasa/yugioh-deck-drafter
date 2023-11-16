@@ -35,7 +35,7 @@ def test_dialog(main_window_fill: main.MainWindow, qtbot):
 
     qtbot.addWidget(start_button)
 
-    dia = main_window.start_creating()
+    dia = main_window.start_drafting()
 
     assert isinstance(dia, main.SelectionDialog)
 

@@ -3,12 +3,14 @@ from typing import Optional
 from pathlib import Path
 from json import JSONEncoder
 from datetime import date
+import re
+import unicodedata
 
 import math
 
 from PyQt6.QtGui import QPixmap, QPixmapCache
 
-from PyQt6.QtWidgets import QLayout, QHBoxLayout
+from PyQt6.QtWidgets import QLayout
 
 
 def get_or_insert(pixmap_path: str | Path, format: str = ".jpg",
@@ -71,17 +73,20 @@ def round_down_int(value: int, multiple: int = 10):
     return math.floor(value / multiple) * multiple
 
 
+def sanitize_file_path(name: str, max_len=255) -> Path:
+    name = name.replace("[", "-").replace("]", "-")
+    sanitized_name = re.sub(r'[\\/:"*?<>|]', '', name)
+    sanitized_name = unicodedata.normalize('NFC', sanitized_name)
+    sanitized_name = sanitized_name[:max_len]
+    return Path(sanitized_name)
+
+
 class DateSerializer(JSONEncoder):
     def default(self, obj):
         if isinstance(obj, date):
             return obj.isoformat()
         return super().default(obj)
 
+
 if __name__ == "__main__":
-
-    layout = QHBoxLayout()
-
-    layout.addStretch(1)
-
-
-    print(type(layout.itemAt(0)))
+    pass
