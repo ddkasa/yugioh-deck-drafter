@@ -12,7 +12,6 @@ from functools import partial
 
 import re
 import random
-from PyQt6 import QtCore, QtGui
 
 import requests_cache
 import requests
@@ -27,12 +26,12 @@ from PyQt6.QtWidgets import (QApplication, QLineEdit, QPushButton, QWidget,
                              QMenu, QButtonGroup, QSpinBox, QCompleter,
                              QScrollArea, QLabel, QStyle, QLayout, QFileDialog,
                              QStyleOptionButton, QMessageBox, QSpacerItem,
-                             QProgressDialog,)
+                             QProgressDialog)
 
 from PyQt6.QtGui import (QPen, QPixmapCache, QPixmap, QPainter, QDrag,
                          QPaintEvent, QResizeEvent, QCursor, QBrush, QFont,
                          QDragEnterEvent, QDropEvent, QMouseEvent, QKeyEvent,
-                         QImage)
+                         QImage, QAction)
 
 
 from yugioh_deck_drafter import util
@@ -49,7 +48,7 @@ class YGOCardSet:
     card_count: int = field(default=1)
     count: int = field(default=1)
     card_set: list['YGOCard'] = field(default_factory=lambda: [])
-    probabilities: list = field(default_factory=lambda: [])
+    probabilities: tuple[int, ...] = field(default_factory=lambda: ())
 
 
 class YGOCard(NamedTuple):
@@ -531,7 +530,7 @@ class SelectionDialog(QDialog):
             card_data = self.data_requests.get_card_set_info(set_data)
             set_data.card_set = card_data
             probabilities = self.generate_weights(next_key, card_data)
-            set_data.probabilities = probabilities
+            set_data.probabilities = tuple(probabilities)
 
         if self.total_packs % 10 == 0 and self.total_packs != 0:
             self.next_button.setText("Discard Stage")
@@ -555,7 +554,7 @@ class SelectionDialog(QDialog):
         self.update_counter_label()
 
     def generate_weights(self, card_set_name: str, data: list[YGOCard],
-                         extra: bool = False) -> list[int]:
+                         extra: bool = False) -> tuple[int, ...]:
         """
         >>> Generate a list of integers depeding on the weight denoting the
             index of an item inside the set cards.
@@ -573,8 +572,8 @@ class SelectionDialog(QDialog):
 
         probabilities = []
 
-        for index, card in enumerate(data):
-            card = card.raw_data
+        for card_model in data:
+            card = card_model.raw_data
             card_sets = card["card_sets"]
             for card_set in card_sets:
                 if card_set["set_name"] != card_set_name:
@@ -586,13 +585,11 @@ class SelectionDialog(QDialog):
 
                 card["set_rarity"] = rarity_name
 
-                rarity = round(PROB.get(rarity_name, 2.8571428571) * 100)
-
-                for _ in range(rarity):
-                    probabilities.append(index)
+                rarity = round(PROB.get(rarity_name, 2.8571428571))
+                probabilities.append(rarity)
                 break
 
-        return probabilities
+        return tuple(probabilities)
 
     def clean_layout(self):
         """
@@ -617,12 +614,15 @@ class SelectionDialog(QDialog):
         self.repaint()
         QApplication.processEvents()
 
+    def filter_common(self, card: YGOCard):
+        return card.rarity != "Common"
+
     def open_pack(self,
-                  card_set: list,
-                  probablities: list,
+                  card_set: list[YGOCard],
+                  probablities: tuple[int, ...],
                   set_data: YGOCardSet):
         (logging
-         .debug(f"Opening a pack from {set_data.set_name}.".center(60,"-")))
+         .debug(f"Opening a pack from {set_data.set_name}.".center(60, "-")))
 
         self.selection_per_pack += 2
         logging.debug(f"{self.selection_per_pack} Cards Plus Available.")
@@ -633,21 +633,21 @@ class SelectionDialog(QDialog):
         row = 0
         for column in range(CARDS_PER_PACK):
             if column == 8:
-                prob = self.generate_weights(set_data.set_name, card_set,
+                rare_cards = list(filter(self.filter_common, card_set))
+                prob = self.generate_weights(set_data.set_name, rare_cards,
                                              extra=True)
-                random_int = random.randint(0, len(prob) - 1)
-                pick = prob[random_int]
+                card_data = random.choices(rare_cards, weights=prob, k=1)
             else:
-                random_int = random.randint(0, len(probablities) - 1)
-                pick = probablities[random_int]
+                print(len(card_set), len(probablities))
+                card_data = random.choices(card_set, weights=probablities, k=1)
 
             row = 0
             if column % 2 != 0:
                 row = 1
                 column -= 1
 
-            card_data = card_set[pick]
-            card = CardButton(card_data, self)
+            # card_data = card_set[pick]
+            card = CardButton(card_data[0], self)
             self.update()
             QApplication.processEvents()
 
@@ -656,7 +656,7 @@ class SelectionDialog(QDialog):
             self.card_layout.addWidget(card, row, column, 1, 1)
 
         self.repaint()
-
+        
     def parent(self) -> MainWindow:
         return super().parent()  # type: ignore
 
@@ -905,13 +905,15 @@ class CardButton(QPushButton):
 
             if self in self.viewer.deck:
                 mv_main = f"Move {self.accessibleName()} to Side Deck"
-                move_to_main = menu.addAction(mv_main)
-                move_to_main.triggered.connect(lambda: mv_deck(self, "side"))
+                mv_to_side = menu.addAction(mv_main)
+                (mv_to_side.triggered  # type: ignore
+                 .connect(lambda: mv_deck(self, "side")))  
 
             elif self in self.viewer.side:
                 mv_main = f"{self.accessibleName()} to Main Deck"
-                move_to_main = menu.addAction(mv_main)
-                move_to_main.triggered.connect(lambda: mv_deck(self, "main"))
+                mv_to_mn = menu.addAction(mv_main)
+                (mv_to_mn.triggered  # type: ignore
+                 .connect(lambda: mv_deck(self, "main")))
 
             return menu.exec(pos)
 
@@ -1127,7 +1129,8 @@ class DeckViewer(QDialog):
                 layout.addWidget(card_button)
                 continue
 
-            layout.addWidget(card_button, row, column, QAF.AlignJustify)
+            layout.addWidget(card_button, row, column,
+                             QAF.AlignJustify)  # type: ignore
             column += 1
 
         if isinstance(layout, QHBoxLayout):
@@ -1267,7 +1270,6 @@ class DeckSlider(QScrollArea):
 
             self.setWidgetResizable(True)
             self.setVerticalScrollBarPolicy(SBP.ScrollBarAlwaysOff)
-
         else:
             self.setVerticalScrollBarPolicy(SBP.ScrollBarAlwaysOn)
             self.main_widget = DeckWidget(deck_type, self)
@@ -1299,7 +1301,6 @@ class DeckWidget(QWidget):
         super().paintEvent(event)
         if event is None:
             return
-
 
         r = event.rect()
         painter = QPainter(self)
@@ -1349,7 +1350,7 @@ class DeckDragWidget(DeckWidget):
         widget: CardButton = event.source()  # type: ignore
 
         for n in range(self.main_layout.count()):
-            w = self.main_layout.itemAt(n).widget()
+            w = self.main_layout.itemAt(n).widget()  # type: ignore
             if self.orientation == Qt.Orientation.Vertical:
                 drop_here = pos.y() < w.y() + w.size().height() // 2
             else:   
