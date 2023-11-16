@@ -89,6 +89,8 @@ class YugiObj:
 
         new_set = []
         for item in data:
+            if item["num_of_cards"] < 10:
+                continue
             d = item.get("tcg_date")
             if d is None:
                 continue
@@ -119,7 +121,8 @@ class YugiObj:
 
     def get_card_art(self, card_art_id: int) -> QPixmap:
         """Collects and stores card art for the given piece."""
-        image_store = Path(r"data\images\card_art")
+        image_store = Path(r"assets\images\card_art")
+        image_store.mkdir(parents=True, exist_ok=True)
         image_path = image_store / str(str(card_art_id) + ".jpg")
 
         if image_path.exists():
@@ -297,11 +300,7 @@ class MainWindow(QWidget):
 
         self.show()
 
-        TEST_DATA = ("Legend of Blue Eyes White Dragon", "Pharaoh's Servant",
-                     "Spell Ruler", "Magic Ruler")
-
-        for item in TEST_DATA:
-            self.select_pack.setCurrentText(item)
+        self.select_pack.setCurrentText("Legend of Blue Eyes White Dragon")
 
     def list_context_menu(self):
         pos = QCursor().pos()
@@ -421,8 +420,8 @@ class MainWindow(QWidget):
         self.selected_packs = {}
         self.selected_cards = []
         self.selected_side = []
-
         self.list_widget.clear()
+        self.update_pack_count()
 
 
 class SelectionDialog(QDialog):
@@ -655,6 +654,13 @@ class SelectionDialog(QDialog):
                   card_set: list[YGOCard],
                   probablities: tuple[int, ...],
                   set_data: YGOCardSet):
+        """
+        >>> Opens a pack with probablities supplied and adds its to the layout.
+        >>> The last card get new probabilities as its atleast a rare.
+        >>> *refactor this in the future too make probability calculations
+            easier.
+        """
+
         (logging
          .debug(f"Opening a pack from {set_data.set_name}.".center(60, "-")))
 
@@ -676,13 +682,11 @@ class SelectionDialog(QDialog):
 
             row = 0
             if column % 2 != 0:
+                QApplication.processEvents()
                 row = 1
                 column -= 1
 
-            # card_data = card_set[pick]
             card = CardButton(card_data[0], self)
-            self.update()
-            QApplication.processEvents()
 
             self.card_buttons.append(card)
             card.toggled.connect(self.update_selection)
@@ -1518,8 +1522,19 @@ def main():
     app.setStyle("Fusion")
     main_window = MainWindow()
 
-    with open(r"yugioh_deck_drafter\style\stylesheet.qss", "r") as style:
-        main_window.setStyleSheet(style.read())
+    style = """
+        QScrollArea {
+            border: 1px solid gray;
+            border-radius: 2px;
+            }
+        QLabel#indicator {
+            color: white;
+            border: 1px solid gray;
+            border-radius: 2px;
+            }
+        """
+
+    main_window.setStyleSheet(style)
 
     main_window.show()
 

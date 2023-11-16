@@ -161,7 +161,7 @@ cython_debug/
 
 #data
 cache
-data
+assets
 
 # env
 .vscode

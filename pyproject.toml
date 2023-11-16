@@ -1,13 +1,16 @@
 [tool.poetry]
 name = "yugioh-deck-drafter"
-version = "0.2.0"
+version = "0.3.0"
 description = "\"Python app for drafting custom apps with the Ygoprodeck API.\""
 authors = ["DK <davidakasakaitis@gmail.com>"]
 license = "MIT"
 readme = "README.md"
 
+[tool.poetry.scripts]
+build = "yugioh_deck_drafter.pyinstaller:install"
+
 [tool.poetry.dependencies]
-python = "^3.11"
+python = ">=3.11,<3.13"
 pyqt6 = "^6.6.0"
 requests-cache = "^1.1.0"
 
@@ -17,6 +20,7 @@ flake8 = "^6.1.0"
 pytest = "^7.4.3"
 pytest-qt = "^4.2.0"
 ipykernel = "^6.26.0"
+pyinstaller = "^6.2.0"
 
 [build-system]
 requires = ["poetry-core"]
