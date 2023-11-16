@@ -1343,7 +1343,7 @@ class DeckWidget(QWidget):
         if event is None:
             return
 
-        r = event.rect()
+        rect = self.rect()
         painter = QPainter(self)
         font = QFont()
         font.setItalic(True)
@@ -1351,7 +1351,7 @@ class DeckWidget(QWidget):
         painter.setOpacity(0.1)
         painter.setFont(font)
         painter.setPen(Qt.GlobalColor.white)
-        painter.drawText(r, (Qt.TextFlag.TextWordWrap
+        painter.drawText(rect, (Qt.TextFlag.TextWordWrap
                          | Qt.AlignmentFlag.AlignCenter),
                          self.name)
 
