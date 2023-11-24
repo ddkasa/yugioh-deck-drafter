@@ -21,6 +21,7 @@ pytest = "^7.4.3"
 pytest-qt = "^4.2.0"
 ipykernel = "^6.26.0"
 pyinstaller = "^6.2.0"
+bandit = "^1.7.5"
 
 [build-system]
 requires = ["poetry-core"]

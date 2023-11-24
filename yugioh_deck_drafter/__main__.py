@@ -1,3 +1,5 @@
+"""Main Deck Builder File To Be Broken up into smaller pieces."""
+
 import logging
 import sys
 import traceback
@@ -17,7 +19,7 @@ import requests_cache
 import requests
 
 from PyQt6.QtCore import (Qt, QRectF, pyqtSignal, pyqtSlot, QSize, QPoint,
-                          qFatal)
+                          qFatal, QSignalBlocker)
 
 from PyQt6.QtWidgets import (QApplication, QLineEdit, QPushButton, QWidget,
                              QComboBox, QVBoxLayout, QListWidget, QSlider,
@@ -129,7 +131,7 @@ class YugiObj:
             return util.get_or_insert(image_path)
 
         URL = f"https://images.ygoprodeck.com/images/cards/{card_art_id}.jpg"
-        request = requests.get(URL)
+        request = requests.get(URL, timeout=10)
         if request.status_code != 200:
             # Add a default image here in the future.
             logging.critical("Failed to fetch card image. Skipping!")
@@ -148,7 +150,8 @@ class YugiObj:
                          subtype: str = "archetype") -> list | None:
         URL = "https://db.ygoprodeck.com/api/v7/cardinfo.php?{0}={1}"
 
-        request = self.CACHE.get(URL.format(subtype, card_arche))
+        request = self.CACHE.get(URL.format(subtype, card_arche),
+                                 timeout=10)
 
         if request.status_code != 200:
             # Add a default image here in the future.
@@ -162,7 +165,7 @@ class YugiObj:
         name = quote(name, safe="/:?&")
         URL = f"https://db.ygoprodeck.com/api/v7/cardinfo.php?name={name}"
 
-        request = self.CACHE.get(URL)
+        request = self.CACHE.get(URL, timeout=10)
 
         if request.status_code != 200:
             # Add a default image here in the future.
@@ -188,10 +191,7 @@ class YugiObj:
 
         return card
 
-    def to_ygodk_format(self,
-                        deck: DeckModel,
-                        path: Path) -> bool:
-
+    def to_ygodk_format(self, deck: DeckModel) -> str:
         def create_text(data: list[YGOCard]) -> str:
             cards = [str(item.card_id) for item in data]
             mn_text = "\n".join(cards)
@@ -208,30 +208,35 @@ class YugiObj:
         text += "!side\n"
         text += side_ids + "\n"
 
-        with path.open("w", encoding="utf-8") as file:
-            file.write(text)
-
-        return True
+        return text
 
 
 class MainWindow(QWidget):
+    """Main Window Class managing Pack Selection and general utilities."""
+
+    DEFAULT_PACK_COUNT: Final[int] = 10
+    PACK_MAX: Final[int] = 40
+    OMEGA_PATH = Path(r"C:\Program Files (x86)\YGO Omega")
+    DEFAULT_IMPORT = OMEGA_PATH / r"YGO Omega_Data\Files\Imports"
 
     def __init__(self, debug: bool = False):
-        super(MainWindow, self).__init__()
-        omega_path = Path(r"C:\Program Files (x86)\YGO Omega")
-        self.default_location = omega_path / r"YGO Omega_Data\Files\Imports"
+        super().__init__()
 
         self.debug = debug
-
-        self.deck_name = "Deck"
-
-        self.YU_GI = YugiObj()
-
-        QPixmapCache.setCacheLimit(100000)
+        self.yugi_pro_connect = YugiObj()
 
         self.setWindowTitle(NAME)
         self.selected_packs: dict[str, YGOCardSet] = {}
         self.p_count: int = 0
+
+        self.init_ui()
+
+        self.update_pack_count()
+
+        self.show()
+
+    def init_ui(self) -> None:
+        """Intializes layouts and widgets for the UI."""
         self.main_layout = QVBoxLayout()
         self.setLayout(self.main_layout)
 
@@ -239,14 +244,11 @@ class MainWindow(QWidget):
         self.main_layout.addLayout(self.select_layout)
 
         self.select_pack = QComboBox()
-        names = [item["set_name"] for item in self.YU_GI.card_set]
+        names = [item["set_name"] for item in self.yugi_pro_connect.card_set]
 
         self.select_pack.addItems(names)
         self.select_layout.addWidget(self.select_pack, 50)
         self.select_layout.addStretch(10)
-
-        self.PACK_MAX: Final[int] = 40
-        DEFAULT_PACK_COUNT: Final[int] = 10
 
         self.no_packs = QSlider()
         self.no_packs.setSingleStep(10)
@@ -254,12 +256,12 @@ class MainWindow(QWidget):
         self.no_packs.setTickInterval(10)
         self.no_packs.setOrientation(Qt.Orientation.Horizontal)
         self.no_packs.setMinimum(10)
-        self.no_packs.setValue(DEFAULT_PACK_COUNT)
+        self.no_packs.setValue(self.DEFAULT_PACK_COUNT)
         self.no_packs.setMaximum(self.PACK_MAX)
         self.select_layout.addWidget(self.no_packs, 40)
 
         self.no_pack_indi = QSpinBox()
-        self.no_pack_indi.setValue(DEFAULT_PACK_COUNT)
+        self.no_pack_indi.setValue(self.DEFAULT_PACK_COUNT)
         self.no_pack_indi.setSingleStep(5)
         self.no_pack_indi.setMinimum(5)
         self.no_pack_indi.setMaximum(self.PACK_MAX)
@@ -283,8 +285,6 @@ class MainWindow(QWidget):
         self.pack_count.setObjectName("indicator")
         self.button_layout.addWidget(self.pack_count)
 
-        self.update_pack_count()
-
         self.button_layout.addStretch(20)
 
         self.reset_button = QPushButton("RESET")
@@ -298,11 +298,15 @@ class MainWindow(QWidget):
         self.no_pack_indi.valueChanged[int].connect(self.update_indi)
         self.start_button.pressed.connect(self.start_drafting)
 
-        self.show()
-
-        self.select_pack.setCurrentText("Legend of Blue Eyes White Dragon")
-
+    @pyqtSlot()
     def list_context_menu(self):
+        """Create and display a context menu for managing the pack list widget.
+
+        This function generates a context menu when triggered at a specific
+        position within the widget.
+        The context menu provides an option to remove an item from the
+        list, triggered by selecting 'Remove Item'.
+        """
         pos = QCursor().pos()
 
         menu = QMenu(self.list_widget)
@@ -313,13 +317,18 @@ class MainWindow(QWidget):
 
         menu.exec(pos)
 
+    @pyqtSlot()
     def add_item(self):
+        """
+        This function retrieves the selected pack from the UI and adds it to
+        the selection list while managing the associated indicators.
+        """
         label = self.select_pack.currentText()
         if label in self.selected_packs:
             return
 
         index = self.select_pack.currentIndex()
-        data = self.YU_GI.card_set[index]
+        data = self.yugi_pro_connect.card_set[index]
 
         cnt = self.no_pack_indi.value()
 
@@ -333,12 +342,25 @@ class MainWindow(QWidget):
 
         self.update_pack_count()
 
+    @pyqtSlot()
     def remove_item(self, pos: QPoint):
+        """Remove an item from the pack list based on the provided position.
+
+        This function identifies the item in the pack list widget based on the
+        given position.
+        If no item is found at that position, it logs a debug message and
+        exits.
+        Upon successful identification, it removes the item from the list,
+        updates the associated data, and refreshes the pack count.
+
+        Args:
+            pos (QPoint): The position from which the item removal action is
+            triggered.
+        """
         pos = self.list_widget.mapFromGlobal(pos)
         item = self.list_widget.itemAt(pos)
-        DEBUG_MSG = "Bad position for removal."
         if item is None:
-            logging.debug(DEBUG_MSG)
+            logging.debug("Bad index for pack removal.")
             return
         row = self.list_widget.row(item)
         removed_item = self.list_widget.takeItem(row)
@@ -350,12 +372,21 @@ class MainWindow(QWidget):
         self.update_pack_count()
 
     def update_indi(self, value: int):
-        self.no_packs.blockSignals(True)
-        self.no_packs.setValue(value)
-        self.no_pack_indi.setValue(value)
-        self.no_packs.blockSignals(False)
+        """Updates pack count indicators depending on the values provided
+        which determine how many packs get added at a time.
+
+        Args:
+            value (int): the updated value set by the widget.
+        """
+        with (QSignalBlocker(self.no_packs)
+             and QSignalBlocker(self.no_pack_indi)):
+            self.no_packs.setValue(value)
+            self.no_pack_indi.setValue(value)
 
     def update_pack_count(self):
+        """Updates pack count of the selected packs when the values are
+           changed.
+        """
         self.p_count = 0
         for pack in self.selected_packs.values():
             self.p_count += pack.count
@@ -363,34 +394,32 @@ class MainWindow(QWidget):
         self.pack_count.setText(f"Pack Count: {self.p_count}")
 
     @pyqtSlot()
-    def start_drafting(self):
+    def start_drafting(self) -> None:
+        """Starts the drafting process.
+
+           Checks if there are 40 packs selected first and asks for a Deck
+           Name.
+           Begins the drafting dialog if conditions are met which will stay in
+           this func until the process is finished.
+        """
+
         if self.p_count != self.PACK_MAX:
             msg = "Make sure you have {0} packs selected."
             QMessageBox.information(self, "Not Enough Packs",
                                     msg.format(self.PACK_MAX))
             return
 
-        if self.deck_name == "Deck":
-            name_dia = QInputDialog(self)
-            name_dia.setWindowTitle("Deck Name")
-            name_dia.setLabelText("Choose a name for your deck.")
-
-            if not name_dia.exec():
-                return
-            else:
-                self.deck_name = name_dia.textValue()
+        name_dia = QInputDialog(self)
+        name_dia.setWindowTitle("Deck Name")
+        name_dia.setLabelText("Choose a name for your deck.")
+        deck_name = name_dia.textValue()
 
         logging.info("Opening Selection Dialog.")
-        dialog = SelectionDialog(self)
-
-        if self.debug:
-            dialog.setWindowModality(Qt.WindowModality.NonModal)
-            dialog.show()
-            return dialog
+        dialog = DraftingDialog(self, deck_name)
 
         if dialog.exec():
-            if self.default_location.exists():
-                path = self.default_location
+            if self.DEFAULT_IMPORT.exists():
+                path = self.DEFAULT_IMPORT
             else:
                 file_dia = QFileDialog(self)
                 file_dia.setWindowTitle("Select a Folder")
@@ -406,25 +435,42 @@ class MainWindow(QWidget):
             QMessageBox.information(self, "File Saved",
                                     f"File was saved to {path}!",
                                     QMessageBox.StandardButton.Ok)
-            return
+        return
 
-    def save__deck_dialog(self, deck: DeckModel, path: Path):
-        deck_name = util.sanitize_file_path(self.deck_name)
+    def save__deck_dialog(self, deck: DeckModel, path: Path) -> None:
+        """Converts and saves the provided deck to path.
+
+        Sanitizes the provided path(Path) first and then converts the deck to
+        a str according to the .ydk format.
+
+        Args:
+            deck (DeckModel): Datamodel containing all the selected cards
+                including the side/extra deck.
+            path (Path): Path to where the YDK file will be saved.
+        """
+        deck_name = util.sanitize_file_path(deck.name)
         file_name = Path(f"{deck_name}.ydk")
-        p = path / file_name
-        self.YU_GI.to_ygodk_format(deck, p)
+        file_path = path / file_name
+        deck_file = self.yugi_pro_connect.to_ygodk_format(deck)
+
+        with file_path.open("w", encoding="utf-8") as file:
+            file.write(deck_file)
 
     @pyqtSlot()
-    def reset_selection(self):
+    def reset_selection(self) -> None:
+        """Resets pack Selection to empty and clears out the rest of cache."""
         logging.info("Resetting app to defaults.")
+
         self.selected_packs = {}
-        self.selected_cards = []
-        self.selected_side = []
         self.list_widget.clear()
         self.update_pack_count()
 
+    @pyqtSlot()
+    def randomize_packs(self):
+        """Launches a dialog for randomizing card_set picks."""
 
-class SelectionDialog(QDialog):
+
+class DraftingDialog(QDialog):
     """
     >>> Dialog for opening packs and managing drafting in general, as it has a
         core function that cycles and keep track of whats been added and
@@ -433,10 +479,12 @@ class SelectionDialog(QDialog):
         into their own objects.
     """
 
-    def __init__(self, parent: MainWindow, flags=Qt.WindowType.Dialog):
-        super(SelectionDialog, self).__init__(parent, flags)
-
+    def __init__(self, parent: MainWindow, deck_name: str,
+                 flags=Qt.WindowType.Dialog):
+        super(DraftingDialog, self).__init__(parent, flags)
         self.setWindowTitle("Card Pack Opener")
+
+        self.deck_name = deck_name
 
         self.main_deck: list[YGOCard] = []
         self.extra_deck: list[YGOCard] = []
@@ -453,7 +501,7 @@ class SelectionDialog(QDialog):
         self.setMinimumSize(w, h)
 
         self.sets = {}
-        self.data_requests = parent.YU_GI
+        self.data_requests = parent.yugi_pro_connect
 
         self.main_layout = QVBoxLayout()
         self.main_layout.addStretch(1)
@@ -698,7 +746,7 @@ class SelectionDialog(QDialog):
         return super().parent()  # type: ignore
 
     def accept(self):
-        self.deck = DeckModel(self.parent().deck_name, self.main_deck,
+        self.deck = DeckModel(self.deck_name, self.main_deck,
                               self.extra_deck, self.side_deck)
 
         return super().accept()
@@ -820,7 +868,7 @@ class CardButton(QPushButton):
     """
     BASE_SIZE = QSize(164, 242)
 
-    def __init__(self, data: YGOCard, parent: SelectionDialog,
+    def __init__(self, data: YGOCard, parent: DraftingDialog,
                  viewer: Optional['DeckViewer'] = None):
         super().__init__()
         self.ASPECT_RATIO: Final[float] = 1.4756097561  # Height to Width
@@ -853,6 +901,7 @@ class CardButton(QPushButton):
 
         self.image = parent.data_requests.get_card_art(self.card_id)
 
+
     def minimumSize(self) -> QSize:
         return self.BASE_SIZE
 
@@ -863,6 +912,9 @@ class CardButton(QPushButton):
 
     def heightForWidth(self, width: int) -> int:
         return round(width * self.ASPECT_RATIO)
+
+    def hasHeightForWidth(self) -> bool:
+        return True
 
     def filter_assocciated(self) -> set:
         pattern = r'(?<!\\)"(.*?[^\\])"'
@@ -950,7 +1002,7 @@ class CardButton(QPushButton):
                  .connect(lambda: mv_deck(self, "side")))  
 
             elif self in self.viewer.side:
-                mv_main = f"{self.accessibleName()} to Main Deck"
+                mv_main = f"Move {self.accessibleName()} to Main Deck"
                 mv_to_mn = menu.addAction(mv_main)
                 (mv_to_mn.triggered  # type: ignore
                  .connect(lambda: mv_deck(self, "main")))
@@ -1014,7 +1066,7 @@ class CardButton(QPushButton):
 
         data = self.parent().data_requests.grab_card(card_name)
         if data is None:
-            return
+            raise FileNotFoundError("Card does not exist.")
         logging.info(f"Adding {card_name} to selection.")
         try:
             c_mdl = self.parent().data_requests.create_card(data[0],
@@ -1026,7 +1078,7 @@ class CardButton(QPushButton):
 
     def add_card(self, card: YGOCard):
         if self.parent().check_dup_card_count(card) == 3:
-            logging.error(f"Three {card.name} in deck.")
+            logging.error(f"Three {card.name} cards in deck.")
             return
 
         self.parent().main_deck.append(card)
@@ -1034,7 +1086,7 @@ class CardButton(QPushButton):
             self.parent().selection_per_pack -= 1
         self.parent().update_counter_label()
 
-    def parent(self) -> SelectionDialog:
+    def parent(self) -> DraftingDialog:
         return super().parent()  # type: ignore
 
     # def mouseMoveEvent(self, event: QMouseEvent):
@@ -1059,7 +1111,7 @@ class DeckViewer(QDialog):
     >>> Main Dialog use for viewing and discard additional cards from the deck.
     """
 
-    def __init__(self, parent: SelectionDialog, discard: int = 0):
+    def __init__(self, parent: DraftingDialog, discard: int = 0):
         super(DeckViewer, self).__init__(parent)
         self.resize(1745, 860)  # Base on 1080 ratio
 
@@ -1201,7 +1253,7 @@ class DeckViewer(QDialog):
         if self.discard:
             self.removal_count()
 
-    def parent(self) -> SelectionDialog:
+    def parent(self) -> DraftingDialog:
         return super().parent()  # type: ignore
 
     def keyPressEvent(self, event: QKeyEvent | None) -> None:
@@ -1418,94 +1470,7 @@ class DeckDragWidget(DeckWidget):
         return super().resizeEvent(event)
 
 
-class SearchDialog(QDialog):
-
-    def __init__(self, attribute: str, subtype: str, parent: SelectionDialog):
-        super(SearchDialog, self).__init__(parent)
-
-        self.data = parent.data_requests.card_arche_types(attribute, subtype)
-        if self.data is None:
-            return self.reject()
-
-        p_size = QApplication.primaryScreen().availableGeometry()
-
-        self.setMinimumSize(p_size.width() // 2, p_size.height() // 2)
-
-        self.main_layout = QVBoxLayout()
-
-        self.search_box = QLineEdit()
-        self.main_layout.addWidget(self.search_box)
-
-        self.scroll_widget = QScrollArea()
-        self.card_widget = QWidget()
-        self.scroll_widget.setWidget(self.card_widget)
-        self.scroll_widget.setWidgetResizable(True)
-
-        self.main_layout.addWidget(self.scroll_widget)
-
-        self.card_layout = QHBoxLayout()
-        self.card_widget.setLayout(self.card_layout)
-
-        self.card_buttons: list[CardButton] = []
-        self.card_button_group = QButtonGroup()
-        self.card_button_group.setExclusive(True)
-
-        CMP = Qt.ContextMenuPolicy
-
-        for i, item in enumerate(self.data):
-            card_button = CardButton(item, None, parent)
-            card_button.setContextMenuPolicy(CMP.NoContextMenu)
-            self.card_buttons.append(card_button)
-            self.card_button_group.addButton(card_button)
-            self.card_layout.addWidget(card_button)
-
-        self.button_layout = QHBoxLayout()
-        self.canceL_button = QPushButton("Cancel")
-        self.canceL_button.pressed.connect(self.reject)
-        self.button_layout.addWidget(self.canceL_button)
-
-        self.button_layout.addStretch(20)
-
-        self.accept_button = QPushButton("Accept")
-        self.accept_button.pressed.connect(self.accept)
-        self.button_layout.addWidget(self.accept_button)
-
-        self.main_layout.addLayout(self.button_layout)
-
-        self.fill_search()
-
-        self.setLayout(self.main_layout)
-
-    def fill_search(self):
-        if not isinstance(self.data, list):
-            return self.reject()
-
-        names = [card["name"] for card in self.data]
-
-        completer = QCompleter(names)
-        completer.setCompletionMode(QCompleter.CompletionMode.InlineCompletion)
-
-        self.search_box.setCompleter(completer)
-        self.search_box.editingFinished.connect(lambda: self.highlight_search)
-
-    def highlight_search(self):
-        name = self.search_box.text()
-        for item in self.card_buttons:
-            if item.accessibleName() == name:
-                item.setChecked(True)
-                return
-
-    def accept(self) -> None:
-        for item in self.card_buttons:
-            if item.isChecked():
-                self.selected_item = item.card_model
-        else:
-            self.selected_item = self.card_buttons[0]
-
-        return super().accept()
-
-
-def main():
+def main(argv: list):
     FMT = "%(levelname)s | %(module)s\\%(funcName)s:%(lineno)d -> %(message)s"
 
     def excepthook(type_, value, traceback_):
@@ -1515,8 +1480,10 @@ def main():
 
     sys.excepthook = excepthook
 
+    QPixmapCache.setCacheLimit(100000)
+
     logging.basicConfig(stream=sys.stderr, level=logging.DEBUG, format=FMT)
-    logging.info(f"Starting {NAME}!")
+    logging.info("Starting %s!", NAME)
 
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
@@ -1535,11 +1502,9 @@ def main():
         """
 
     main_window.setStyleSheet(style)
-
     main_window.show()
-
     sys.exit(app.exec())
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv)

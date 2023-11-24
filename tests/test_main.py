@@ -37,7 +37,7 @@ def test_dialog(main_window_fill: main.MainWindow, qtbot):
 
     dia = main_window.start_drafting()
 
-    assert isinstance(dia, main.SelectionDialog)
+    assert isinstance(dia, main.DraftingDialog)
 
 
 def test_card_picks(main_window_fill: main.MainWindow, qtbot):
@@ -53,7 +53,7 @@ def test_card_picks(main_window_fill: main.MainWindow, qtbot):
     main_window = main_window_fill
     main_window.show()
 
-    dialog = main.SelectionDialog(main_window, Qt.WindowType.Widget)
+    dialog = main.DraftingDialog(main_window, Qt.WindowType.Widget)
     qtbot.addWidget(dialog)
     dialog.show()
 
