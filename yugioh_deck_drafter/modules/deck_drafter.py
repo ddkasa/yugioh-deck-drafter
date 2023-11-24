@@ -89,7 +89,7 @@ class DraftingDialog(QDialog):
         self.setMinimumSize(w, h)
 
         self.sets = {}
-        self.data_requests = parent.yugi_pro_connect
+        self.ygo_data = parent.yugi_pro_connect
 
         self.main_layout = QVBoxLayout()
         self.main_layout.addStretch(1)
@@ -99,7 +99,7 @@ class DraftingDialog(QDialog):
         self.card_layout.setAlignment(Qt.AlignmentFlag.AlignAbsolute)
         self.main_layout.addLayout(self.card_layout)
 
-        self.card_buttons: list[CardButton] = []  # Contains the card widgets.
+        self.card_buttons: list[CardButton] = []  # Contains the card widgets
 
         self.button_layout = QHBoxLayout()
 
@@ -196,7 +196,7 @@ class DraftingDialog(QDialog):
             return self.sel_next_set()
 
         if not set_data.probabilities:
-            card_data = self.data_requests.get_card_set_info(set_data)
+            card_data = self.ygo_data.get_card_set_info(set_data)
             set_data.card_set = card_data
             probabilities = self.generate_weights(next_key, card_data)
             set_data.probabilities = tuple(probabilities)
@@ -214,7 +214,7 @@ class DraftingDialog(QDialog):
             card = cardbutton.card_model
             cardbutton.deleteLater()
 
-            if self.check_extra_monster(card):
+            if self.ygo_data.check_extra_monster(card):
                 self.extra_deck.append(card)
                 continue
 
@@ -347,7 +347,7 @@ class DraftingDialog(QDialog):
 
             item_in = item in self.picked_cards
 
-            fus_monster = self.check_extra_monster(item.card_model)
+            fus_monster = self.ygo_data.check_extra_monster(item.card_model)
             three = self.check_dup_card_count(item.card_model) == 3
 
             if (item.isChecked()
@@ -381,9 +381,6 @@ class DraftingDialog(QDialog):
         tip += f"Extra Deck: {len(self.extra_deck)}\n"
         tip += f"Side Deck: {len(self.side_deck)}"
         self.cards_picked.setToolTip(tip)
-
-    def check_extra_monster(self, card: YGOCard) -> bool:
-        return card.card_type == "Fusion Monster"
 
     def check_dup_card_count(self, card: YGOCard) -> int:
         count = 0
@@ -444,27 +441,41 @@ class DraftingDialog(QDialog):
 
 
 class CardButton(QPushButton):
-    """
-    >>> Card class used for displaying, deleting and containg cards.
-    >>> Has some functions to search and locate assocciated cards aswell.
-    >>> *Future refactor might include moving some functions out and refining
-         the paint event.
-    >>> *Also draggable functionality still in progress as I need to implement
-         that.
+    """Card class used for displaying, deleting and containg cards.
+
+        Has some functions to search and locate assocciated cards aswell.
+        Future refactor might include moving some functions out and refining
+        the paint event.
+
+        Attributes:
+            BASE_SIZE (QSize): Minimum size of the card for readibility.
+            ASPECT_RATION (float): Ratio of the card that allows for smooth
+                scaling.
+            card_model (YGOCard): Holds all the metadata of the card itself.
+            image (QPixmap): Holds the cover art inside an image.
+
+        Args:
+            data (YGOCard): Card data itself with the set_data prefilled.
+            parent (DraftingDialog): Dialog where the drafting is being done
+                for accessing additonal information.
+            viwer (DeckViewer): Optional argument if slotting it into a
+                DeckViewer dialog, which enables different functionality
+                in terms of menu and draggability.
+
     """
     BASE_SIZE = QSize(164, 242)
+    ASPECT_RATIO: Final[float] = 1.4756097561  # Height to Width
 
     def __init__(self, data: YGOCard, parent: DraftingDialog,
-                 viewer: Optional['DeckViewer'] = None):
+                 viewer: Optional['DeckViewer'] = None) -> None:
         super().__init__()
-        self.ASPECT_RATIO: Final[float] = 1.4756097561  # Height to Width
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
-        self.viewer = viewer
+        if isinstance(viewer, DeckViewer):
+            self.setAcceptDrops(True)
 
-        self.card_set = data.card_set
+        self.viewer = viewer
         self.card_model = data
-        self.card_id = data.card_id
 
         self.setAccessibleName(data.name)
         self.setAccessibleDescription(data.description)
@@ -485,29 +496,54 @@ class CardButton(QPushButton):
 
         self.assocc = self.filter_assocciated()
 
-        self.image = parent.data_requests.get_card_art(self.card_model)
+        self.image = parent.ygo_data.get_card_art(self.card_model)
 
     def minimumSize(self) -> QSize:
+        """Overriden minimum size of the card widget in order to stay legible
+
+        Returns:
+            A QSize item desribes the minimum size of the widget.
+        """
         return self.BASE_SIZE
 
     def sizeHint(self) -> QSize:
+        """Size Hint to keep the the card widget in proportion.
+
+        Returns:
+            QSize: Based on the proportions set by the constant ASPECT_RATIO.
+        """
         width = self.minimumSize().width()
         size = QSize(width, self.heightForWidth(width))
         return size
 
     def heightForWidth(self, width: int) -> int:
+        """Return a height for the widget depending on the width."""
         return round(width * self.ASPECT_RATIO)
 
-    def hasHeightForWidth(self) -> bool:
-        return True
-
     def filter_assocciated(self) -> set:
-        pattern = r'(?<!\\)"(.*?[^\\])"'
-        matches = re.findall(pattern, self.accessibleDescription())
+        """Filters out asscciated cards for quick adding with the submenu.
 
+        Returns:
+            set: Names of the cards assocciated with this instance.
+                 *At the moment it will return anything that matches, but in
+                 reality it should check if cards exists in order to avoid
+                 confusion.
+        """
+        pattern = re.compile(r'(?<!\\)"(.*?[^\\])"')
+        matches = re.findall(pattern, self.accessibleDescription())
         return set(matches)
 
-    def paintEvent(self, event: QPaintEvent | None):
+    def paintEvent(self, event: QPaintEvent | None) -> None:
+        """Overriden PaintEvent for painting the card art and additonal
+           effects.
+
+           Override the drawing/painting process completely unless the image
+           is missing.
+
+        Args:
+            event (QPaintEvent | None): PaintEvent called from the gui loop or
+                somewhere else.
+        """
         if event is None or self.image is None:
             return super().paintEvent(event)
 
@@ -569,7 +605,19 @@ class CardButton(QPushButton):
             painter.drawLine(rect.topLeft(), rect.bottomRight())
             painter.drawLine(rect.bottomLeft(), rect.topRight())
 
-    def show_menu(self):
+    def show_menu(self) -> None:
+        """Submenu event which spawn a dropdown menu at the cursor location.
+
+        Create a varied menu depending if its inside the DraftingDialog
+          or the deckviewer
+
+        DraftingDialog:
+            Adding Assocciated Cards/Fusion Material
+        DeckViewer:
+            If its not a discard stage there is no menu, otherwise movement or
+            deletion buttons.
+
+        """
         pos = QCursor().pos()
         menu = QMenu(self)
 
@@ -577,25 +625,20 @@ class CardButton(QPushButton):
             if not self.viewer.discard:
                 return
 
-            mv_deck = self.viewer.mv_card
+            self.discard_stage_menu(menu)
 
-            if self in self.viewer.deck:
-                mv_main = f"Move {self.accessibleName()} to Side Deck"
-                mv_to_side = menu.addAction(mv_main)
-                (mv_to_side.triggered  # type: ignore
-                 .connect(lambda: mv_deck(self, "side")))
-
-            elif self in self.viewer.side:
-                mv_main = f"Move {self.accessibleName()} to Main Deck"
-                mv_to_mn = menu.addAction(mv_main)
-                (mv_to_mn.triggered  # type: ignore
-                 .connect(lambda: mv_deck(self, "main")))
-
-            return menu.exec(pos)
+            menu.exec(pos)
+            return
 
         if self.parent().selection_per_pack < 1:
             return
 
+        self.drafting_menu(menu)
+
+        menu.exec(pos)
+
+    def drafting_menu(self, menu: QMenu) -> None:
+        """Menu that pop ups when drafting the deck."""
         if self.card_model.card_type == "Fusion Monster":
             poly = "Polymerization"
 
@@ -623,14 +666,46 @@ class CardButton(QPushButton):
             else:
                 return
 
-        menu.exec(pos)
+    def discard_stage_menu(self, menu: QMenu) -> None:
+        """Menu that pop ups when in the discard stage of drafting."""
+
+        self.viewer: DeckViewer
+        if self.isChecked():
+            remove_card = menu.addAction("Keep Card")
+        else:
+            remove_card = menu.addAction("Discard Card")
+
+        if remove_card is not None:
+            remove_card.triggered.connect(self.toggle)
+
+        mv_deck = self.viewer.mv_card
+
+        if self in self.viewer.deck:
+            mv_main = f"Move {self.accessibleName()} to Side Deck"
+            mv_to_side = menu.addAction(mv_main)
+            (mv_to_side.triggered  # type: ignore
+             .connect(lambda: mv_deck(self, "side")))
+
+        elif self in self.viewer.side:
+            mv_main = f"Move {self.accessibleName()} to Main Deck"
+            mv_to_mn = menu.addAction(mv_main)
+            (mv_to_mn.triggered  # type: ignore
+             .connect(lambda: mv_deck(self, "main")))
 
     def add_all_assocc(self):
+        """Adds all assocciated cards present within the assocc instance
+           variable.
+
+           If the monster belongs in the extra deck a Polymerization gets
+           added to the deck.
+        """
         self.setChecked(True)
         self.setDisabled(True)
 
         items = list(self.assocc)
-        if self.card_model.card_type == "Fusion Monster":
+        if self.parent().ygo_data.check_extra_monster(self.card_model):
+            # Need to confirm this as different extra deck monster might need
+            # different material
             poly = "Polymerization"
             items.append(poly)
 
@@ -648,13 +723,14 @@ class CardButton(QPushButton):
                 self.get_card(item)
             return
 
-        data = self.parent().data_requests.grab_card(card_name)
+        data = self.parent().ygo_data.grab_card(card_name)
         if data is None:
             raise FileNotFoundError("Card does not exist.")
         logging.info(f"Adding {card_name} to selection.")
+
         try:
-            c_mdl = self.parent().data_requests.create_card(data[0],
-                                                            self.card_set)
+            card_set = self.card_model.card_set
+            c_mdl = self.parent().ygo_data.create_card(data[0], card_set)
         except KeyError:
             return
 
@@ -674,6 +750,8 @@ class CardButton(QPushButton):
         return super().parent()  # type: ignore
 
     def mouseMoveEvent(self, event: QMouseEvent):
+        if self.viewer is None:
+            return
         if event.buttons() == Qt.MouseButton.LeftButton:
             drag = QDrag(self)
             mime = QMimeData()
@@ -915,7 +993,7 @@ class DeckViewer(QDialog):
         return count
 
     @pyqtSlot()
-    def removal_count(self):
+    def removal_count(self) -> None:
         """Updates the counters for removal, main, side and extra deck."""
         if self.discard:
             discardcount = self.count() - self.discard

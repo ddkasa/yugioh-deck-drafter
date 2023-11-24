@@ -5,7 +5,7 @@ card sets/cards and exporting to the .ydk format.
 """
 
 import sys
-from typing import NamedTuple, Optional, Any
+from typing import NamedTuple, Optional, Any, Final
 import logging
 from datetime import date, datetime
 from dataclasses import dataclass, field
@@ -61,6 +61,8 @@ class YugiObj:
 
     CACHE = requests_cache.CachedSession("cache\\ygoprodeck.sqlite",
                                          backend="sqlite")
+    SIDE_DECK_TYPES: Final[set[str]] = {"Fusion Monster", "Synchro Monster",
+                                        "Pendulum Monster", "XC Monster"}
 
     def __init__(self) -> None:
         self.card_set = self.get_card_set()
@@ -250,3 +252,15 @@ class YugiObj:
         text += side_ids + "\n"
 
         return text
+    
+    def check_extra_monster(self, card: YGOCard) -> bool:
+        """Checks if a card belongs in the side deck.
+
+        Args:
+            card (YGOCard): Card to be Checked
+
+        Returns:
+            bool: checks if a card model variable in present in a class
+                constant.
+        """
+        return card.card_type in self.SIDE_DECK_TYPES
