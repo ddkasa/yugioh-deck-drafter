@@ -10,7 +10,7 @@ import math
 
 from PyQt6.QtGui import QPixmap, QPixmapCache
 
-from PyQt6.QtWidgets import QLayout
+from PyQt6.QtWidgets import QLayout, QLayoutItem, QWidget
 
 
 def get_or_insert(pixmap_path: str | Path, format: str = ".jpg",
@@ -50,13 +50,20 @@ def new_line_text(text: str, max_line_length: int) -> str:
 def clean_layout(layout: QLayout):
     for i in range(layout.count()):
         item = layout.itemAt(i)
-        if item is None:
-            continue
-        widget = item.widget()
+        widget = check_item_validation(item)
         if widget is None:
             continue
         widget.deleteLater()
         widget.setParent(None)
+
+
+def check_item_validation(item: QLayoutItem | None) -> QWidget | None:
+    if item is None:
+        return
+    widget = item.widget()
+    if widget is None:
+        return
+    return widget
 
 
 def get_operation(number: int) -> tuple[str, int]:
