@@ -61,17 +61,36 @@ if TYPE_CHECKING:
 
 
 class DraftingDialog(QDialog):
+    """Dialog for opening packs and managing drafting in general, as it has a
+       core function that cycles and keep track of whats been added and
+       removed in the meanwhile.
+
+    Attributes:
+        W/H (int): Base size for the dialog itself.
+        main/extra/side deck (list): Mostly for storing the selected card data.
+        selection_per_pack (int): Counter for how many selections the drafter
+            has left for the current pack. Must be 0 or less to proceed through
+            the drafting process.
+        opened_set_packs (int): Keeps track of how many pack bundles have been
+            opened so far.
+        total_packs (int): The total number of packs that have been opened so
+            far.
+        discard_stage_cnt (int): How many discard stages have occured, mainly
+            to trigger deck completion.
+
+    Args:
+        parent (MainWindow): For retrieving, managing and finalzing the
+            drafting data.
+        deck_name (str): Name of deck set by the user used for save pathh name
+            later on.
+        flags (Optional[WindowType]): Mostly for debugging.
+
     """
-    >>> Dialog for opening packs and managing drafting in general, as it has a
-        core function that cycles and keep track of whats been added and
-        removed in the meanwhile.
-    >>> *Future refactor might include seperating UI & calculations functions
-        into their own objects.
-    """
+    W, H = 1344, 824  # Base on 1080 screen resolution
 
     def __init__(self, parent: MainWindow, deck_name: str,
                  flags=Qt.WindowType.Dialog):
-        super(DraftingDialog, self).__init__(parent, flags)
+        super().__init__(parent, flags)
         self.setWindowTitle("Card Pack Opener")
 
         self.deck_name = deck_name
@@ -85,10 +104,8 @@ class DraftingDialog(QDialog):
         self.selection_per_pack = 0
         self.discard_stage_cnt = 0
 
-        w, h = 1344, 824  # Base on 1080 screen width sizes
-        self.setMinimumSize(w, h)
+        self.setMinimumSize(self.W, self.H)
 
-        self.sets = {}
         self.ygo_data = parent.yugi_pro_connect
 
         self.main_layout = QVBoxLayout()
@@ -142,12 +159,10 @@ class DraftingDialog(QDialog):
         self.sel_next_set()
 
     def sel_next_set(self):
-        """
-        >>> Selects the next pack and also manages the session in general.
+        """Selects the next pack and also manages the session in general.
         >>> Might need some refactor in the future to split it apart into
             multiple functions.
         """
-        print(self.size())
         self.main_layout.removeItem(self.stretch)
 
         if self.selection_per_pack > 0:
@@ -474,7 +489,7 @@ class CardButton(QPushButton):
         if isinstance(viewer, DeckViewer):
             self.setAcceptDrops(True)
 
-        self.viewer = viewer
+        self.viewer = viewer  # type: ignore
         self.card_model = data
 
         self.setAccessibleName(data.name)
@@ -624,16 +639,12 @@ class CardButton(QPushButton):
         if isinstance(self.viewer, DeckViewer):
             if not self.viewer.discard:
                 return
-
             self.discard_stage_menu(menu)
+        else:
+            if self.parent().selection_per_pack < 1:
+                return
 
-            menu.exec(pos)
-            return
-
-        if self.parent().selection_per_pack < 1:
-            return
-
-        self.drafting_menu(menu)
+            self.drafting_menu(menu)
 
         menu.exec(pos)
 
@@ -671,12 +682,12 @@ class CardButton(QPushButton):
 
         self.viewer: DeckViewer
         if self.isChecked():
-            remove_card = menu.addAction("Keep Card")
+            card_state = "Keep Card"
         else:
-            remove_card = menu.addAction("Discard Card")
-
-        if remove_card is not None:
-            remove_card.triggered.connect(self.toggle)
+            card_state = "Discard Card"
+        card_state_change = menu.addAction(card_state)
+        if card_state_change is not None:
+            card_state_change.triggered.connect(self.toggle)
 
         mv_deck = self.viewer.mv_card
 
@@ -692,7 +703,7 @@ class CardButton(QPushButton):
             (mv_to_mn.triggered  # type: ignore
              .connect(lambda: mv_deck(self, "main")))
 
-    def add_all_assocc(self):
+    def add_all_assocc(self) -> None:
         """Adds all assocciated cards present within the assocc instance
            variable.
 
@@ -711,12 +722,28 @@ class CardButton(QPushButton):
 
         self.get_card(self.assocc)
 
-    def add_assocc(self, card_name: str):
+    def add_assocc(self, card_name: str) -> None:
+        """Adds a single assocciated card to the selected cards.
+
+        Args:
+            card_name (str): Which card to add to the deck as it will get
+                searched by subsequent functions.
+        """
         self.setChecked(True)
         self.setDisabled(True)
         self.get_card(card_name)
 
-    def get_card(self, card_name: str | list | set):
+    def get_card(self, card_name: str | list | set) -> None:
+        """Collects a card with the help of a YGO data model object.
+
+        Args:
+            card_name (str | list | set): Card Name which can be multiple cards
+                if inside in an Iterable.
+
+        Raises:
+            FileNotFoundError: If there is no card found inside the YGOProDeck
+                database.
+        """
 
         if isinstance(card_name, (list, set)):
             for item in card_name:
@@ -736,7 +763,14 @@ class CardButton(QPushButton):
 
         self.add_card(c_mdl)
 
-    def add_card(self, card: YGOCard):
+    def add_card(self, card: YGOCard) -> None:
+        """Adds a card to the deck list.
+
+        If three of the same card exist inside the deck the card gets ignored.
+
+        Args:
+            card (YGOCard): Model of the card to be added.
+        """
         if self.parent().check_dup_card_count(card) == 3:
             logging.error(f"Three {card.name} cards in deck.")
             return
@@ -747,9 +781,11 @@ class CardButton(QPushButton):
         self.parent().update_counter_label()
 
     def parent(self) -> DraftingDialog:
+        """Override to clear typing issues when calling this function."""
         return super().parent()  # type: ignore
 
-    def mouseMoveEvent(self, event: QMouseEvent):
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:
+        """Movement function for when dragging cards between decks."""
         if self.viewer is None:
             return
         if event.buttons() == Qt.MouseButton.LeftButton:
@@ -764,6 +800,7 @@ class CardButton(QPushButton):
             drag.exec(Qt.DropAction.MoveAction)
 
     def resizeEvent(self, event: QResizeEvent | None) -> None:
+        """Resize event to set the minimum size of an object."""
         self.setMinimumSize(self.sizeHint())
         return super().resizeEvent(event)
 
@@ -967,7 +1004,7 @@ class DeckViewer(QDialog):
         """Returns the count of the deck picked > target[str] with the
            checked cards marked for removal as discarded.
 
-           Args:
+            Args:
                 target (str): If just checking for just one deck count this is
                     used to filter those out.
 
@@ -1081,7 +1118,7 @@ class DeckSlider(QScrollArea):
     def __init__(self,
                  deck_type: Literal["Main Deck", "Side Deck", "Extra Deck"],
                  parent: DeckViewer) -> None:
-        super(DeckSlider, self).__init__(parent)
+        super().__init__(parent)
 
         QAF = Qt.AlignmentFlag
         SBP = Qt.ScrollBarPolicy
