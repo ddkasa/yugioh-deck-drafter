@@ -1,45 +1,27 @@
-"""Main Deck Builder Manager Python Script"""
-
+"""Main Deck Builder Python Script"""
+from typing import Final
 import logging
 import sys
 import traceback
 from pathlib import Path
-from typing import Optional, NamedTuple, Final, Any, Literal
 
-from datetime import date, datetime
-from dataclasses import dataclass, field
-from urllib.parse import quote
+from PyQt6.QtCore import (Qt, pyqtSlot, QPoint, qFatal, QSignalBlocker)
 
-from functools import partial
-
-import re
-import random
-
-import requests_cache
-import requests
-
-from PyQt6.QtCore import (Qt, QRectF, pyqtSignal, pyqtSlot, QSize, QPoint,
-                          qFatal, QSignalBlocker)
-
-from PyQt6.QtWidgets import (QApplication, QLineEdit, QPushButton, QWidget,
+from PyQt6.QtWidgets import (QApplication, QPushButton, QWidget,
                              QComboBox, QVBoxLayout, QListWidget, QSlider,
-                             QHBoxLayout, QListWidgetItem, QDialog, QSpinBox,
-                             QGridLayout, QSizePolicy, QMenu, QButtonGroup,
-                             QScrollArea, QLabel, QStyle, QFileDialog,
-                             QStyleOptionButton, QMessageBox, QSpacerItem,
-                             QCompleter, QInputDialog)
+                             QHBoxLayout, QListWidgetItem, QSpinBox, 
+                             QLabel, QFileDialog, QMenu, QMessageBox,
+                             QInputDialog)
 
-from PyQt6.QtGui import (QPen, QPixmapCache, QPixmap, QPainter, QPaintEvent,
-                         QResizeEvent, QCursor, QBrush, QFont, QDragEnterEvent,
-                         QDropEvent, QKeyEvent, QImage)
-
+from PyQt6.QtGui import (QPixmapCache, QCursor)
 
 from yugioh_deck_drafter import util
 from yugioh_deck_drafter.modules.deck_drafter import DraftingDialog
 from yugioh_deck_drafter.modules.ygo_data import (
     DeckModel,
     YGOCardSet,
-    YugiObj)
+    YugiObj
+    )
 
 
 class MainWindow(QWidget):
@@ -60,9 +42,7 @@ class MainWindow(QWidget):
         self.p_count: int = 0
 
         self.init_ui()
-
         self.update_pack_count()
-
         self.show()
 
     def init_ui(self) -> None:
@@ -148,7 +128,7 @@ class MainWindow(QWidget):
         menu.exec(pos)
 
     @pyqtSlot()
-    def add_item(self):
+    def add_item(self) -> None:
         """
         This function retrieves the selected pack from the UI and adds it to
         the selection list while managing the associated indicators.
@@ -173,7 +153,7 @@ class MainWindow(QWidget):
         self.update_pack_count()
 
     @pyqtSlot()
-    def remove_item(self, pos: QPoint):
+    def remove_item(self, pos: QPoint) -> None:
         """Remove an item from the pack list based on the provided position.
 
         This function identifies the item in the pack list widget based on the
@@ -194,6 +174,8 @@ class MainWindow(QWidget):
             return
         row = self.list_widget.row(item)
         removed_item = self.list_widget.takeItem(row)
+        if removed_item is None:
+            return
         label = removed_item.text().split("x ")[-1]
         self.selected_packs.pop(label)
 

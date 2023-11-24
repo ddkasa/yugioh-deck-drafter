@@ -1,13 +1,37 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional, Final, Literal
 
+import random
+import re
 import logging
+from functools import partial
 
 from PyQt6.QtCore import (
-    Qt
+    Qt,
+    QSize,
+    pyqtSlot,
+    pyqtSignal,
+    QRectF,
+    QRect
+    )
+
+from PyQt6.QtGui import (
+    QResizeEvent,
+    QDropEvent,
+    QDragEnterEvent,
+    QPainter,
+    QPaintEvent,
+    QFont,
+    QKeyEvent,
+    QBrush,
+    QPen,
+    QPixmap,
+    QImage,
+    QCursor
 )
 
 from PyQt6.QtWidgets import (
+    QWidget,
     QDialog,
     QGridLayout,
     QVBoxLayout,
@@ -15,10 +39,17 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QLabel,
     QMessageBox,
+    QScrollArea,
+    QSizePolicy,
+    QApplication,
+    QStyleOptionButton,
+    QStyle,
+    QMenu,
+    QSpacerItem
+)
 
-    )
-
-from yugioh_deck_drafter.modules.ygo_data import YGOCard
+from yugioh_deck_drafter.modules.ygo_data import YGOCard, YGOCardSet, DeckModel
+from yugioh_deck_drafter import util
 
 if TYPE_CHECKING:
     from yugioh_deck_drafter.__main__ import MainWindow
@@ -46,9 +77,7 @@ class DraftingDialog(QDialog):
 
         self.opened_set_packs = 0
         self.total_packs = 0
-
         self.selection_per_pack = 0
-
         self.discard_stage_cnt = 0
 
         w, h = 1344, 824  # Base on 1080 screen width sizes
@@ -453,8 +482,7 @@ class CardButton(QPushButton):
 
         self.assocc = self.filter_assocciated()
 
-        self.image = parent.data_requests.get_card_art(self.card_id)
-
+        self.image = parent.data_requests.get_card_art(self.card_model)
 
     def minimumSize(self) -> QSize:
         return self.BASE_SIZE
@@ -477,7 +505,7 @@ class CardButton(QPushButton):
         return set(matches)
 
     def paintEvent(self, event: QPaintEvent | None):
-        if event is None:
+        if event is None or self.image is None:
             return super().paintEvent(event)
 
         option = QStyleOptionButton()
@@ -531,7 +559,6 @@ class CardButton(QPushButton):
         painter.drawRect(new_rect)
         painter.setOpacity(1)
 
-
         if not self.isChecked():
             return
         if isinstance(self.viewer, DeckViewer) and self.viewer.discard:
@@ -553,7 +580,7 @@ class CardButton(QPushButton):
                 mv_main = f"Move {self.accessibleName()} to Side Deck"
                 mv_to_side = menu.addAction(mv_main)
                 (mv_to_side.triggered  # type: ignore
-                 .connect(lambda: mv_deck(self, "side")))  
+                 .connect(lambda: mv_deck(self, "side")))
 
             elif self in self.viewer.side:
                 mv_main = f"Move {self.accessibleName()} to Main Deck"
@@ -940,43 +967,84 @@ class DeckSlider(QScrollArea):
 
 
 class DeckWidget(QWidget):
+    """Basic Deck Widget for attaching to a scrolling.
+
+    Reimplements the QSizePolicy and repaints the background with the
+    decktype.
+    Layout management happens within a child or parent class of this class.
+
+    Args:
+        deck_type (str): Type of Deck {Side/Extra/Main} for label purposes.
+        parent (DeckSlider): to access and manage the layout within the
+                             DeckViewer and allow scrolling the layout
+    """
 
     def __init__(self, deck_type: str, parent: DeckSlider):
-        super(DeckWidget, self).__init__(parent)
+        super().__init__(parent)
+        self.scroll_area = parent
         self.name = deck_type
         QSP = QSizePolicy.Policy
 
         self.setSizePolicy(QSP.Minimum, QSP.Minimum)
 
     def paintEvent(self, event: QPaintEvent | None):
+        """Draws the basic paint event of the widget.
+
+        Extended with a QPainter in order to draw the deck name on the
+        background.
+
+        Args:
+            event (QPaintEvent | None): Builtin QWidget paint event to refresh
+                                        and find out which area needs rerender.
+        """
         super().paintEvent(event)
         if event is None:
             return
 
-        rect = self.rect()
+        pos = self.scroll_area.viewport().pos()
+
+        vscroll = self.scroll_area.verticalScrollBar()
+        if vscroll is not None:
+            pos.setY(pos.y() + vscroll.value())
+        hscroll = self.scroll_area.horizontalScrollBar()
+        if hscroll is not None:
+            pos.setX(pos.x() + hscroll.value())
+
+        new_rect = QRect(pos, event.rect().size())
+
         painter = QPainter(self)
+
         font = QFont()
         font.setItalic(True)
         font.setPixelSize(36)
         painter.setOpacity(0.1)
         painter.setFont(font)
         painter.setPen(Qt.GlobalColor.white)
-        painter.drawText(rect, (Qt.TextFlag.TextWordWrap
+        painter.drawText(new_rect, (Qt.TextFlag.TextWordWrap
                          | Qt.AlignmentFlag.AlignCenter),
                          self.name)
 
-    def resizeEvent(self, event: QResizeEvent | None) -> None:
-        return super().resizeEvent(event)
-
 
 class DeckDragWidget(DeckWidget):
+    """Widget for visually managing dragging cards around the layouts.
+
+    Not fully implemented with to enable dragging cards at the moment.
+
+    Args:
+        deck_type (str): Type of Deck {Side/Extra/Main} for label purposes.
+        parent (DeckSlider): to access and manage the layout within the
+                             DeckViewer and allow scrolling the layout
+        orientation (Qt.Orientation): For choosing which directions the cards
+                                      slide.
+    """
+
     orderChanged = pyqtSignal()
 
     def __init__(self, deck_type: str, parent: DeckSlider,
                  orientation=Qt.Orientation.Horizontal):
         super(DeckDragWidget, self).__init__(deck_type, parent)
         self.name = deck_type
-        # self.setAcceptDrops(True)
+        self.setAcceptDrops(True)
         self.orientation = orientation
 
         if self.orientation == Qt.Orientation.Vertical:
@@ -989,23 +1057,45 @@ class DeckDragWidget(DeckWidget):
         self.setLayout(self.main_layout)
 
     def add_drag_widget(self, card: CardButton):
+        """Adds a card to the layout.
+
+        Args:
+            card (CardButton): Card widget to be added to the layout.
+        """
         self.main_layout.addWidget(card)
 
     def dragEnterEvent(self, event: QDragEnterEvent):
+        """Event Manager for a widget dragged aroudn the layout
+
+        Args:
+            event (QDragEnterEvent): _description_
+        """
         event.accept()
 
-    def dropEvent(self, event: QDropEvent):
+    def dropEvent(self, event: QDropEvent | None):
         """Checks for a drop event and the position in order to choose where
-           to put the widget."""
+           to put the widget.
+
+        Args:
+            event (QDropEvent): Event produced by the widget getting dragged
+                                around.
+        """
+
+        if event is None:
+            return
         pos = event.position()
-        widget: CardButton = event.source()  # type: ignore
 
         for n in range(self.main_layout.count()):
-            w = self.main_layout.itemAt(n).widget()  # type: ignore
+            item = self.main_layout.itemAt(n)
+            if item is None:
+                continue
+            widget = item.widget()
+            if widget is None:
+                continue
             if self.orientation == Qt.Orientation.Vertical:
-                drop_here = pos.y() < w.y() + w.size().height() // 2
-            else:   
-                drop_here = pos.x() < w.x() + w.size().width() // 2
+                drop_here = pos.y() < widget.y() + widget.size().height() // 2
+            else:
+                drop_here = pos.x() < widget.x() + widget.size().width() // 2
 
             if drop_here:
                 self.main_layout.insertWidget(n - 1, widget)
@@ -1016,9 +1106,14 @@ class DeckDragWidget(DeckWidget):
 
     @pyqtSlot(int)
     def delete_widget(self, widget: CardButton):
+        """Removes the widget provided form the layout.
+
+        Removes a widget and notifies sends out a signal about the order
+        changing.
+
+        Args:
+            widget (CardButton): Widget to be removed from its layout.
+        """
+        widget.deleteLater()
         widget.setParent(None)  # type: ignore
         self.orderChanged.emit()
-
-    def resizeEvent(self, event: QResizeEvent | None) -> None:
-        # self.resize(self.parent().size())
-        return super().resizeEvent(event)

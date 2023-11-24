@@ -8,9 +8,10 @@ readme = "README.md"
 
 [tool.poetry.scripts]
 build = "yugioh_deck_drafter.pyinstaller:install"
+project = "yugioh_deck_drafter.__main__:main"
 
 [tool.poetry.dependencies]
-python = ">=3.11,<3.13"
+python = "3.12"
 pyqt6 = "^6.6.0"
 requests-cache = "^1.1.0"
 
@@ -22,7 +23,11 @@ pytest-qt = "^4.2.0"
 ipykernel = "^6.26.0"
 pyinstaller = "^6.2.0"
 bandit = "^1.7.5"
+pylint = "^3.0.2"
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.pylint]
+disable = ["E0611"]
