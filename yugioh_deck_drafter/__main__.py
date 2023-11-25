@@ -1,11 +1,12 @@
 """Main Deck Builder Python Script"""
+
 from typing import Final, Optional, Iterable
 import logging
 import sys
 import traceback
 from pathlib import Path
 
-from PyQt6.QtCore import (Qt, pyqtSlot, QPoint, QSignalBlocker, QModelIndex)
+from PyQt6.QtCore import (Qt, pyqtSlot, QPoint, QSignalBlocker, QDate)
 
 from PyQt6.QtWidgets import (QApplication, QPushButton, QWidget,
                              QComboBox, QVBoxLayout, QListWidget, QSlider,
@@ -18,7 +19,7 @@ from PyQt6.QtGui import (QPixmapCache, QCursor, QStandardItemModel,
 
 from yugioh_deck_drafter import util
 from yugioh_deck_drafter.modules.deck_drafter import DraftingDialog
-from yugioh_deck_drafter.modules.ygo_data import (DeckModel, CardSetModel, 
+from yugioh_deck_drafter.modules.ygo_data import (DeckModel, CardSetModel,
                                                   YugiObj, CardSetClass)
 
 
@@ -289,26 +290,14 @@ class MainWindow(QWidget):
         dialog.show()
 
 
-class 
+class PackFilterDialog(QDialog):
+    """Filter dialog for filtering out packs from the selection Dropdown.
 
-
-class RandomPacks(QDialog):
-    """Randomizes and pick random packs with certain constraints applied to
-    them.
-
-    Attributes:
-        pack_increments (int): How many packs per random set to add.
-        total_packs (int): How many packs to add in total.
-        max_date (date): Maximum date to filter out the booster packs with.
-        pack_types (list): What type of packs to include the selection.
-        reset_packs (button): Reset the list of packs you selected.
-
-    Args:
-        parent (MainWindow): for accessing the pack_data and pack storage.
-
+    
     """
-    def __init__(self, parent: MainWindow, flags=Qt.WindowType.Window) -> None:
-        super().__init__(parent, flags)
+
+    def __init__(self, parent: MainWindow) -> None:
+        super().__init__(parent=parent)
         self.setWindowTitle("Randomise Packs")
         self.setModal(False)
 
@@ -317,28 +306,22 @@ class RandomPacks(QDialog):
         self.form = QFormLayout()
         self.main_layout.addLayout(self.form)
 
-        self.pack_increments = QSpinBox()
-        self.pack_increments.setValue(5)
-        self.pack_increments.setMinimum(5)
-        self.pack_increments.setMaximum(40)
-        self.pack_increments.setSingleStep(5)
-        self.form.addRow("Pack Count", self.pack_increments)
-
         self.total_packs = QSpinBox()
         self.total_packs.setValue(5)
         self.total_packs.setMinimum(5)
         self.total_packs.setMaximum(10)
         self.total_packs.setSingleStep(5)
         self.total_packs.setToolTip("Total packs to be added ")
-        self.form.addRow("Total Packs", self.total_packs)
+        self.form.addRow("Min Increments", self.total_packs)
 
         self.max_date = QDateEdit()
+        self.max_date.setDate(QDate.currentDate())
         self.max_date.setToolTip("Insert packs up this date.")
-        self.form.addRow("Date", self.max_date)
+        self.form.addRow("Max Date", self.max_date)
 
         self.checkable_items = CheckableListWidget()
         self.checkable_items.addItems(YugiObj.CARD_CLASS_NAMES)
-        self.form.addRow("Checkable Items", self.checkable_items)
+        self.form.addRow("Card Sets", self.checkable_items)
 
         self.button_layout = QHBoxLayout()
 
@@ -348,13 +331,39 @@ class RandomPacks(QDialog):
 
         self.button_layout.addStretch(20)
 
+        self.setLayout(self.main_layout)
+
+
+class RandomPacks(PackFilterDialog):
+    """Randomizes and pick random packs with certain constraints selected which
+    filter through all the sets.
+
+    Attributes:
+        pack_increments (int): How many packs per random set to add.
+        total_packs (int): How many packs to add in total.
+        max_date (date): Maximum date to filter out the booster packs with.
+        pack_types (list): What type of packs to include the selection.
+        reset_packs (button): Reset the list of packs you selected.
+
+    Args:
+        parent (parent): Widget to parent the dialog to and access additonal
+            information.
+    """
+    def __init__(self, parent: MainWindow) -> None:
+        super().__init__(parent=parent)
+
+        self.pack_increments = QSpinBox()
+        self.pack_increments.setValue(5)
+        self.pack_increments.setMinimum(5)
+        self.pack_increments.setMaximum(40)
+        self.pack_increments.setSingleStep(5)
+        self.form.addRow("Pack Count", self.pack_increments)
+
         self.randomize_button = QPushButton("Randomise")
         self.randomize_button.pressed.connect(self.randomise_packs)
         self.button_layout.addWidget(self.randomize_button)
 
         self.main_layout.addLayout(self.button_layout)
-
-        self.setLayout(self.main_layout)
 
     def randomise_packs(self):
         self.parent().yugi_pro_connect.card_set
@@ -365,8 +374,7 @@ class RandomPacks(QDialog):
 
 class CheckableListWidget(QListWidget):
     """QListWidget subclass for allowing selectable filters with checkboxes.
-    
-    
+
     """
 
     def __init__(self) -> None:

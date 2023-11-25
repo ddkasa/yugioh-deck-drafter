@@ -54,7 +54,7 @@ def test_card_picks(main_window_fill: main.MainWindow, qtbot):
     main_window = main_window_fill
     main_window.show()
 
-    dialog = main.DraftingDialog(main_window, "test_deck", 
+    dialog = main.DraftingDialog(main_window, "test_deck",
                                  Qt.WindowType.Widget)
     qtbot.addWidget(dialog)
     dialog.show()
@@ -86,22 +86,23 @@ def test_card_picks(main_window_fill: main.MainWindow, qtbot):
 
         move_cnt = 0
         for item in discard_stage.deck:
+
             if item.isChecked():
                 continue
+
             discard_stage.mv_card(item, "side")
             move_cnt += 1
+
             if move_cnt == 2:
                 break
 
         qtbot.addWidget(discard_stage.accept_button)
         discard_stage.accept_button.click()
 
-        dialog.main_deck = discard_stage.new_deck
-        dialog.extra_deck = discard_stage.new_extra
-        dialog.side_deck = discard_stage.new_side
+        dialog.deck = discard_stage.new_deck
 
         stage += 1
-        assert len(dialog.main_deck) == 10 * stage
-        assert len(dialog.side_deck) == 2 * stage
+        assert len(dialog.deck.main) == 10 * stage
+        assert len(dialog.deck.side) == 2 * stage
 
         discard_stage.close()
