@@ -107,6 +107,12 @@ class MainWindow(QWidget):
         self.no_packs.valueChanged[int].connect(self.update_indi)
         self.no_pack_indi.valueChanged[int].connect(self.update_indi)
         self.start_button.pressed.connect(self.start_drafting)
+        
+        TEST_DATA = ("Legend of Blue Eyes White Dragon", "Pharaoh's Servant",
+                 "Spell Ruler", "Magic Ruler")
+
+        for item in TEST_DATA:
+            self.select_pack.setCurrentText(item)
 
     @pyqtSlot()
     def list_context_menu(self):

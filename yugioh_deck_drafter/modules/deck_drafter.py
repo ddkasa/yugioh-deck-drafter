@@ -67,6 +67,7 @@ class DraftingDialog(QDialog):
 
     Attributes:
         W/H (int): Base size for the dialog itself.
+        CARDS_PER_PACK (int): How many cards each pack contains.
         main/extra/side deck (list): Mostly for storing the selected card data.
         selection_per_pack (int): Counter for how many selections the drafter
             has left for the current pack. Must be 0 or less to proceed through
@@ -87,6 +88,7 @@ class DraftingDialog(QDialog):
 
     """
     W, H = 1344, 824  # Base on 1080 screen resolution
+    CARDS_PER_PACK: Final[int] = 9
 
     def __init__(self, parent: MainWindow, deck_name: str,
                  flags=Qt.WindowType.Dialog):
@@ -144,6 +146,12 @@ class DraftingDialog(QDialog):
         self.packs_opened.setObjectName("indicator")
         self.button_layout.addWidget(self.packs_opened, 20)
 
+        self.button_layout.addStretch(2)
+
+        self.current_pack = QLabel("Current Pack: ")
+        self.current_pack.setObjectName("indicator")
+        self.button_layout.addWidget(self.current_pack, 20)
+
         self.button_layout.addStretch(60)
 
         self.next_button = QPushButton("Start")
@@ -159,11 +167,26 @@ class DraftingDialog(QDialog):
         self.sel_next_set()
 
     def sel_next_set(self):
-        """Selects the next pack and also manages the session in general.
-        >>> Might need some refactor in the future to split it apart into
-            multiple functions.
+        """Selects the next pack and also manages the drafting session in
+        general.
+
+        1. Will check if there have been enough enough cards selected.
+        1a. Returns back to the selection with a warning popup.
+        2b. Otherwise it will add the selected cards to the deck.
+        3. Check if its a discard stage and trigger the dialog for that if the
+           pack count is divisable by 10.
+        4. Checks everytime if there have been 4 discard stages and ask the
+           user if they want to preview the deck and continue on to save the
+           deck.
+        5. Removes the current cards from the layout.
+        6. Selects the next pack and decrements the count.
+        7. Generates the probabilities for the base cards in the set.
+        8. Finally opens the pack by calling open_pack()
         """
-        self.main_layout.removeItem(self.stretch)
+
+        if hasattr(self, "stretch"):
+            self.main_layout.removeItem(self.stretch)
+            del self.stretch
 
         if self.selection_per_pack > 0:
             text = f"Select at least {self.selection_per_pack} more cards."
@@ -175,7 +198,7 @@ class DraftingDialog(QDialog):
         if self.picked_cards:
             self.add_card_to_deck()
 
-        if self.total_packs % 10 == 0 and self.total_packs != 0:
+        if self.total_packs % 10 == 0 and self.total_packs:
             self.discard_stage()
             self.selection_per_pack = 0
 
@@ -194,9 +217,10 @@ class DraftingDialog(QDialog):
             if ms_box == mbutton.Yes:
                 self.check_deck()
 
-            return self.accept()
+            self.accept()
 
-        self.clean_layout()
+        if self.card_buttons:
+            self.clean_layout()
 
         sel_packs = self.parent().selected_packs
 
@@ -205,10 +229,7 @@ class DraftingDialog(QDialog):
 
         self.total_packs += 1
         self.packs_opened.setText(f"Pack No.: {self.total_packs}")
-
-        if set_data.count == 0:
-            self.opened_set_packs += 1
-            return self.sel_next_set()
+        self.current_pack.setText("Current Pack: %s" % set_data.set_name)
 
         if not set_data.probabilities:
             card_data = self.ygo_data.get_card_set_info(set_data)
@@ -221,6 +242,9 @@ class DraftingDialog(QDialog):
 
         self.open_pack(set_data.card_set, set_data.probabilities, set_data)
         set_data.count -= 1
+
+        if set_data.count == 0:
+            self.opened_set_packs += 1
 
     def add_card_to_deck(self):
         for cardbutton in list(self.picked_cards):
@@ -319,10 +343,8 @@ class DraftingDialog(QDialog):
         logging.debug(f"{self.selection_per_pack} Cards Plus Available.")
         self.update_counter_label()
 
-        CARDS_PER_PACK = 9
-
         row = 0
-        for column in range(CARDS_PER_PACK):
+        for column in range(self.CARDS_PER_PACK):
             if column == 8:
                 rare_cards = list(filter(self.filter_common, card_set))
                 prob = self.generate_weights(set_data.set_name, rare_cards,
@@ -418,19 +440,14 @@ class DraftingDialog(QDialog):
         return count
 
     def discard_stage(self):
-        """Calculates the amount to be discard and starts the dialog."""
+        """Calculates the amount to be discarded and starts the dialog."""
 
         discard = self.total_packs + (self.total_packs // 5)
         dialog = DeckViewer(self, discard)
 
         dialog.setWindowTitle("Card Removal Stage")
 
-        if self.parent().debug:
-            dialog.setModal(False)
-            dialog.show()
-            return dialog
-
-        elif dialog.exec():
+        if dialog.exec():
             self.main_deck = dialog.new_deck
             self.extra_deck = dialog.new_extra
             self.side_deck = dialog.new_side
@@ -439,7 +456,7 @@ class DraftingDialog(QDialog):
 
     def check_deck(self):
         deck = DeckViewer(self)
-        deck.show()
+        deck.exec()
 
     def keyPressEvent(self, event: QKeyEvent | None) -> None:
         if event is None:

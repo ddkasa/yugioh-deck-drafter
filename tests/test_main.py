@@ -2,6 +2,7 @@ import pytest
 from PyQt6.QtCore import Qt
 
 from yugioh_deck_drafter import __main__ as main
+from yugioh_deck_drafter.modules import deck_drafter
 
 
 @pytest.fixture()
@@ -45,7 +46,7 @@ def test_card_picks(main_window_fill: main.MainWindow, qtbot):
 
     def find_dialog(children: list):
         for item in children:
-            if isinstance(item, main.DeckViewer):
+            if isinstance(item, deck_drafter.DeckViewer):
                 return item
         else:
             raise ValueError("No DeckViewer dialog present in children.")
@@ -53,7 +54,8 @@ def test_card_picks(main_window_fill: main.MainWindow, qtbot):
     main_window = main_window_fill
     main_window.show()
 
-    dialog = main.DraftingDialog(main_window, Qt.WindowType.Widget)
+    dialog = main.DraftingDialog(main_window, "test_deck", 
+                                 Qt.WindowType.Widget)
     qtbot.addWidget(dialog)
     dialog.show()
 
@@ -73,7 +75,7 @@ def test_card_picks(main_window_fill: main.MainWindow, qtbot):
 
             dialog.next_button.click()
 
-        discard_stage: main.DeckViewer = find_dialog(dialog.children())
+        discard_stage: deck_drafter.DeckViewer = find_dialog(dialog.children())
 
         qtbot.addWidget(discard_stage)
 

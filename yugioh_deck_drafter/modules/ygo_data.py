@@ -34,7 +34,11 @@ class YGOCardSet:
 
 
 class YGOCard(NamedTuple):
-    """Datamodel for a YGO Card"""
+    """Datamodel for a YGO Card
+
+    Some data is stored in the raw JSON[dict] format so that could be
+    parsed more cleanly in the future
+    """
     name: str
     description: str
     card_id: int
@@ -54,9 +58,17 @@ class DeckModel:
 
 
 class YugiObj:
-    """
-    >>> Object for managing requests from YGOPRODECK, creating Models and
-        generating cardmodels themselves.
+    """Object for managing requests from YGOPRODECK, creating Models and
+       generating cardmodels themselves.
+
+    Will immediatly request card_set data in order to grab the information
+        for the main window.
+
+    Attributes:
+        CACHE (CachedSession): Cache for most of the requests except images
+            which get managed more manually.
+        SIDE_DECK_TYPES (set): For filtering out extra deck monsters and
+            arche types.
     """
 
     CACHE = requests_cache.CachedSession("cache\\ygoprodeck.sqlite",
@@ -117,7 +129,17 @@ class YugiObj:
         return cards
 
     def get_card_art(self, card: YGOCard) -> QPixmap | None:
-        """Collects and stores card art for the given piece."""
+        """Collects and stores card art for the given piece.
+
+        Will return a default image here if neede
+
+        Args:
+            card (YGOCard): Card data for grabbing the card art.
+
+        Returns:
+            QPixmap | None: Image in a pixmap format ready to displayed on the
+                QT GUI.
+        """
         image_store = Path(r"assets\images\card_art")
         image_store.mkdir(parents=True, exist_ok=True)
 
@@ -164,10 +186,9 @@ class YugiObj:
                                  timeout=10)
 
         if request.status_code != 200:
-            # Add a default image here in the future.
-            logging.warning("Failed to fetch card arche_types. Skipping!")
+            logging.warning(f"Failed to fetch card {subtype}. Skipping!")
             logging.warning("Status Code: %s", request.status_code)
-            return None
+            return
 
         return request.json()["data"]
 
@@ -186,10 +207,9 @@ class YugiObj:
         request = self.CACHE.get(url, timeout=10)
 
         if request.status_code != 200:
-            # Add a default image here in the future.
             logging.warning("Failed to grab %s. Skipping!", name)
             logging.warning("Status Code: %s", request.status_code)
-            return None
+            return
 
         return request.json()["data"]
 
@@ -208,7 +228,7 @@ class YugiObj:
             YGOCard: Generated model from the card data that was received.
         """
 
-        # Rarity will have to be adjuste and tweaked here as I am no 100%
+        # Rarity will have to be adjusted and tweaked here as I am not 100%
         # if it selects the correct value as there multiple values for the same
         # set included in the json data.
         rarity = "Common"
@@ -252,7 +272,7 @@ class YugiObj:
         text += side_ids + "\n"
 
         return text
-    
+
     def check_extra_monster(self, card: YGOCard) -> bool:
         """Checks if a card belongs in the side deck.
 
