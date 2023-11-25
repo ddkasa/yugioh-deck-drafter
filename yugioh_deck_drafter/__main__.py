@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (QApplication, QPushButton, QWidget,
                              QComboBox, QVBoxLayout, QListWidget, QSlider,
                              QHBoxLayout, QListWidgetItem, QSpinBox, 
                              QLabel, QFileDialog, QMenu, QMessageBox,
-                             QInputDialog)
+                             QInputDialog, QDialog, QFormLayout, QDateEdit)
 
 from PyQt6.QtGui import (QPixmapCache, QCursor)
 
@@ -38,10 +38,11 @@ class MainWindow(QWidget):
         self.debug = debug
         self.yugi_pro_connect = YugiObj()
 
-        self.selected_packs: dict[str, YGOCardSet] = {}
+        self.selected_packs: list[YGOCardSet] = []
         self.p_count: int = 0
 
         self.init_ui()
+
         self.update_pack_count()
         self.show()
 
@@ -58,6 +59,7 @@ class MainWindow(QWidget):
 
         self.select_pack.addItems(names)
         self.select_layout.addWidget(self.select_pack, 50)
+
         self.select_layout.addStretch(10)
 
         self.no_packs = QSlider()
@@ -107,12 +109,6 @@ class MainWindow(QWidget):
         self.no_packs.valueChanged[int].connect(self.update_indi)
         self.no_pack_indi.valueChanged[int].connect(self.update_indi)
         self.start_button.pressed.connect(self.start_drafting)
-        
-        TEST_DATA = ("Legend of Blue Eyes White Dragon", "Pharaoh's Servant",
-                 "Spell Ruler", "Magic Ruler")
-
-        for item in TEST_DATA:
-            self.select_pack.setCurrentText(item)
 
     @pyqtSlot()
     def list_context_menu(self):
@@ -130,6 +126,10 @@ class MainWindow(QWidget):
         remove_item = menu.addAction("Remove Item")
         (remove_item.triggered  # type: ignore
          .connect(lambda: self.remove_item(pos)))
+
+        random_packs = menu.addAction("Randomize Packs")
+        (random_packs.triggered  # type: ignore
+         .connect(lambda: self.randomize_packs()))
 
         menu.exec(pos)
 
@@ -154,7 +154,7 @@ class MainWindow(QWidget):
         data = YGOCardSet(label, data["set_code"], data["tcg_date"],
                           data["num_of_cards"], cnt)
 
-        self.selected_packs[label] = data
+        self.selected_packs.append(data)
 
         self.update_pack_count()
 
@@ -182,10 +182,12 @@ class MainWindow(QWidget):
         removed_item = self.list_widget.takeItem(row)
         if removed_item is None:
             return
-        label = removed_item.text().split("x ")[-1]
-        self.selected_packs.pop(label)
+        cnt, label = removed_item.text().split("x ")
 
-        del removed_item
+        for index, item in enumerate(self.selected_packs):
+            if item.set_name == label and item.count == cnt:
+                self.selected_packs.pop(index)
+                break
 
         self.update_pack_count()
 
@@ -206,7 +208,7 @@ class MainWindow(QWidget):
            changed.
         """
         self.p_count = 0
-        for pack in self.selected_packs.values():
+        for pack in self.selected_packs:
             self.p_count += pack.count
 
         self.pack_count.setText(f"Pack Count: {self.p_count}")
@@ -287,6 +289,73 @@ class MainWindow(QWidget):
     def randomize_packs(self):
         """Launches a dialog for randomizing card_set picks."""
 
+        dialog = RandomPacks(self)
+        dialog.show()
+
+
+class RandomPacks(QDialog):
+    """Randomizes and pick random packs with certain constraints applied to
+    them.
+
+    Attributes:
+        pack_increments (int): How many packs per random set to add.
+        total_packs (int): How many packs to add in total.
+        max_date (date): Maximum date to filter out the booster packs with.
+        pack_types (list): What type of packs to include the selection.
+        reset_packs (button): Reset the list of packs you selected.
+
+    Args:
+        parent (MainWindow): for accessing the pack_data and pack storage.
+
+    """
+    def __init__(self, parent: MainWindow, flags=Qt.WindowType.Window) -> None:
+        super().__init__(parent, flags)
+        self.setWindowTitle("Randomise")
+
+        self.setModal(False)
+
+        self.main_layout = QVBoxLayout()
+
+        self.form = QFormLayout()
+        self.main_layout.addLayout(self.form)
+
+        self.pack_increments = QSpinBox()
+        self.form.addRow("Pack Count", self.pack_increments)
+
+        self.total_packs = QSpinBox()
+        self.total_packs.setValue(5)
+        self.total_packs.setMinimum(5)
+        self.total_packs.setMaximum(10)
+        self.total_packs.setSingleStep(5)
+        self.total_packs.setToolTip("Total packs to be added ")
+        self.form.addRow("Total Packs", self.total_packs)
+
+        self.max_date = QDateEdit()
+        self.max_date.setToolTip("Insert packs up this date.")
+        self.form.addRow("Date", self.max_date)
+
+        self.button_layout = QHBoxLayout()
+
+        self.close_button = QPushButton("Close")
+        self.close_button.pressed.connect(self.close)
+        self.button_layout.addWidget(self.close_button)
+
+        self.button_layout.addStretch(20)
+
+        self.randomize_button = QPushButton("Randomise")
+        self.randomize_button.pressed.connect(self.randomise_packs)
+        self.button_layout.addWidget(self.randomize_button)
+
+        self.main_layout.addLayout(self.button_layout)
+
+        self.setLayout(self.main_layout)
+
+    def randomise_packs(self):
+        self.parent().yugi_pro_connect.card_set
+
+    def parent(self) -> MainWindow:
+        return super().parent()  # type: ignore
+
 
 def main(argv: list):
     """
@@ -326,7 +395,6 @@ if __name__ == "__main__":
     def excepthook(type_, value, traceback_):
         """Exception hook and display."""
         traceback.print_exception(type_, value, traceback_)
-        qFatal(traceback_)
         sys.exit(1)
 
     sys.excepthook = excepthook

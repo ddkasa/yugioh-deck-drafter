@@ -71,6 +71,7 @@ class YugiObj:
     for the main window.
 
     Attributes:
+        card_set (list): Data of all the card_sets available.
         CACHE (CachedSession): Cache for most of the requests except images
             which get managed more manually.
         SIDE_DECK_TYPES (set): For filtering out extra deck monsters and
@@ -96,7 +97,10 @@ class YugiObj:
         self.card_set = self.get_card_set()
 
     def get_card_set(self) -> list:
-        """Collects all card sets for selection."""
+        """Collects all card sets for selection.
+
+        Filters out any Card Sets with less than 10 cards in them.
+        """
         url = r"https://db.ygoprodeck.com/api/v7/cardsets.php"
         request = self.CACHE.get(url, timeout=20)
         if request.status_code != 200:

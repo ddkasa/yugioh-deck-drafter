@@ -50,7 +50,9 @@ from PyQt6.QtWidgets import (
     QStyle,
     QMenu,
     QSpacerItem,
-    
+    QCompleter,
+    QLineEdit,
+    QButtonGroup
 )
 
 from yugioh_deck_drafter.modules.ygo_data import YGOCard, YGOCardSet, DeckModel
@@ -94,12 +96,9 @@ class DraftingDialog(QDialog):
                  flags=Qt.WindowType.Dialog):
         super().__init__(parent, flags)
         self.setWindowTitle("Card Pack Opener")
-
         self.deck_name = deck_name
 
-        self.main_deck: list[YGOCard] = []
-        self.extra_deck: list[YGOCard] = []
-        self.side_deck: list[YGOCard] = []
+        self.deck = DeckModel(deck_name)
 
         self.opened_set_packs = 0
         self.total_packs = 0
@@ -124,7 +123,7 @@ class DraftingDialog(QDialog):
 
         self.check_deck_button = QPushButton("View Deck")
         self.button_layout.addWidget(self.check_deck_button)
-        self.check_deck_button.pressed.connect(self.check_deck)
+        self.check_deck_button.pressed.connect(self.preview_deck)
 
         self.button_layout.addStretch(60)
 
@@ -215,7 +214,7 @@ class DraftingDialog(QDialog):
                 (mbutton.No | mbutton.Yes))
 
             if ms_box == mbutton.Yes:
-                self.check_deck()
+                self.preview_deck()
 
             self.accept()
 
@@ -224,8 +223,7 @@ class DraftingDialog(QDialog):
 
         sel_packs = self.parent().selected_packs
 
-        next_key = list(sel_packs.keys())[self.opened_set_packs]
-        set_data = sel_packs[next_key]
+        set_data = sel_packs[self.opened_set_packs]
 
         self.total_packs += 1
         self.packs_opened.setText(f"Pack No.: {self.total_packs}")
@@ -234,7 +232,8 @@ class DraftingDialog(QDialog):
         if not set_data.probabilities:
             card_data = self.ygo_data.get_card_set_info(set_data)
             set_data.card_set = tuple(card_data)
-            probabilities = self.ygo_data.generate_weights(next_key, card_data)
+            probabilities = self.ygo_data.generate_weights(set_data.set_name,
+                                                           card_data)
             set_data.probabilities = tuple(probabilities)
 
         if self.total_packs % 10 == 0 and self.total_packs:
@@ -257,10 +256,10 @@ class DraftingDialog(QDialog):
             cardbutton.deleteLater()
 
             if self.ygo_data.check_extra_monster(card):
-                self.extra_deck.append(card)
+                self.deck.extra.append(card)
                 continue
 
-            self.main_deck.append(card)
+            self.deck.main.append(card)
 
         self.update_counter_label()
 
@@ -316,7 +315,7 @@ class DraftingDialog(QDialog):
             if column == 8:
                 rare_cards = list(filter(self.filter_common, card_set))
                 rprob = self.ygo_data.generate_weights(set_data.set_name,
-                                                       rare_cards,
+                                                       rare_cards,  
                                                        extra=True)
                 card_data = random.choices(rare_cards, weights=rprob, k=1)
             else:
@@ -337,15 +336,16 @@ class DraftingDialog(QDialog):
         self.repaint()
 
     def parent(self) -> MainWindow:
+        """Overriden function to remove the type alert."""
         return super().parent()  # type: ignore
 
-    def accept(self):
-        self.deck = DeckModel(self.deck_name, self.main_deck,
-                              self.extra_deck, self.side_deck)
-
-        return super().accept()
-
     def update_selection(self):
+        """Check if there are any slections left and checks and for duplicate
+        cards.
+
+        Removes the selections if there are three of more of the card present
+        in the deck.
+        """
         logging.debug("Updating Selection")
 
         for item in list(self.card_buttons):
@@ -379,16 +379,28 @@ class DraftingDialog(QDialog):
             item.blockSignals(False)
 
     def update_counter_label(self):
+        """Updates the card count indicator labels in the GUI."""
+
         remaining = f"Remaining Picks: {self.selection_per_pack}"
         self.card_picks_left.setText(remaining)
-        picked = len(self.main_deck) + len(self.side_deck)
+        picked = len(self.deck.main) + len(self.deck.side)
+
         self.cards_picked.setText(f"Deck Total: {picked}")
-        tip = f"Main Deck: {len(self.main_deck)}\n"
-        tip += f"Extra Deck: {len(self.extra_deck)}\n"
-        tip += f"Side Deck: {len(self.side_deck)}"
+        tip = f"Main Deck: {len(self.deck.main)}\n"
+        tip += f"Extra Deck: {len(self.deck.extra)}\n"
+        tip += f"Side Deck: {len(self.deck.side)}"
         self.cards_picked.setToolTip(tip)
 
     def check_dup_card_count(self, card: YGOCard) -> int:
+        """Checks the amount of the same card present in the deck.
+
+        Args:
+            card (YGOCard): Card Model to be checked for.
+
+        Returns:
+            int: The amount of cards present inside all the decks.
+                 Between 0 and 3 usually.
+        """
         count = 0
 
         def count_cards(card, deck) -> int:
@@ -398,9 +410,9 @@ class DraftingDialog(QDialog):
                     count += 1
             return count
 
-        count += count_cards(card, self.main_deck)
-        count += count_cards(card, self.extra_deck)
-        count += count_cards(card, self.side_deck)
+        count += count_cards(card, self.deck.main)
+        count += count_cards(card, self.deck.extra)
+        count += count_cards(card, self.deck.side)
 
         for item in self.picked_cards:
             if item.accessibleName() == card.name:
@@ -417,17 +429,19 @@ class DraftingDialog(QDialog):
         dialog.setWindowTitle("Card Removal Stage")
 
         if dialog.exec():
-            self.main_deck = dialog.new_deck
-            self.extra_deck = dialog.new_extra
-            self.side_deck = dialog.new_side
+            self.deck = dialog.new_deck
 
             self.discard_stage_cnt += 1
 
-    def check_deck(self):
+    def preview_deck(self):
+        """Spawns the deck viewer for previewing the deck on demand."""
         deck = DeckViewer(self)
         deck.exec()
 
     def keyPressEvent(self, event: QKeyEvent | None) -> None:
+        """Key override to prevent the drafter from accidently quitting out of
+        the window or misclicking.
+        """
         if event is None:
             return super().keyPressEvent(event)
         KEY = Qt.Key
@@ -462,7 +476,6 @@ class CardButton(QPushButton):
             viwer (DeckViewer): Optional argument if slotting it into a
                 DeckViewer dialog, which enables different functionality
                 in terms of menu and draggability.
-
     """
     BASE_SIZE = QSize(164, 242)
     ASPECT_RATIO: Final[float] = 1.4756097561  # Height to Width
@@ -703,8 +716,9 @@ class CardButton(QPushButton):
         if self.parent().ygo_data.check_extra_monster(self.card_model):
             # Need to confirm this as different extra deck monster might need
             # different material
-            poly = "Polymerization"
-            items.append(poly)
+            if self.card_model.card_type == "Fusion Monster":
+                poly = "Polymerization"
+                items.append(poly)
 
         self.get_card(self.assocc)
 
@@ -738,7 +752,11 @@ class CardButton(QPushButton):
 
         data = self.parent().ygo_data.grab_card(card_name)
         if data is None:
-            raise FileNotFoundError("Card does not exist.")
+            logging.error("Card does not exist.")
+            self.setChecked(False)
+            self.setDisabled(False)
+            return
+
         logging.info(f"Adding {card_name} to selection.")
 
         try:
@@ -761,8 +779,8 @@ class CardButton(QPushButton):
             logging.error(f"Three {card.name} cards in deck.")
             return
 
-        self.parent().main_deck.append(card)
-        if card.card_type != "Fusion Monster":
+        self.parent().deck.main.append(card)
+        if self.parent().ygo_data.check_extra_monster(card):
             self.parent().selection_per_pack -= 1
         self.parent().update_counter_label()
 
@@ -808,7 +826,8 @@ class DeckViewer(QDialog):
 
     Args:
         parent (DraftingDialog): Parent where the deck is/was being drafting.
-        discard (int): How many cards should be discounted
+        discard (int): How many cards should be discounted.
+            Used as a boolean to decide what type of viewer it is.
     """
 
     MAX_COLUMNS: Final[int] = 10
@@ -820,7 +839,7 @@ class DeckViewer(QDialog):
         self.resize(1745, 860)  # Base on 1080 ratio
 
         self.discard = discard
-        self.side_length = len(parent.side_deck) + 2
+        self.side_length = len(parent.deck.side) + 2
 
         self.deck: list[CardButton] = []
         self.extra: list[CardButton] = []
@@ -830,15 +849,15 @@ class DeckViewer(QDialog):
 
         self.deck_area = DeckSlider("Main Deck", self)
         self.main_layout.addWidget(self.deck_area, 60)
-        self.fill_deck(parent.main_deck, self.deck, self.deck_area)
+        self.fill_deck(parent.deck.main, self.deck, self.deck_area)
 
         self.extra_deck_widget = DeckSlider("Extra Deck", self)
         self.main_layout.addWidget(self.extra_deck_widget, 20)
-        self.fill_deck(parent.extra_deck, self.extra, self.extra_deck_widget)
+        self.fill_deck(parent.deck.extra, self.extra, self.extra_deck_widget)
 
         self.side_deck_widget = DeckSlider("Side Deck", self)
         self.main_layout.addWidget(self.side_deck_widget, 20)
-        self.fill_deck(parent.side_deck, self.side, self.side_deck_widget)
+        self.fill_deck(parent.deck.side, self.side, self.side_deck_widget)
 
         self.button_layout = QHBoxLayout()
 
@@ -1036,9 +1055,9 @@ class DeckViewer(QDialog):
 
     def accept(self) -> None:
         """Overriden accept function to check if there are the right amount of
-           cards in each deck and validate the entries.
+        cards in each deck and validate the entries.
 
-           Will check if Main & Side deck counts are at the right numbers
+        Will check if Main & Side deck counts are at the right numbers
             according instance.discard and instance.side_length.
         """
         if not self.discard:
@@ -1050,11 +1069,13 @@ class DeckViewer(QDialog):
                 if not item.isChecked():
                     container.append(item.card_model)
                     continue
+
                 item.deleteLater()
 
         logging.debug("Deck Cards: %s", len(self.deck))
         logging.debug("Extra Cards: %s", len(self.extra))
         logging.debug("Side Cards: %s", len(self.side))
+
         count = self.count()
         logging.debug("Actual Count: %s", count)
 
@@ -1071,19 +1092,120 @@ class DeckViewer(QDialog):
             cnt = self.count("side") - self.side_length
             operation, cnt = util.get_operation(cnt)
             msg = f"{operation} {cnt} more card(s) to the Side Deck"
+
             if operation == "Remove":
                 msg = f"{operation} {cnt} more card(s) from the Side Deck"
+
             QMessageBox.warning(self, "Adjust Side Deck", msg,
                                 QMessageBox.StandardButton.Ok)
             return
 
-        self.new_deck = []
-        self.new_extra = []
-        self.new_side = []
+        self.new_deck = DeckModel(self.parent().deck.name)
 
-        filter_items(self.new_deck, self.deck)
-        filter_items(self.new_extra, self.extra)
-        filter_items(self.new_side, self.side)
+        filter_items(self.new_deck.main, self.deck)
+        filter_items(self.new_deck.extra, self.extra)
+        filter_items(self.new_deck.side, self.side)
+
+        return super().accept()
+
+
+class CardSearch(QDialog):
+    """Dialog for search for different subtypes of a card when the card desc
+    doesn't have a description itself.
+
+    Args:
+        attribute (str): The name of the subtype to search for.
+        subtype (subtype): What subtype to look for in the database.
+        parent (DraftingDialog): For searching capability and checking
+            duplicates.
+    """
+
+    def __init__(self, attribute: str, subtype: str, parent: DraftingDialog):
+        super().__init__(parent)
+        self.setMinimumSize(960, 540)
+
+        self.total_cards = 1
+
+        self.data = parent.ygo_data.card_arche_types(attribute, subtype)
+
+        if self.data is None:
+            return self.reject()
+
+        self.main_layout = QVBoxLayout()
+
+        self.search_box = QLineEdit()
+        self.main_layout.addWidget(self.search_box)
+
+        self.scroll_widget = DeckSlider(subtype + " Search", self)
+
+        self.card_buttons: list[CardButton] = []
+        self.card_button_group = QButtonGroup()
+        self.card_button_group.setExclusive(True)
+
+        CMP = Qt.ContextMenuPolicy
+
+        for i, item in enumerate(self.data):
+            card_button = CardButton(item, parent, None)
+            card_button.setContextMenuPolicy(CMP.NoContextMenu)
+            self.card_buttons.append(card_button)
+            self.card_button_group.addButton(card_button)
+            self.scroll_widget.main_layout.addWidget(card_button)
+
+        self.button_layout = QHBoxLayout()
+        self.canceL_button = QPushButton("Cancel")
+        self.canceL_button.pressed.connect(self.reject)
+        self.button_layout.addWidget(self.canceL_button)
+
+        self.button_layout.addStretch(20)
+
+        self.accept_button = QPushButton("Accept")
+        self.accept_button.pressed.connect(self.accept)
+        self.button_layout.addWidget(self.accept_button)
+
+        self.main_layout.addLayout(self.button_layout)
+
+        self.fill_search()
+
+        self.setLayout(self.main_layout)
+
+    def fill_search(self):
+        """Pre-cached the search values which matched to the name of the
+        searched subtype.
+        """
+
+        if not isinstance(self.data, list):
+            return self.reject()
+
+        names = [card["name"] for card in self.data]
+
+        completer = QCompleter(names)
+        completer.setCompletionMode(QCompleter.CompletionMode.InlineCompletion)
+
+        self.search_box.setCompleter(completer)
+        self.search_box.editingFinished.connect(lambda: self.highlight_search)
+
+    def highlight_search(self):
+        """Hightlights the item searched for inside the search box and toggls
+        the button to the checked state.
+        """
+        name = self.search_box.text()
+        for item in self.card_buttons:
+            if item.accessibleName() == name:
+                item.setChecked(True)
+                return
+
+    def accept(self) -> None:
+        """Overriden except method in order to highlight and return the correct
+        card model.
+
+
+        """
+        for item in self.card_buttons:
+            if item.isChecked():
+                self.selected_item = item.card_model
+                break
+        else:
+            self.selected_item = self.card_buttons[0].card_model
 
         return super().accept()
 
@@ -1102,8 +1224,8 @@ class DeckSlider(QScrollArea):
     """
 
     def __init__(self,
-                 deck_type: Literal["Main Deck", "Side Deck", "Extra Deck"],
-                 parent: DeckViewer) -> None:
+                 deck_type: str,
+                 parent: DeckViewer | CardSearch) -> None:
         super().__init__(parent)
 
         QAF = Qt.AlignmentFlag
