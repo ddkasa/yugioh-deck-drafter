@@ -55,7 +55,7 @@ from PyQt6.QtWidgets import (
     QButtonGroup
 )
 
-from yugioh_deck_drafter.modules.ygo_data import YGOCard, YGOCardSet, DeckModel
+from yugioh_deck_drafter.modules.ygo_data import CardModel, CardSetModel, DeckModel
 from yugioh_deck_drafter import util
 
 if TYPE_CHECKING:
@@ -247,7 +247,7 @@ class DraftingDialog(QDialog):
 
     def add_card_to_deck(self):
         """Adds cards to the deck from the picked cards in the current opended
-        pack.
+        pack.        
         """
         for cardbutton in list(self.picked_cards):
             self.card_layout.removeWidget(cardbutton)
@@ -286,11 +286,11 @@ class DraftingDialog(QDialog):
         self.repaint()
         QApplication.processEvents()
 
-    def filter_common(self, card: YGOCard):
+    def filter_common(self, card: CardModel):
         """Filters out common rarity cards out of a set."""
         return card.rarity != "Common"
 
-    def open_pack(self, set_data: YGOCardSet):
+    def open_pack(self, set_data: CardSetModel):
         """ Opens a pack with probablities supplied and adds its to the layout.
 
         The last card get new probabilities as its atleast a rare.
@@ -391,7 +391,7 @@ class DraftingDialog(QDialog):
         tip += f"Side Deck: {len(self.deck.side)}"
         self.cards_picked.setToolTip(tip)
 
-    def check_dup_card_count(self, card: YGOCard) -> int:
+    def check_dup_card_count(self, card: CardModel) -> int:
         """Checks the amount of the same card present in the deck.
 
         Args:
@@ -480,7 +480,7 @@ class CardButton(QPushButton):
     BASE_SIZE = QSize(164, 242)
     ASPECT_RATIO: Final[float] = 1.4756097561  # Height to Width
 
-    def __init__(self, data: YGOCard, parent: DraftingDialog,
+    def __init__(self, data: CardModel, parent: DraftingDialog,
                  viewer: Optional['DeckViewer'] = None) -> None:
         super().__init__()
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
@@ -767,7 +767,7 @@ class CardButton(QPushButton):
 
         self.add_card(c_mdl)
 
-    def add_card(self, card: YGOCard) -> None:
+    def add_card(self, card: CardModel) -> None:
         """Adds a card to the deck list.
 
         If three of the same card exist inside the deck the card gets ignored.
@@ -890,7 +890,7 @@ class DeckViewer(QDialog):
 
         self.setLayout(self.main_layout)
 
-    def fill_deck(self, cards: list[YGOCard], container: list,
+    def fill_deck(self, cards: list[CardModel], container: list,
                   scroll_bar: 'DeckSlider', check: bool = False) -> None:
         """Fills the deck preview with the list of given list[YGOCards].
 

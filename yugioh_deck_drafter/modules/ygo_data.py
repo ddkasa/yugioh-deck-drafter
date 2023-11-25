@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import quote
 from collections import defaultdict
+import enum
 
 import requests
 import requests_cache
@@ -22,8 +23,25 @@ from PyQt6.QtWidgets import QMessageBox
 from yugioh_deck_drafter import util
 
 
+class CardSetClass(enum.Enum):
+    Booster_Pack = enum.auto()
+    Promotional = enum.auto()
+    Starter_Deck = enum.auto()
+    Tournament = enum.auto()
+    Tin = enum.auto()
+    Participation = enum.auto()
+    Special_Edition = enum.auto()
+    Exclusive = enum.auto()
+    Prize = enum.auto()
+    Movie = enum.auto()
+    Master_Collection = enum.auto()
+    Structure_Deck = enum.auto()
+    Duelist_Pack = enum.auto()
+    Champion_Pack = enum.auto()
+
+
 @dataclass
-class YGOCardSet:
+class CardSetModel:
     """Datamodel for a YGO Cardset
 
     Store base data for a card set and weights in addtional, while also
@@ -32,14 +50,16 @@ class YGOCardSet:
     """
     set_name: str = field()
     set_code: str = field()
-    data: date = field()
+    set_date: date = field()
+    set_image: Optional[str] = field(default=None)
+    set_class: set[CardSetClass] = field(default_factory=set)
     card_count: int = field(default=1)
     count: int = field(default=1)
-    card_set: tuple['YGOCard', ...] = field(default_factory=tuple)
+    card_set: tuple['CardModel', ...] = field(default_factory=tuple)
     probabilities: tuple[int, ...] = field(default_factory=tuple)
 
 
-class YGOCard(NamedTuple):
+class CardModel(NamedTuple):
     """Datamodel for a YGO Card
 
     Some data is stored in the raw JSON[dict] format so that could be
@@ -51,16 +71,16 @@ class YGOCard(NamedTuple):
     card_type: str = field()
     raw_data: dict[str, Any] = field()
     rarity: str = field(default="Common")
-    card_set: Optional[YGOCardSet] = None
+    card_set: Optional[CardSetModel] = None
 
 
 @dataclass
 class DeckModel:
     """Datamodel for a complete YGO Deck"""
     name: str = field(default="Deck")
-    main: list[YGOCard] = field(default_factory=lambda: [])
-    extra: list[YGOCard] = field(default_factory=lambda: [])
-    side: list[YGOCard] = field(default_factory=lambda: [])
+    main: list[CardModel] = field(default_factory=lambda: [])
+    extra: list[CardModel] = field(default_factory=lambda: [])
+    side: list[CardModel] = field(default_factory=lambda: [])
 
 
 class YugiObj:
@@ -93,10 +113,12 @@ class YugiObj:
     SIDE_DECK_TYPES: Final[set[str]] = {"Fusion Monster", "Synchro Monster",
                                         "Pendulum Monster", "XC Monster"}
 
+    CARD_CLASS_NAMES = [s.name.replace("_", " ").lower() for s in CardSetClass]
+
     def __init__(self) -> None:
         self.card_set = self.get_card_set()
 
-    def get_card_set(self) -> list:
+    def get_card_set(self) -> list[CardSetModel]:
         """Collects all card sets for selection.
 
         Filters out any Card Sets with less than 10 cards in them.
@@ -115,18 +137,68 @@ class YugiObj:
 
         new_set = []
         for item in data:
-            if item["num_of_cards"] < 10:
-                continue
             d = item.get("tcg_date")
             if d is None:
                 continue
-            item["tcg_date"] = datetime.strptime(d, '%Y-%m-%d').date()
-            new_set.append(item)
+            new_date = datetime.strptime(d, '%Y-%m-%d').date()
+            name = item["set_name"]
+            set_class = self.infer_set_types(name)
+            set_model = CardSetModel(set_name=name,
+                                     set_code=item["set_code"],
+                                     set_date=new_date,
+                                     set_image=item.get("set_image", None),
+                                     set_class=set_class,
+                                     card_count=item["num_of_cards"])
+            new_set.append(set_model)
 
-        new_set.sort(key=lambda x: x["set_name"])
+        new_set.sort(key=lambda x: x.set_name)
+
         return new_set
 
-    def get_card_set_info(self, card_set: YGOCardSet) -> list[YGOCard]:
+    def filter_out_card_sets(
+        self,
+        card_set: CardSetModel,
+        minimum_count: int = 10,
+        min_date: Optional[date] = None,
+        set_type: Optional[set[str]] = None
+    ) -> bool:
+        """Filters out card_sets based on the criteria.
+
+        Args:
+            card_set (CardSetModel): _description_
+            minimum_count (Minimal): Minimum amount of cards in the set.
+            date (Optional[date], optional): _description_. Defaults to None.
+            set_type (str): Set type mostly matches against the name of the
+                set.
+
+        Returns:
+            bool: If card set matches the count, date and set type it returns.
+                true.
+        """
+        count_bool = card_set.card_count >= minimum_count
+        date_bool = min_date is None or card_set.set_date >= min_date
+        type_bool = (set_type is None
+                     or any(x in card_set.set_name for x in set_type))
+        return count_bool and date_bool and type_bool
+
+    def infer_set_types(self, set_name: str) -> set[CardSetClass]:
+        """Parses the name of a card set and generates set classes for
+        filtering purposes later on.
+
+        Args:
+            set_name (str): To filter out various sets in the collection.
+        """
+        set_classes: set[CardSetClass] = set()
+        for set_class in self.CARD_CLASS_NAMES:
+            if set_class in set_name.lower():
+                sclass = CardSetClass[set_class.title().replace(" ", "_")]
+                set_classes.add(sclass)
+        if not set_classes:
+            set_classes.add(CardSetClass.Booster_Pack)
+
+        return set_classes
+
+    def get_card_set_info(self, card_set: CardSetModel) -> list[CardModel]:
         """Returns the cards contained within the given card set."""
         url = "https://db.ygoprodeck.com/api/v7/cardinfo.php?cardset={0}"
         request = self.CACHE.get(url.format(card_set.set_name),
@@ -148,7 +220,7 @@ class YugiObj:
 
         return cards
 
-    def get_card_art(self, card: YGOCard) -> QPixmap | None:
+    def get_card_art(self, card: CardModel) -> QPixmap | None:
         """Collects and stores card art for the given piece.
 
         Will return a default image here if neede
@@ -158,7 +230,7 @@ class YugiObj:
 
         Returns:
             QPixmap | None: Image in a pixmap format ready to displayed on the
-                QT GUI.
+                PyQt GUI.
         """
         image_store = Path(r"assets\images\card_art")
         image_store.mkdir(parents=True, exist_ok=True)
@@ -233,7 +305,7 @@ class YugiObj:
 
         return request.json()["data"]
 
-    def create_card(self, data: dict, set_data: YGOCardSet | None) -> YGOCard:
+    def create_card(self, data: dict, set_data: CardSetModel | None) -> CardModel:
         """Create a card datamodel from given JSON Data.
 
         Creates a cardmodel which uses the first rarity data found which
@@ -253,7 +325,7 @@ class YugiObj:
         # set included in the json data.
         rarity = "Common"
 
-        if isinstance(set_data, YGOCardSet):
+        if isinstance(set_data, CardSetModel):
             card_sets = data["card_sets"]
             for card_set in card_sets:
                 card_set_code = card_set["set_code"]
@@ -261,7 +333,7 @@ class YugiObj:
                     rarity = card_set["set_rarity"]
                     break
 
-        card = YGOCard(data["name"], data["desc"], data["id"], data["type"],
+        card = CardModel(data["name"], data["desc"], data["id"], data["type"],
                        data, rarity, set_data)
 
         return card
@@ -275,7 +347,7 @@ class YugiObj:
         Returns:
             str: File in a str newline concated str.
         """
-        def create_text(data: list[YGOCard]) -> str:
+        def create_text(data: list[CardModel]) -> str:
             cards = [str(item.card_id) for item in data]
             mn_text = "\n".join(cards)
             return mn_text
@@ -293,7 +365,7 @@ class YugiObj:
 
         return text
 
-    def check_extra_monster(self, card: YGOCard) -> bool:
+    def check_extra_monster(self, card: CardModel) -> bool:
         """Checks if a card belongs in the side deck.
 
         Args:
@@ -305,7 +377,7 @@ class YugiObj:
         """
         return card.card_type in self.SIDE_DECK_TYPES
 
-    def generate_weights(self, card_set_name: str, data: list[YGOCard],
+    def generate_weights(self, card_set_name: str, data: list[CardModel],
                          extra: bool = False) -> tuple[int, ...]:
         """Generate a list of integers depeding on the weight denoting the
         index of an item inside the set cards.

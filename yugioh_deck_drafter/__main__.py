@@ -1,11 +1,11 @@
 """Main Deck Builder Python Script"""
-from typing import Final
+from typing import Final, Optional, Iterable
 import logging
 import sys
 import traceback
 from pathlib import Path
 
-from PyQt6.QtCore import (Qt, pyqtSlot, QPoint, qFatal, QSignalBlocker)
+from PyQt6.QtCore import (Qt, pyqtSlot, QPoint, QSignalBlocker, QModelIndex)
 
 from PyQt6.QtWidgets import (QApplication, QPushButton, QWidget,
                              QComboBox, QVBoxLayout, QListWidget, QSlider,
@@ -13,15 +13,13 @@ from PyQt6.QtWidgets import (QApplication, QPushButton, QWidget,
                              QLabel, QFileDialog, QMenu, QMessageBox,
                              QInputDialog, QDialog, QFormLayout, QDateEdit)
 
-from PyQt6.QtGui import (QPixmapCache, QCursor)
+from PyQt6.QtGui import (QPixmapCache, QCursor, QStandardItemModel,
+                         QStandardItem)
 
 from yugioh_deck_drafter import util
 from yugioh_deck_drafter.modules.deck_drafter import DraftingDialog
-from yugioh_deck_drafter.modules.ygo_data import (
-    DeckModel,
-    YGOCardSet,
-    YugiObj
-    )
+from yugioh_deck_drafter.modules.ygo_data import (DeckModel, CardSetModel, 
+                                                  YugiObj, CardSetClass)
 
 
 class MainWindow(QWidget):
@@ -38,7 +36,7 @@ class MainWindow(QWidget):
         self.debug = debug
         self.yugi_pro_connect = YugiObj()
 
-        self.selected_packs: list[YGOCardSet] = []
+        self.selected_packs: list[CardSetModel] = []
         self.p_count: int = 0
 
         self.init_ui()
@@ -55,7 +53,7 @@ class MainWindow(QWidget):
         self.main_layout.addLayout(self.select_layout)
 
         self.select_pack = QComboBox()
-        names = [item["set_name"] for item in self.yugi_pro_connect.card_set]
+        names = [item.set_name for item in self.yugi_pro_connect.card_set]
 
         self.select_pack.addItems(names)
         self.select_layout.addWidget(self.select_pack, 50)
@@ -151,9 +149,7 @@ class MainWindow(QWidget):
         item = QListWidgetItem(f"{cnt}x {label}")
         self.list_widget.addItem(item)
 
-        data = YGOCardSet(label, data["set_code"], data["tcg_date"],
-                          data["num_of_cards"], cnt)
-
+        data.count = cnt
         self.selected_packs.append(data)
 
         self.update_pack_count()
@@ -250,14 +246,14 @@ class MainWindow(QWidget):
 
                 path = Path(str(file_dia.directory()))
 
-            self.save__deck_dialog(dialog.deck, path)
+            self.save_deck_dialog(dialog.deck, path)
 
             QMessageBox.information(self, "File Saved",
                                     f"File was saved to {path}!",
                                     QMessageBox.StandardButton.Ok)
         return
 
-    def save__deck_dialog(self, deck: DeckModel, path: Path) -> None:
+    def save_deck_dialog(self, deck: DeckModel, path: Path) -> None:
         """Converts and saves the provided deck to path.
 
         Sanitizes the provided path(Path) first and then converts the deck to
@@ -281,7 +277,7 @@ class MainWindow(QWidget):
         """Resets pack Selection to empty and clears out the rest of cache."""
         logging.info("Resetting app to defaults.")
 
-        self.selected_packs = {}
+        self.selected_packs = []
         self.list_widget.clear()
         self.update_pack_count()
 
@@ -291,6 +287,9 @@ class MainWindow(QWidget):
 
         dialog = RandomPacks(self)
         dialog.show()
+
+
+class 
 
 
 class RandomPacks(QDialog):
@@ -310,8 +309,7 @@ class RandomPacks(QDialog):
     """
     def __init__(self, parent: MainWindow, flags=Qt.WindowType.Window) -> None:
         super().__init__(parent, flags)
-        self.setWindowTitle("Randomise")
-
+        self.setWindowTitle("Randomise Packs")
         self.setModal(False)
 
         self.main_layout = QVBoxLayout()
@@ -320,6 +318,10 @@ class RandomPacks(QDialog):
         self.main_layout.addLayout(self.form)
 
         self.pack_increments = QSpinBox()
+        self.pack_increments.setValue(5)
+        self.pack_increments.setMinimum(5)
+        self.pack_increments.setMaximum(40)
+        self.pack_increments.setSingleStep(5)
         self.form.addRow("Pack Count", self.pack_increments)
 
         self.total_packs = QSpinBox()
@@ -333,6 +335,10 @@ class RandomPacks(QDialog):
         self.max_date = QDateEdit()
         self.max_date.setToolTip("Insert packs up this date.")
         self.form.addRow("Date", self.max_date)
+
+        self.checkable_items = CheckableListWidget()
+        self.checkable_items.addItems(YugiObj.CARD_CLASS_NAMES)
+        self.form.addRow("Checkable Items", self.checkable_items)
 
         self.button_layout = QHBoxLayout()
 
@@ -355,6 +361,37 @@ class RandomPacks(QDialog):
 
     def parent(self) -> MainWindow:
         return super().parent()  # type: ignore
+
+
+class CheckableListWidget(QListWidget):
+    """QListWidget subclass for allowing selectable filters with checkboxes.
+    
+    
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+
+    def addItems(self, items: list[str]) -> None:
+        items = [name.title() for name in items]
+
+        for item in items:
+            list_item = QListWidgetItem(item)
+            list_item.setFlags(list_item.flags() |
+                               Qt.ItemFlag.ItemIsUserCheckable)
+            list_item.setCheckState(Qt.CheckState.Checked)
+            self.addItem(list_item)
+
+    def checked_items_to_list(self) -> list:
+        check_items = []
+
+        for i in range(self.count()):
+            item = self.itemAt(i)
+            if item is None or item.checkState() != Qt.CheckState.Checked:
+                continue
+            check_items.append(item)
+
+        return check_items
 
 
 def main(argv: list):
