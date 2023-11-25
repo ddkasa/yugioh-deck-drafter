@@ -181,7 +181,7 @@ class DraftingDialog(QDialog):
         5. Removes the current cards from the layout.
         6. Selects the next pack and decrements the count.
         7. Generates the probabilities for the base cards in the set.
-        8. Finally opens the pack by calling open_pack()
+        8. Finally opens the pack by calling open_pack().
         """
 
         if hasattr(self, "stretch"):
@@ -233,20 +233,23 @@ class DraftingDialog(QDialog):
 
         if not set_data.probabilities:
             card_data = self.ygo_data.get_card_set_info(set_data)
-            set_data.card_set = card_data
-            probabilities = self.generate_weights(next_key, card_data)
+            set_data.card_set = tuple(card_data)
+            probabilities = self.ygo_data.generate_weights(next_key, card_data)
             set_data.probabilities = tuple(probabilities)
 
-        if self.total_packs % 10 == 0 and self.total_packs != 0:
+        if self.total_packs % 10 == 0 and self.total_packs:
             self.next_button.setText("Discard Stage")
 
-        self.open_pack(set_data.card_set, set_data.probabilities, set_data)
+        self.open_pack(set_data)
         set_data.count -= 1
 
         if set_data.count == 0:
             self.opened_set_packs += 1
 
     def add_card_to_deck(self):
+        """Adds cards to the deck from the picked cards in the current opended
+        pack.
+        """
         for cardbutton in list(self.picked_cards):
             self.card_layout.removeWidget(cardbutton)
 
@@ -261,50 +264,12 @@ class DraftingDialog(QDialog):
 
         self.update_counter_label()
 
-    def generate_weights(self, card_set_name: str, data: list[YGOCard],
-                         extra: bool = False) -> tuple[int, ...]:
-        """
-        >>> Generate a list of integers depeding on the weight denoting the
-            index of an item inside the set cards.
-        >>> The Extra[bool] value is if you want to skip the common cards in
-            order to weight the last card in a pack.
-        """
-
-        PROB = {
-            "Common": 80,
-            "Rare": 16.6667,
-            "Super Rare": 8.3334,
-            "Ultra Rare": 4.3478260870,
-            "Secret": 2.8571428571,
-        }
-
-        probabilities = []
-
-        for card_model in data:
-            card = card_model.raw_data
-            card_sets = card["card_sets"]
-            for card_set in card_sets:
-                if card_set["set_name"] != card_set_name:
-                    continue
-
-                rarity_name = card_set["set_rarity"]
-                if rarity_name == "Common" and extra:
-                    break
-
-                card["set_rarity"] = rarity_name
-
-                rarity = round(PROB.get(rarity_name, 2.8571428571))
-                probabilities.append(rarity)
-                break
-
-        return tuple(probabilities)
-
     def clean_layout(self):
-        """
-        >>> Cleans the pack Card Layout in order to add the open the next pack.
-        >>> *Might have to look a the function in the in order to determine
+        """Cleans the pack Card Layout in order to add the open the next pack.
+
+        *Might have to look a the function in the in order to determine
             if I am not having a issues with this approach.
-        >>> *Could also be combined with the adding cards function in order to
+        *Could also be combined with the adding cards function in order to
             make a smoother operation.
         """
         util.clean_layout(self.card_layout)
@@ -323,17 +288,17 @@ class DraftingDialog(QDialog):
         QApplication.processEvents()
 
     def filter_common(self, card: YGOCard):
+        """Filters out common rarity cards out of a set."""
         return card.rarity != "Common"
 
-    def open_pack(self,
-                  card_set: list[YGOCard],
-                  probablities: tuple[int, ...],
-                  set_data: YGOCardSet):
-        """
-        >>> Opens a pack with probablities supplied and adds its to the layout.
-        >>> The last card get new probabilities as its atleast a rare.
-        >>> *refactor this in the future too make probability calculations
-            easier.
+    def open_pack(self, set_data: YGOCardSet):
+        """ Opens a pack with probablities supplied and adds its to the layout.
+
+        The last card get new probabilities as its atleast a rare.
+
+        Args:
+            set_data (YGOCardSet): Cards set which contains all the cards,
+                probabilities and set info.
         """
 
         (logging
@@ -343,15 +308,19 @@ class DraftingDialog(QDialog):
         logging.debug(f"{self.selection_per_pack} Cards Plus Available.")
         self.update_counter_label()
 
+        card_set = set_data.card_set
+        prob = set_data.probabilities
+
         row = 0
         for column in range(self.CARDS_PER_PACK):
             if column == 8:
                 rare_cards = list(filter(self.filter_common, card_set))
-                prob = self.generate_weights(set_data.set_name, rare_cards,
-                                             extra=True)
-                card_data = random.choices(rare_cards, weights=prob, k=1)
+                rprob = self.ygo_data.generate_weights(set_data.set_name,
+                                                       rare_cards,
+                                                       extra=True)
+                card_data = random.choices(rare_cards, weights=rprob, k=1)
             else:
-                card_data = random.choices(card_set, weights=probablities, k=1)
+                card_data = random.choices(card_set, weights=prob, k=1)
 
             row = 0
             if column % 2 != 0:

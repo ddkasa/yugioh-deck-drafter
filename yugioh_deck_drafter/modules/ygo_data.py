@@ -11,6 +11,7 @@ from datetime import date, datetime
 from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import quote
+from collections import defaultdict
 
 import requests
 import requests_cache
@@ -23,14 +24,19 @@ from yugioh_deck_drafter import util
 
 @dataclass
 class YGOCardSet:
-    """Datamodel for a YGO Cardset"""
-    set_name: str
-    set_code: str
-    data: date
+    """Datamodel for a YGO Cardset
+
+    Store base data for a card set and weights in addtional, while also
+    carrying the list of weights for random choices.
+
+    """
+    set_name: str = field()
+    set_code: str = field()
+    data: date = field()
     card_count: int = field(default=1)
     count: int = field(default=1)
-    card_set: list['YGOCard'] = field(default_factory=lambda: [])
-    probabilities: tuple[int, ...] = field(default_factory=lambda: ())
+    card_set: tuple['YGOCard', ...] = field(default_factory=tuple)
+    probabilities: tuple[int, ...] = field(default_factory=tuple)
 
 
 class YGOCard(NamedTuple):
@@ -39,19 +45,19 @@ class YGOCard(NamedTuple):
     Some data is stored in the raw JSON[dict] format so that could be
     parsed more cleanly in the future
     """
-    name: str
-    description: str
-    card_id: int
-    card_type: str
-    raw_data: dict[str, Any]
-    rarity: str = "Common"
+    name: str = field()
+    description: str = field()
+    card_id: int = field()
+    card_type: str = field()
+    raw_data: dict[str, Any] = field()
+    rarity: str = field(default="Common")
     card_set: Optional[YGOCardSet] = None
 
 
 @dataclass
 class DeckModel:
     """Datamodel for a complete YGO Deck"""
-    name: str = "Deck"
+    name: str = field(default="Deck")
     main: list[YGOCard] = field(default_factory=lambda: [])
     extra: list[YGOCard] = field(default_factory=lambda: [])
     side: list[YGOCard] = field(default_factory=lambda: [])
@@ -62,17 +68,27 @@ class YugiObj:
        generating cardmodels themselves.
 
     Will immediatly request card_set data in order to grab the information
-        for the main window.
+    for the main window.
 
     Attributes:
         CACHE (CachedSession): Cache for most of the requests except images
             which get managed more manually.
         SIDE_DECK_TYPES (set): For filtering out extra deck monsters and
             arche types.
+        PROB (defaultdict): probablities for each type of card rarity.
     """
 
     CACHE = requests_cache.CachedSession("cache\\ygoprodeck.sqlite",
                                          backend="sqlite")
+    PROB: Final[defaultdict[str, float]] = defaultdict(
+        lambda: 2.8571428571,
+        {"Common": 80,
+         "Rare": 16.6667,
+         "Super Rare": 8.3334,
+         "Ultra Rare": 4.3478260870,
+         "Secret": 2.8571428571
+         })
+
     SIDE_DECK_TYPES: Final[set[str]] = {"Fusion Monster", "Synchro Monster",
                                         "Pendulum Monster", "XC Monster"}
 
@@ -284,3 +300,39 @@ class YugiObj:
                 constant.
         """
         return card.card_type in self.SIDE_DECK_TYPES
+
+    def generate_weights(self, card_set_name: str, data: list[YGOCard],
+                         extra: bool = False) -> tuple[int, ...]:
+        """Generate a list of integers depeding on the weight denoting the
+        index of an item inside the set cards.
+
+        Basic weight generator for probablities in the card set.
+
+        Args:
+            cards_set_name (str): In order to grab the corrrect rarity for the
+                card.
+            data (list): the cards required in the probablity set.
+            extra (bool): value is if you want to skip the common cards in
+                order to weight the last card in a pack.
+        """
+
+        probabilities = []
+
+        for card_model in data:
+            card = card_model.raw_data
+            card_sets = card["card_sets"]
+            for card_set in card_sets:
+                if card_set["set_name"] != card_set_name:
+                    continue
+
+                rarity_name = card_set["set_rarity"]
+                if rarity_name == "Common" and extra:
+                    break
+
+                card["set_rarity"] = rarity_name
+
+                rarity = round(self.PROB[rarity_name])
+                probabilities.append(rarity)
+                break
+
+        return tuple(probabilities)

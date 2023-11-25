@@ -305,7 +305,6 @@ def main(argv: list):
     main_window = MainWindow()
     main_window.setWindowTitle(NAME)
 
-
     style = """
         QScrollArea {
             border: 1px solid gray;
