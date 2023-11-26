@@ -15,7 +15,8 @@ from PyQt6.QtWidgets import (QApplication, QPushButton, QWidget,
                              QComboBox, QVBoxLayout, QListWidget, QSlider,
                              QHBoxLayout, QListWidgetItem, QSpinBox,
                              QLabel, QFileDialog, QMenu, QMessageBox,
-                             QInputDialog, QDialog, QFormLayout, QDateEdit)
+                             QInputDialog, QDialog, QFormLayout, QDateEdit,
+                             QStackedWidget)
 
 from PyQt6.QtGui import (QPixmapCache, QCursor, QAction)
 
@@ -67,9 +68,22 @@ class MainWindow(QWidget):
     def init_ui(self) -> None:
         """Intializes layouts and widgets for the UI."""
         self.pack_filter = None
+        self.view_widget = QStackedWidget()
+
+        self.loading_widget = QWidget(self.loading_widget)
+        self.loading_layout = QHBoxLayout()
+        self.set_art_widget = QLabel()        
+        self.loading_widget.setLayout(self.loading_layout)
+        self.view_widget.addWidget(self.loading_widget)
+
+        self.drafting_widget = self.setup_drafting_widget()
+        self.view_widget.addWidget(self.drafting_widget)
+
+    def setup_drafting_widget(self) -> QWidget:
+        self.drafting_widget = QWidget()
 
         self.main_layout = QVBoxLayout()
-        self.setLayout(self.main_layout)
+        self.drafting_widget.setLayout(self.main_layout)
 
         self.select_layout = QHBoxLayout()
         self.main_layout.addLayout(self.select_layout)
@@ -137,6 +151,8 @@ class MainWindow(QWidget):
         self.no_pack_indi.valueChanged[int].connect(self.update_indi)
         self.start_button.pressed.connect(self.start_drafting)
 
+        return self.drafting_widget
+        
     @pyqtSlot()
     def list_context_menu(self):
         """Create and display a context menu for managing the pack list widget.
@@ -393,7 +409,7 @@ class MainWindow(QWidget):
 
         dialog = RandomPacks(self, self.yugi_pro.card_set.copy(),
                              self.filter)
-        dialog.show()
+        dialog.show()   
         dialog.exec()
 
     @pyqtSlot(bool)

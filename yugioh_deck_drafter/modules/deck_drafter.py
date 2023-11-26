@@ -32,8 +32,7 @@ from PyQt6.QtGui import (
     QImage,
     QCursor,
     QDrag,
-    QMouseEvent,
-    QUndoStack
+    QMouseEvent
 )
 
 from PyQt6.QtWidgets import (
@@ -70,18 +69,19 @@ class PackOpeningState:
     """Needed data for drafting decks with the Drafting Dialog.
 
     Attributes:
-        selection_per_pack (int): Counter for how many selections the drafter
-            has left for the current pack. Must be 0 or less to proceed through
-            the drafting process.
         opened_set_packs (int): Keeps track of how many pack bundles have been
             opened so far.
         total_packs (int): The total number of packs that have been opened so
             far.
+        selection_per_pack (int): How many max selections the current pack has.
+        selections_left (int): Counter for how many selections the drafter
+            has left for the current pack. Must be 0 or less to proceed through
+            the drafting process.
         discard_stage_cnt (int): How many discard stages have occured, mainly
             to trigger deck completion.
-        
+        selection (list): Where the current selections are stored and delegated
+            from later on.
     """
-
     opened_set_packs: int = field(default=0)
     total_packs: int = field(default=0)
     selection_per_pack: int = field(default=0)
@@ -107,7 +107,6 @@ class DraftingDialog(QDialog):
         deck_name (str): Name of deck set by the user used for save pathh name
             later on.
         flags (Optional[WindowType]): Mostly for debugging.
-
     """
     W, H = 1344, 824  # Base on 1080 screen resolution
     CARDS_PER_PACK: Final[int] = 9
@@ -143,7 +142,7 @@ class DraftingDialog(QDialog):
 
         self.button_layout.addStretch(60)
 
-        self.reset_selection = QPushButton("Reset Pack Selection")
+        self.reset_selection = QPushButton("Reset Selection")
         self.button_layout.addWidget(self.reset_selection)
         self.reset_selection.pressed.connect(self.clear_pack_selection)
 
@@ -153,7 +152,7 @@ class DraftingDialog(QDialog):
         self.card_picks_left.setObjectName("indicator")
         self.button_layout.addWidget(self.card_picks_left, 20)
 
-        self.button_layout.addStretch(4)
+        self.button_layout.addStretch(2)
 
         self.cards_picked = QLabel()
         self.cards_picked.setObjectName("indicator")
@@ -237,7 +236,7 @@ class DraftingDialog(QDialog):
             if ms_box == mbutton.Yes:
                 self.preview_deck()
 
-            self.accept()
+            return self.accept()
 
         if self.card_buttons:
             self.clean_layout()
@@ -329,9 +328,8 @@ class DraftingDialog(QDialog):
             set_data (YGOCardSet): Cards set which contains all the cards,
                 probabilities and set info.
         """
-
-        (logging
-         .debug(f"Opening a pack from {set_data.set_name}.".center(60, "-")))
+        debug = f"Opening a pack from {set_data.set_name}.".center(60, "-")
+        logging.debug(debug)
 
         self.drafting_model.selections_left += 2
         sel_left = self.drafting_model.selections_left

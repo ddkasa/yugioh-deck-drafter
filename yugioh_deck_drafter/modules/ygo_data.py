@@ -125,7 +125,7 @@ class YugiObj:
          })
 
     SIDE_DECK_TYPES: Final[set[str]] = {"Fusion Monster", "Synchro Monster",
-                                        "Pendulum Monster", "XC Monster"}
+                                        "Pendulum Monster", "XYZ Monster"}
 
     CARD_CLASS_NAMES = [s.name.replace("_", " ").lower() for s in CardSetClass]
 
