@@ -1,16 +1,15 @@
 """Main Deck Builder Python Script"""
 
-
-from typing import Final, Optional, Iterable
+from typing import Final, Optional
 import logging
 import sys
 import traceback
-from datetime import date
 from pathlib import Path
 from functools import partial
 import enum
+import re
 
-from PyQt6.QtCore import (Qt, pyqtSlot, QPoint, QSignalBlocker, QDate)
+from PyQt6.QtCore import (Qt, pyqtSlot, QSignalBlocker)
 
 from PyQt6.QtWidgets import (QApplication, QPushButton, QWidget,
                              QComboBox, QVBoxLayout, QListWidget, QSlider,
@@ -19,6 +18,8 @@ from PyQt6.QtWidgets import (QApplication, QPushButton, QWidget,
                              QInputDialog, QDialog, QFormLayout, QDateEdit)
 
 from PyQt6.QtGui import (QPixmapCache, QCursor, QAction)
+
+import pyperclip as clipboard
 
 from yugioh_deck_drafter import util
 from yugioh_deck_drafter.modules.deck_drafter import DraftingDialog
@@ -151,20 +152,39 @@ class MainWindow(QWidget):
         remove_item.setDisabled(not item_exist)
         remove_item.triggered.connect(lambda: self.remove_item(item))
 
-        random_packs = QAction("Randomize Packs")
+        menu.addSeparator()
+
+        random_packs = QAction("Randomise Packs")
+        random_packs.setDisabled(self.check_for_filter_dia())
         menu.addAction(random_packs)
         random_packs.triggered.connect(self.randomize_packs)
 
+        menu.addSeparator()
+
+        pack_exist = not self.selected_packs
+
         copy_packs = QAction("Copy Packs")
-        copy_packs.setDisabled(not self.selected_packs)
+        copy_packs.setDisabled(pack_exist)
         copy_packs.triggered.connect(self.copy_pack_selection)
         menu.addAction(copy_packs)
 
         paste_packs = QAction("Paste Packs")
-        paste_packs.triggered.connect(self.paste_pack_selection)
+        text = clipboard.paste()
+        paste_packs.setDisabled(not isinstance(text, str) or text == "")
+        paste_packs.triggered.connect(lambda: self.paste_pack_selection(text))
         menu.addAction(paste_packs)
 
+        menu.addSeparator()
+
+        clear_packs = QAction("Clear Packs")
+        clear_packs.setDisabled(pack_exist)
+        clear_packs.triggered.connect(self.reset_selection)
+        menu.addAction(clear_packs)
+
         menu.exec(pos)
+
+    def check_for_filter_dia(self) -> bool:
+        return any(isinstance(c, PackFilterDialog) for c in self.children())
 
     @pyqtSlot()
     def pack_list_context_menu(self):
@@ -172,6 +192,7 @@ class MainWindow(QWidget):
         menu = QMenu(self.sel_card_set_list)
 
         pack_filter = QAction("Filter Packs")
+        pack_filter.setDisabled(self.check_for_filter_dia())
         pack_filter.triggered.connect(self.filter_packs)
         menu.addAction(pack_filter)
 
@@ -231,7 +252,8 @@ class MainWindow(QWidget):
         removed_item = self.sel_card_set_list.takeItem(row)
         if removed_item is None:
             return
-        cnt, label = removed_item.text().split("x ")
+
+        label, cnt = self.retrieve_set_list_info(removed_item)
 
         for index, value in enumerate(self.selected_packs):
             if value.set_name == label and value.count == cnt:
@@ -239,6 +261,18 @@ class MainWindow(QWidget):
                 break
 
         self.update_pack_count()
+
+    def retrieve_set_list_info(self, item: QListWidgetItem | str
+                               ) -> tuple[str, int]:
+        text = item
+        if isinstance(text, QListWidgetItem):
+            text = text.text()
+        try:
+            cnt, label = text.split("x ")
+        except ValueError as v:
+            raise v
+
+        return label, int(cnt)
 
     def update_indi(self, value: int) -> None:
         """Updates pack count indicators depending on the values provided
@@ -341,6 +375,7 @@ class MainWindow(QWidget):
         dialog = RandomPacks(self, self.yugi_pro.card_set.copy(),
                              self.filter)
         dialog.show()
+        dialog.exec()
 
     @pyqtSlot(bool)
     def filter_packs(self, reset: bool = False):
@@ -369,12 +404,62 @@ class MainWindow(QWidget):
             self.current_card_set = card_set
             packs = [item.set_name for item in card_set]
             self.select_pack.addItems(packs)
-            
+
     def copy_pack_selection(self) -> None:
-        pass
-    
-    def paste_pack_selection(self) -> None:
-        pass
+        """Copies current pack selection into clipboard for sharing or saving.
+        """
+        logging.debug("Copying text to clipboard.")
+        copied_text = ""
+        count = self.sel_card_set_list.count()
+        for i in range(count):
+            item = self.sel_card_set_list.item(i)
+            if item is None:
+                continue
+            text = item.text()
+            if text == "":
+                continue
+            copied_text += text
+
+            if i + 1 != count:
+                copied_text += "\n"
+
+        clipboard.copy(copied_text)
+
+    def paste_pack_selection(self, clip_data: str) -> None:
+        """Pastes clipboard data into the list widget which displays selected
+        packs.
+
+        Args:
+            clip_data (str): User clipboard as copied before with
+                copy_pack_selection method.
+        """
+        logging.debug("Pasting packs in clipboard into QListWidget")
+        self.reset_selection()
+        patt = re.compile(r'[\r]')
+        clip_data = re.sub(patt, "", clip_data)
+        text = clip_data.split("\n")
+
+        for t in text:
+            try:
+                label, cnt = self.retrieve_set_list_info(t)
+            except ValueError:
+                print("value")
+                continue
+            try:
+                card_set = self.find_card_set(label)
+            except KeyError:
+                print("keyerror")
+                continue
+
+            card_set.count = cnt
+            self.add_item(card_set)
+
+    def find_card_set(self, label: str) -> CardSetModel:
+        for item in self.yugi_pro.card_set:
+            if item.set_name == label:
+                return item
+
+        raise KeyError(f"{label} does not exist in the file.")
 
 
 class PackFilterDialog(QDialog):
