@@ -25,7 +25,7 @@ def test_main_win_functionality(main_window_fill: main.MainWindow, qtbot):
 
     qtbot.addWidget(main_window)
 
-    assert main_window.list_widget.count() == 4
+    assert main_window.sel_card_set_list.count() == 4
 
 
 def test_dialog(main_window_fill: main.MainWindow, qtbot):

@@ -583,10 +583,7 @@ class CardButton(QPushButton):
         brush = QBrush(image)
         painter.setBrush(brush)
 
-        # RADIUS = 10
-
         PEN_WIDTH = 5
-        assert PEN_WIDTH % 2 != 0
         PEN_HALF = PEN_WIDTH / 2
         new_rect = QRectF(rect.x(), rect.y() + PEN_HALF,
                           image.width(), image.height())

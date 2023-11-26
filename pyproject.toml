@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "yugioh-deck-drafter"
-version = "1.0.0"
+version = "1.1.0"
 description = "Python app for drafting custom apps with the Ygoprodeck API."
 authors = ["DK <davidkasakaitis@proton.me>"]
 license = "MIT"

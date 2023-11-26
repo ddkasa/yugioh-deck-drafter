@@ -4,6 +4,8 @@ from typing import Final, Optional, Iterable
 import logging
 import sys
 import traceback
+from datetime import date
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from PyQt6.QtCore import (Qt, pyqtSlot, QPoint, QSignalBlocker, QDate)
@@ -15,12 +17,18 @@ from PyQt6.QtWidgets import (QApplication, QPushButton, QWidget,
                              QInputDialog, QDialog, QFormLayout, QDateEdit)
 
 from PyQt6.QtGui import (QPixmapCache, QCursor, QStandardItemModel,
-                         QStandardItem)
+                         QAction)
 
 from yugioh_deck_drafter import util
 from yugioh_deck_drafter.modules.deck_drafter import DraftingDialog
 from yugioh_deck_drafter.modules.ygo_data import (DeckModel, CardSetModel,
                                                   YugiObj, CardSetClass)
+
+@dataclass
+class PackFilter:
+    card_count: int = field()
+    pack_date: date = field(default_factory=date.today)
+    pack_class: set[CardSetClass] = field(default_factory=set)
 
 
 class MainWindow(QWidget):
@@ -40,10 +48,12 @@ class MainWindow(QWidget):
         self.selected_packs: list[CardSetModel] = []
         self.p_count: int = 0
 
+        self.filter = False
+
         self.init_ui()
 
         self.update_pack_count()
-        self.show()
+        self.filter_packs(True)
 
     def init_ui(self) -> None:
         """Intializes layouts and widgets for the UI."""
@@ -53,11 +63,13 @@ class MainWindow(QWidget):
         self.select_layout = QHBoxLayout()
         self.main_layout.addLayout(self.select_layout)
 
-        self.select_pack = QComboBox()
-        names = [item.set_name for item in self.yugi_pro_connect.card_set]
+        CMP = Qt.ContextMenuPolicy.CustomContextMenu
 
-        self.select_pack.addItems(names)
+        self.select_pack = QComboBox()
         self.select_layout.addWidget(self.select_pack, 50)
+        self.select_pack.setContextMenuPolicy(CMP)
+        (self.select_pack.customContextMenuRequested
+         .connect(self.pack_list_context_menu))
 
         self.select_layout.addStretch(10)
 
@@ -70,6 +82,9 @@ class MainWindow(QWidget):
         self.no_packs.setValue(self.DEFAULT_PACK_COUNT)
         self.no_packs.setMaximum(self.PACK_MAX)
         self.select_layout.addWidget(self.no_packs, 40)
+        self.no_packs.setContextMenuPolicy(CMP)
+        (self.no_packs.customContextMenuRequested
+         .connect(self.pack_list_context_menu))
 
         self.no_pack_indi = QSpinBox()
         self.no_pack_indi.setValue(self.DEFAULT_PACK_COUNT)
@@ -77,13 +92,15 @@ class MainWindow(QWidget):
         self.no_pack_indi.setMinimum(5)
         self.no_pack_indi.setMaximum(self.PACK_MAX)
         self.select_layout.addWidget(self.no_pack_indi, 1)
+        self.no_pack_indi.setContextMenuPolicy(CMP)
+        (self.no_pack_indi.customContextMenuRequested
+         .connect(self.pack_list_context_menu))
 
-        self.list_widget = QListWidget()
-        (self.list_widget
-         .setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu))
-        (self.list_widget.customContextMenuRequested
+        self.sel_card_set_list = QListWidget()
+        self.sel_card_set_list.setContextMenuPolicy(CMP)
+        (self.sel_card_set_list.customContextMenuRequested
          .connect(self.list_context_menu))
-        self.main_layout.addWidget(self.list_widget)
+        self.main_layout.addWidget(self.sel_card_set_list)
 
         self.button_layout = QHBoxLayout()
 
@@ -120,15 +137,35 @@ class MainWindow(QWidget):
         """
         pos = QCursor().pos()
 
-        menu = QMenu(self.list_widget)
+        menu = QMenu(self.sel_card_set_list)
 
         remove_item = menu.addAction("Remove Item")
-        (remove_item.triggered  # type: ignore
-         .connect(lambda: self.remove_item(pos)))
+        if remove_item is not None:
+            item_pos = self.sel_card_set_list.mapFromGlobal(pos)
+            item = self.sel_card_set_list.itemAt(item_pos)
+            remove_item.setDisabled(item is None)
+            if item is not None:
+                remove_item.triggered.connect(lambda: self.remove_item(item))
 
         random_packs = menu.addAction("Randomize Packs")
-        (random_packs.triggered  # type: ignore
-         .connect(lambda: self.randomize_packs()))
+        if random_packs is not None:
+            random_packs.triggered.connect(self.randomize_packs)
+
+        menu.exec(pos)
+
+    @pyqtSlot()
+    def pack_list_context_menu(self):
+        pos = QCursor().pos()
+        menu = QMenu(self.sel_card_set_list)
+
+        pack_filter = QAction("Filter Packs")
+        pack_filter.triggered.connect(self.filter_packs)
+        menu.addAction(pack_filter)
+
+        reset_filter = QAction("Reset Filter")
+        reset_filter.setDisabled(not self.filter)
+        pack_filter.triggered.connect(lambda: self.filter_packs(True))
+        menu.addAction(reset_filter)
 
         menu.exec(pos)
 
@@ -148,15 +185,16 @@ class MainWindow(QWidget):
         cnt = self.no_pack_indi.value()
 
         item = QListWidgetItem(f"{cnt}x {label}")
-        self.list_widget.addItem(item)
+        self.sel_card_set_list.addItem(item)
 
         data.count = cnt
         self.selected_packs.append(data)
 
         self.update_pack_count()
 
+
     @pyqtSlot()
-    def remove_item(self, pos: QPoint) -> None:
+    def remove_item(self, item: QListWidgetItem) -> None:
         """Remove an item from the pack list based on the provided position.
 
         This function identifies the item in the pack list widget based on the
@@ -170,25 +208,20 @@ class MainWindow(QWidget):
             pos (QPoint): The position from which the item removal action is
             triggered.
         """
-        pos = self.list_widget.mapFromGlobal(pos)
-        item = self.list_widget.itemAt(pos)
-        if item is None:
-            logging.debug("Bad index for pack removal.")
-            return
-        row = self.list_widget.row(item)
-        removed_item = self.list_widget.takeItem(row)
+        row = self.sel_card_set_list.row(item)
+        removed_item = self.sel_card_set_list.takeItem(row)
         if removed_item is None:
             return
         cnt, label = removed_item.text().split("x ")
 
-        for index, item in enumerate(self.selected_packs):
-            if item.set_name == label and item.count == cnt:
+        for index, value in enumerate(self.selected_packs):
+            if value.set_name == label and value.count == cnt:
                 self.selected_packs.pop(index)
                 break
 
         self.update_pack_count()
 
-    def update_indi(self, value: int):
+    def update_indi(self, value: int) -> None:
         """Updates pack count indicators depending on the values provided
         which determine how many packs get added at a time.
 
@@ -200,7 +233,7 @@ class MainWindow(QWidget):
             self.no_packs.setValue(value)
             self.no_pack_indi.setValue(value)
 
-    def update_pack_count(self):
+    def update_pack_count(self) -> None:
         """Updates pack count of the selected packs when the values are
            changed.
         """
@@ -279,26 +312,55 @@ class MainWindow(QWidget):
         logging.info("Resetting app to defaults.")
 
         self.selected_packs = []
-        self.list_widget.clear()
+        self.sel_card_set_list.clear()
         self.update_pack_count()
 
     @pyqtSlot()
-    def randomize_packs(self):
+    def randomize_packs(self) -> None:
         """Launches a dialog for randomizing card_set picks."""
 
         dialog = RandomPacks(self)
         dialog.show()
 
+    @pyqtSlot(bool)
+    def filter_packs(self, reset: bool = False):
+        """For filtering out unwanted packs from selection."""
+
+        card_set = self.yugi_pro_connect.card_set.copy()
+
+        if reset:
+            self.filter = False
+            packs = [item.set_name for item in card_set]
+            self.select_pack.addItems(packs)
+            return
+
+        self.filter = True
+        dialog = PackFilterDialog(self)
+
+        if dialog.exec():
+            return
+
 
 class PackFilterDialog(QDialog):
     """Filter dialog for filtering out packs from the selection Dropdown.
 
-    
+    Filters out based on total cards in a pack, pack release date and pack
+    type.
+
+    Attributes:
+        min_count (int): Minimum amount of cards in a card set.
+        max_date (date): Maximum date to filter out the card set with.
+        pack_types (list): What type of card sets to include in the selection.
+
+    Args:
+        parent (parent): Widget to parent the dialog to and access additonal
+            information.
+
     """
 
     def __init__(self, parent: MainWindow) -> None:
         super().__init__(parent=parent)
-        self.setWindowTitle("Randomise Packs")
+        self.setWindowTitle("Filter Sets")
         self.setModal(False)
 
         self.main_layout = QVBoxLayout()
@@ -306,13 +368,12 @@ class PackFilterDialog(QDialog):
         self.form = QFormLayout()
         self.main_layout.addLayout(self.form)
 
-        self.total_packs = QSpinBox()
-        self.total_packs.setValue(5)
-        self.total_packs.setMinimum(5)
-        self.total_packs.setMaximum(10)
-        self.total_packs.setSingleStep(5)
-        self.total_packs.setToolTip("Total packs to be added ")
-        self.form.addRow("Min Increments", self.total_packs)
+        self.min_card_count = QSpinBox()
+        self.min_card_count.setMinimum(1)
+        self.min_card_count.setValue(10)
+        (self.min_card_count
+         .setToolTip("Minimum card threshold allowed inside a set."))
+        self.form.addRow("Minimum Cards", self.min_card_count)
 
         self.max_date = QDateEdit()
         self.max_date.setDate(QDate.currentDate())
@@ -331,6 +392,12 @@ class PackFilterDialog(QDialog):
 
         self.button_layout.addStretch(20)
 
+        self.filter_button = QPushButton("Filter Sets")
+        self.filter_button.pressed.connect(self.accept)
+        self.button_layout.addWidget(self.filter_button)
+
+        self.main_layout.addLayout(self.button_layout)
+
         self.setLayout(self.main_layout)
 
 
@@ -341,9 +408,6 @@ class RandomPacks(PackFilterDialog):
     Attributes:
         pack_increments (int): How many packs per random set to add.
         total_packs (int): How many packs to add in total.
-        max_date (date): Maximum date to filter out the booster packs with.
-        pack_types (list): What type of packs to include the selection.
-        reset_packs (button): Reset the list of packs you selected.
 
     Args:
         parent (parent): Widget to parent the dialog to and access additonal
@@ -351,6 +415,17 @@ class RandomPacks(PackFilterDialog):
     """
     def __init__(self, parent: MainWindow) -> None:
         super().__init__(parent=parent)
+        self.setWindowTitle("Randomise Sets")
+
+
+        self.total_packs = QSpinBox()
+        self.total_packs.setValue(5)
+        self.total_packs.setMinimum(5)
+        self.total_packs.setMaximum(20)
+        self.total_packs.setSingleStep(5)
+        (self.total_packs
+         .setToolTip("Total packs to be added to the selection."))
+        self.form.addRow("Min Increments", self.total_packs)
 
         self.pack_increments = QSpinBox()
         self.pack_increments.setValue(5)
@@ -359,22 +434,27 @@ class RandomPacks(PackFilterDialog):
         self.pack_increments.setSingleStep(5)
         self.form.addRow("Pack Count", self.pack_increments)
 
-        self.randomize_button = QPushButton("Randomise")
-        self.randomize_button.pressed.connect(self.randomise_packs)
-        self.button_layout.addWidget(self.randomize_button)
+        self.filter_button.setText("Randomise")
+        self.filter_button.disconnect()
+        self.filter_button.pressed.connect(self.randomise_packs)
 
-        self.main_layout.addLayout(self.button_layout)
-
-    def randomise_packs(self):
+    def randomise_packs(self) -> None:
+        """Randomises packs and adds sets to the MainWindow card set list based
+        on the values chosen in the GUI"""
         self.parent().yugi_pro_connect.card_set
 
     def parent(self) -> MainWindow:
+        """Overriden method to avoid type hint issues."""
         return super().parent()  # type: ignore
 
 
 class CheckableListWidget(QListWidget):
     """QListWidget subclass for allowing selectable filters with checkboxes.
 
+    Methods:
+        addItems: Overriden parent method in order to clean input and add
+            checkboxes to the items.
+        checked_items_to_list: Quick function for return checked items.
     """
 
     def __init__(self) -> None:
