@@ -53,7 +53,8 @@ from PyQt6.QtWidgets import (
     QSpacerItem,
     QCompleter,
     QLineEdit,
-    QButtonGroup
+    QButtonGroup,
+    QStackedWidget
 )
 
 from yugioh_deck_drafter.modules.ygo_data import (CardModel, CardSetModel,
@@ -124,6 +125,25 @@ class DraftingDialog(QDialog):
 
         self.ygo_data = parent.yugi_pro
 
+        self.init_ui()
+
+    def init_ui(self) -> None:
+        """Intializes layouts and widgets for the UI."""
+        self.pack_filter = None
+        self.view_widget = QStackedWidget()
+
+        self.loading_widget = QWidget()
+        self.loading_layout = QHBoxLayout()
+        self.set_art_widget = QLabel()
+        self.loading_widget.setLayout(self.loading_layout)
+        self.view_widget.addWidget(self.loading_widget)
+
+        self.drafting_widget = self.setup_drafting_widget()
+        self.view_widget.addWidget(self.drafting_widget)
+
+    def setup_drafting_widget(self) -> QWidget:
+        self.drafting_widget = QWidget()
+
         self.main_layout = QVBoxLayout()
         self.main_layout.addStretch(1)
         self.stretch = self.main_layout.itemAt(0)
@@ -180,9 +200,11 @@ class DraftingDialog(QDialog):
 
         self.main_layout.addLayout(self.button_layout)
 
-        self.setLayout(self.main_layout)
+        self.drafting_widget.setLayout(self.main_layout)
 
         self.sel_next_set()
+        
+        return self.drafting_widget
 
     def sel_next_set(self):
         """Selects the next pack and also manages the drafting session in

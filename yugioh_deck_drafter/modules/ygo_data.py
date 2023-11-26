@@ -124,8 +124,16 @@ class YugiObj:
          "Secret": 2.8571428571
          })
 
-    SIDE_DECK_TYPES: Final[set[str]] = {"Fusion Monster", "Synchro Monster",
-                                        "Pendulum Monster", "XYZ Monster"}
+    SIDE_DECK_TYPES: Final[set[str]] = {
+        "Fusion Monster",
+        "Link Monster",
+        "Pendulum Effect Fusion Monster",
+        "Synchro Monster",
+        "Synchro Pendulum Effect Monster",
+        "Synchro Tuner Monster",
+        "XYZ Monster",
+        "XYZ Pendulum Effect Monster"
+        }
 
     CARD_CLASS_NAMES = [s.name.replace("_", " ").lower() for s in CardSetClass]
 
@@ -244,6 +252,32 @@ class YugiObj:
             QPixmap | None: Image in a pixmap format ready to displayed on the
                 PyQt GUI.
         """
+        image_store = Path(r"assets\images\card_art")
+        image_store.mkdir(parents=True, exist_ok=True)
+
+        card_art_id = card.card_id
+        image_path = image_store / str(str(card_art_id) + ".jpg")
+
+        if image_path.exists():
+            return util.get_or_insert(image_path)
+
+        url = f"https://images.ygoprodeck.com/images/cards/{card_art_id}.jpg"
+        request = requests.get(url, timeout=10)
+        if request.status_code != 200:
+            # Add a default image here in the future.
+            logging.error("Failed to fetch card image. Using Default")
+            logging.error("Status Code: %s", request.status_code)
+            return None
+
+        data = request.content
+        with image_path.open("wb") as image_file:
+            image_file.write(data)
+
+        image = util.get_or_insert(image_path, data=data)
+
+        return image
+
+    def get_set_art(self, set_model: CardModel) -> QPixmap | None:
         image_store = Path(r"assets\images\card_art")
         image_store.mkdir(parents=True, exist_ok=True)
 
