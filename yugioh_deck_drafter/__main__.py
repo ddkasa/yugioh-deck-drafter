@@ -718,6 +718,11 @@ def main(argv: list):
             border: 1px solid gray;
             border-radius: 2px;
             }
+        QLabel#subtitle {
+            color: white;
+            font-weight: 400;
+            font-size: 16px;
+            }
         """
 
     main_window.setStyleSheet(style)

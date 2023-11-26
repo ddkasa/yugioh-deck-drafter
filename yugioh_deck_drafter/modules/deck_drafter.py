@@ -98,7 +98,6 @@ class DraftingDialog(QDialog):
        removed in the meanwhile.
 
     Attributes:
-        W/H (int): Base size for the dialog itself.
         CARDS_PER_PACK (int): How many cards each pack contains.
         deck (DeckModel): Mostly for storing the selected card data and
             tranferring between widgets.
@@ -109,8 +108,10 @@ class DraftingDialog(QDialog):
         deck_name (str): Name of deck set by the user used for save pathh name
             later on.
         flags (Optional[WindowType]): Mostly for debugging.
+        SET_ART_SIZE (QSize): For having a consistent size for set art when
+            loading.
     """
-    W, H = 1344, 824  # Base on 1080 screen resolution
+    SET_ART_SIZE: Final[QSize] = QSize(400, 708)
     CARDS_PER_PACK: Final[int] = 9
 
     def __init__(self, parent: MainWindow, deck_name: str,
@@ -123,13 +124,10 @@ class DraftingDialog(QDialog):
         self.deck = DeckModel(deck_name)
         self.drafting_model = PackOpeningState()
 
-        self.setMinimumSize(self.W, self.H)
+        self.resize(self.minimumSize())
 
         self.ygo_data = parent.yugi_pro
-
         self.init_ui()
-
-        self.sel_next_set()
 
     def init_ui(self) -> None:
         """Intializes layouts and widgets for the UI."""
@@ -140,11 +138,12 @@ class DraftingDialog(QDialog):
         self.view_widget = QStackedWidget()
         self.main_layout.addWidget(self.view_widget)
 
-        self.loading_widget = self.setup_loading_widget()
-        self.view_widget.addWidget(self.loading_widget)
 
         self.drafting_widget = self.setup_drafting_widget()
         self.view_widget.addWidget(self.drafting_widget)
+
+        self.loading_widget = self.setup_loading_widget()
+        self.view_widget.addWidget(self.loading_widget)
 
     def setup_loading_widget(self) -> QWidget:
         self.loading_widget = QWidget()
@@ -157,27 +156,30 @@ class DraftingDialog(QDialog):
         self.set_art_widget = QLabel()
         self.set_art_widget.setSizePolicy(QSizePolicy.Policy.Minimum,
                                           QSizePolicy.Policy.Minimum)
-        self.set_art_widget.setAlignment(QAF.AlignCenter)
+        self.set_art_widget.setAlignment(QAF.AlignHCenter | QAF.AlignBottom)
         self.set_layout.addWidget(self.set_art_widget, 70)
-        self.set_art_widget.setMaximumSize(400, 708)
+        self.set_art_widget.setMaximumSize(self.SET_ART_SIZE)
 
         self.set_name_label = QLabel("Set")
-        self.set_name_label.setAlignment(QAF.AlignCenter)
-        self.set_layout.addWidget(self.set_name_label, 10)
+        self.set_name_label.setObjectName("subtitle")
+        self.set_name_label.setAlignment(QAF.AlignTop | QAF.AlignHCenter)
+        self.set_layout.addWidget(self.set_name_label, 20)
 
         self.loading_layout.addLayout(self.set_layout, 30)
 
         self.progess_layout = QVBoxLayout()
+
+        self.loading_label = QLabel("Loading")
+        self.loading_label.setObjectName("subtitle")
+        self.loading_label.setAlignment(QAF.AlignHCenter | QAF.AlignBottom)
+        self.progess_layout.addWidget(self.loading_label, 50)
+
         self.loading_bar = QProgressBar()
         self.loading_bar.setMinimum(0)
         self.loading_bar.setMaximum(9)
-        self.loading_bar.setSizePolicy(QSizePolicy.Policy.Minimum,
-                                       QSizePolicy.Policy.Minimum)
-        self.progess_layout.addWidget(self.loading_bar, 70, QAF.AlignVCenter)
-
-        self.loading_label = QLabel("Loading")
-        self.loading_label.setAlignment(QAF.AlignHCenter | QAF.AlignTop)
-        self.progess_layout.addWidget(self.loading_label, 30)
+        self.loading_bar.setSizePolicy(QSizePolicy.Policy.Expanding,
+                                       QSizePolicy.Policy.Preferred)
+        self.progess_layout.addWidget(self.loading_bar, 50, QAF.AlignTop)
 
         self.loading_layout.addLayout(self.progess_layout, 70)
 
@@ -265,6 +267,9 @@ class DraftingDialog(QDialog):
         8. Finally opens the pack by calling open_pack().
         """
 
+        if self.view_widget.currentWidget() == self.loading_widget:
+            return
+
         if hasattr(self, "stretch"):
             self.drafting_layout.removeItem(self.stretch)
             del self.stretch
@@ -278,12 +283,14 @@ class DraftingDialog(QDialog):
             return
 
         self.view_widget.setCurrentWidget(self.loading_widget)
-
         if self.drafting_model.selections:
             self.add_card_to_deck()
 
         if self.check_discard_stage():
-            self.discard_stage()
+            try:
+                self.discard_stage()
+            except ValueError:
+                return
             self.drafting_model.selections_left = 0
 
         self.next_button.setText("Next")
@@ -339,6 +346,9 @@ class DraftingDialog(QDialog):
         self.set_name_label.setText(set_data.set_name)
         set_art = self.parent().yugi_pro.get_set_art(set_data)
         if set_art is not None:
+            set_art = set_art.scaled(self.SET_ART_SIZE.width() // 2,
+                                     self.SET_ART_SIZE.height() // 2,
+                                     Qt.AspectRatioMode.KeepAspectRatio)
             self.set_art_widget.setPixmap(set_art)
 
     def check_discard_stage(self) -> bool:
@@ -411,6 +421,7 @@ class DraftingDialog(QDialog):
         self.drafting_model.selection_per_pack = sel_left
         logging.debug("%s Card Selection(s) Available.",
                       self.drafting_model.selection_per_pack)
+
         self.update_counter_label()
 
         row = 0
@@ -427,8 +438,6 @@ class DraftingDialog(QDialog):
                 column -= 1
 
             card = CardButton(card_data, self)
-   
-
 
             self.card_buttons.append(card)
             card.toggled.connect(self.update_selection)
@@ -442,7 +451,7 @@ class DraftingDialog(QDialog):
         self,
         set_data: CardSetModel,
         pack_index: int
-    ) -> CardModel:
+        ) -> CardModel:
         """Selects a random card based on the weights previously generated.
 
         Will select a rare or higher if its the 8 + 1 column, unless there are
@@ -464,7 +473,6 @@ class DraftingDialog(QDialog):
             rprob = self.ygo_data.generate_weights(set_data.set_name,
                                                    rare_cards,
                                                    extra=True)
-
             try:
                 card_data = random.choices(rare_cards, weights=rprob, k=1)[0]
             except (IndexError, ValueError):
@@ -515,7 +523,7 @@ class DraftingDialog(QDialog):
     def add_card_to_selection(
         self,
         card_model: CardModel | CardButton
-    ) -> None:
+        ) -> None:
         """Adds a card to selection and decrements selections left in the
         current pack.
 
@@ -536,7 +544,7 @@ class DraftingDialog(QDialog):
     def remove_card_from_selection(
         self,
         card_model: CardModel | CardButton
-    ) -> None:
+        ) -> None:
         """Removes a card from selection and increments the selection if
         the card is not a extra deck monster.
 
@@ -607,9 +615,12 @@ class DraftingDialog(QDialog):
 
         dialog.setWindowTitle("Card Removal Stage")
 
+
         if dialog.exec():
             self.deck = dialog.new_deck
             self.drafting_model.discard_stage_cnt += 1
+        else:
+            raise ValueError("Dicard Not Successful")
 
     def preview_deck(self):
         """Spawns the deck viewer for previewing the deck on demand."""
@@ -649,6 +660,9 @@ class DraftingDialog(QDialog):
 
         self.update_counter_label()
 
+    def minimumSize(self) -> QSize:
+        return QSize(1344, 824)  # Base on 1080 screen resolution
+
 
 class CardButton(QPushButton):
     """Card class used for displaying, deleting and containg cards.
@@ -675,7 +689,8 @@ class CardButton(QPushButton):
     BASE_SIZE = QSize(164, 242)
     ASPECT_RATIO: Final[float] = 1.4756097561  # Height to Width
 
-    def __init__(self, data: CardModel, parent: DraftingDialog,
+    def __init__(self, data: CardModel,
+                 parent: DraftingDialog,
                  viewer: Optional['DeckViewer'] = None) -> None:
         super().__init__(parent=parent)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
@@ -708,7 +723,7 @@ class CardButton(QPushButton):
         self.image = parent.ygo_data.get_card_art(self.card_model)
 
     def minimumSize(self) -> QSize:
-        """Overriden minimum size of the card widget in order to stay legible
+        """Overriden minimum size of the widget in order to stay legible.
 
         Returns:
             A QSize item desribes the minimum size of the widget.
@@ -983,7 +998,7 @@ class CardButton(QPushButton):
 
     def parent(self) -> DraftingDialog:
         """Override to clear typing issues when calling this function."""
-        return super().parent().parent().parent() # type: ignore
+        return super().parent().parent().parent()  # type: ignore
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
         """Movement function for when dragging cards between decks."""
@@ -1026,9 +1041,7 @@ class DeckViewer(QDialog):
         discard (int): How many cards should be discounted.
             Used as a boolean to decide what type of viewer it is.
     """
-
     MAX_COLUMNS: Final[int] = 10
-
     def __init__(self, parent: DraftingDialog, discard: int = 0):
         super().__init__(parent)
 

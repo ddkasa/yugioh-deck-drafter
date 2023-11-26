@@ -45,6 +45,7 @@ class CardSetClass(enum.Enum):
     Demo = enum.auto()
     Advent_Calendar = enum.auto()
     Collector_Box = enum.auto()
+    Collection = enum.auto()
 
 @dataclass
 class CardSetModel:
@@ -73,7 +74,7 @@ class CardModel(NamedTuple):
     """
     name: str = field()
     description: str = field()
-    card_id: int = field()
+    card_id: int = field()  
     card_type: str = field()
     raw_data: dict[str, Any] = field()
     rarity: str = field(default="Common")
