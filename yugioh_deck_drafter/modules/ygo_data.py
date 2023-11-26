@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import quote
 from collections import defaultdict
+from random import randint, choice
 import enum
 
 import requests
@@ -43,6 +44,7 @@ class CardSetClass(enum.Enum):
     Deck = enum.auto()
     Demo = enum.auto()
     Advent_Calendar = enum.auto()
+    Collector_Box = enum.auto()
 
 @dataclass
 class CardSetModel:
@@ -422,3 +424,22 @@ class YugiObj:
                 break
 
         return tuple(probabilities)
+
+    def select_random_packs(
+        self,
+        pack_set: list[CardSetModel],
+        count_range: range,
+        max_packs: int = 40
+        ) -> list[CardSetModel]:
+
+        pack_counter = 0
+        packs_to_add = []
+
+        while pack_counter < max_packs:
+            chosen_pack = choice(pack_set)
+            total_pack = randint(count_range.start, count_range.stop)
+            chosen_pack.count = min(max_packs - pack_counter, total_pack)
+            packs_to_add.append(chosen_pack)
+            pack_counter += chosen_pack.count
+
+        return packs_to_add

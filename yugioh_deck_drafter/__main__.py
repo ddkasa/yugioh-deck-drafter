@@ -18,8 +18,7 @@ from PyQt6.QtWidgets import (QApplication, QPushButton, QWidget,
                              QLabel, QFileDialog, QMenu, QMessageBox,
                              QInputDialog, QDialog, QFormLayout, QDateEdit)
 
-from PyQt6.QtGui import (QPixmapCache, QCursor, QStandardItemModel,
-                         QAction)
+from PyQt6.QtGui import (QPixmapCache, QCursor, QAction)
 
 from yugioh_deck_drafter import util
 from yugioh_deck_drafter.modules.deck_drafter import DraftingDialog
@@ -144,17 +143,26 @@ class MainWindow(QWidget):
 
         menu = QMenu(self.sel_card_set_list)
 
-        remove_item = menu.addAction("Remove Item")
-        if remove_item is not None:
-            item_pos = self.sel_card_set_list.mapFromGlobal(pos)
-            item = self.sel_card_set_list.itemAt(item_pos)
-            remove_item.setDisabled(item is None)
-            if item is not None:
-                remove_item.triggered.connect(lambda: self.remove_item(item))
+        remove_item = QAction("Remove Pack")
+        menu.addAction(remove_item)
+        item_pos = self.sel_card_set_list.mapFromGlobal(pos)
+        item = self.sel_card_set_list.itemAt(item_pos)
+        item_exist = isinstance(item, QListWidgetItem)
+        remove_item.setDisabled(not item_exist)
+        remove_item.triggered.connect(lambda: self.remove_item(item))
 
-        random_packs = menu.addAction("Randomize Packs")
-        if random_packs is not None:
-            random_packs.triggered.connect(self.randomize_packs)
+        random_packs = QAction("Randomize Packs")
+        menu.addAction(random_packs)
+        random_packs.triggered.connect(self.randomize_packs)
+
+        copy_packs = QAction("Copy Packs")
+        copy_packs.setDisabled(not self.selected_packs)
+        copy_packs.triggered.connect(self.copy_pack_selection)
+        menu.addAction(copy_packs)
+
+        paste_packs = QAction("Paste Packs")
+        paste_packs.triggered.connect(self.paste_pack_selection)
+        menu.addAction(paste_packs)
 
         menu.exec(pos)
 
@@ -175,31 +183,34 @@ class MainWindow(QWidget):
         menu.exec(pos)
 
     @pyqtSlot()
-    def add_item(self) -> None:
+    def add_item(self, card_set: Optional[CardSetModel] = None) -> None:
         """
         This function retrieves the selected pack from the UI and adds it to
         the selection list while managing the associated indicators.
         """
-        label = self.select_pack.currentText()
-        if label in self.selected_packs:
-            return
 
-        index = self.select_pack.currentIndex()
-        data = self.yugi_pro.card_set[index]
+        if isinstance(card_set, CardSetModel):
+            label = card_set.set_name
+            cnt = card_set.count
+        else:
+            label = self.select_pack.currentText()
+            cnt = self.no_pack_indi.value()
 
-        cnt = self.no_pack_indi.value()
+            index = self.select_pack.currentIndex()
+            card_set = self.yugi_pro.card_set[index]
+
+            cnt = self.no_pack_indi.value()
+            card_set.count = cnt
 
         item = QListWidgetItem(f"{cnt}x {label}")
         self.sel_card_set_list.addItem(item)
 
-        data.count = cnt
-        self.selected_packs.append(data)
+        self.selected_packs.append(card_set)
 
         self.update_pack_count()
 
-
     @pyqtSlot()
-    def remove_item(self, item: QListWidgetItem) -> None:
+    def remove_item(self, item: QListWidgetItem | None) -> None:
         """Remove an item from the pack list based on the provided position.
 
         This function identifies the item in the pack list widget based on the
@@ -213,6 +224,9 @@ class MainWindow(QWidget):
             pos (QPoint): The position from which the item removal action is
             triggered.
         """
+        if item is None:
+            return
+
         row = self.sel_card_set_list.row(item)
         removed_item = self.sel_card_set_list.takeItem(row)
         if removed_item is None:
@@ -324,7 +338,8 @@ class MainWindow(QWidget):
     def randomize_packs(self) -> None:
         """Launches a dialog for randomizing card_set picks."""
 
-        dialog = RandomPacks(self)
+        dialog = RandomPacks(self, self.yugi_pro.card_set.copy(),
+                             self.filter)
         dialog.show()
 
     @pyqtSlot(bool)
@@ -354,6 +369,12 @@ class MainWindow(QWidget):
             self.current_card_set = card_set
             packs = [item.set_name for item in card_set]
             self.select_pack.addItems(packs)
+            
+    def copy_pack_selection(self) -> None:
+        pass
+    
+    def paste_pack_selection(self) -> None:
+        pass
 
 
 class PackFilterDialog(QDialog):
@@ -373,7 +394,8 @@ class PackFilterDialog(QDialog):
 
     """
 
-    def __init__(self, parent: MainWindow, card_set: list[CardSetModel],
+    def __init__(self, parent: MainWindow,
+                 card_set: list[CardSetModel],
                  previous_filter: CardSetFilter) -> None:
         super().__init__(parent=parent)
         self.setWindowTitle("Filter Sets")
@@ -398,8 +420,8 @@ class PackFilterDialog(QDialog):
         self.form.addRow("Max Date", self.max_date)
 
         self.checkable_items = CheckableListWidget()
-        self.checkable_items.addItems(CardSetClass,
-                                      previous_filter.set_classes)
+        self.checkable_items.add_items(CardSetClass,
+                                       previous_filter.set_classes)
         self.form.addRow("Card Sets", self.checkable_items)
 
         self.button_layout = QHBoxLayout()
@@ -466,20 +488,20 @@ class RandomPacks(PackFilterDialog):
         self.setWindowTitle("Randomise Sets")
 
         self.total_packs = QSpinBox()
-        self.total_packs.setValue(5)
-        self.total_packs.setMinimum(5)
-        self.total_packs.setMaximum(20)
-        self.total_packs.setSingleStep(5)
+        self.total_packs.setValue(40)
+        self.total_packs.setMinimum(1)
+        self.total_packs.setMaximum(40)
+        self.total_packs.setSingleStep(1)
         (self.total_packs
          .setToolTip("Total packs to be added to the selection."))
-        self.form.addRow("Min Increments", self.total_packs)
+        self.form.addRow("Total Packs", self.total_packs)
 
         self.pack_increments = QSpinBox()
         self.pack_increments.setValue(5)
         self.pack_increments.setMinimum(5)
-        self.pack_increments.setMaximum(40)
-        self.pack_increments.setSingleStep(5)
-        self.form.addRow("Pack Count", self.pack_increments)
+        self.pack_increments.setMaximum(20)
+        self.pack_increments.setSingleStep(1)
+        self.form.addRow("Pack Increments", self.pack_increments)
 
         self.filter_button.setText("Randomise")
         self.filter_button.disconnect()
@@ -488,12 +510,22 @@ class RandomPacks(PackFilterDialog):
     def randomise_packs(self) -> None:
         """Randomises packs and adds sets to the MainWindow card set list based
         on the values chosen in the GUI"""
+        logging.info("Randomising Cards and adding to ListWidget.")
+
         self.parent().yugi_pro.card_set
 
         new_filter = self.create_filter()
         card_set = self.filter_cards(new_filter)
-        
-        
+        count_range = range(5, self.pack_increments.value())
+        total_packs = self.total_packs.value()
+
+        packs = (self.parent().yugi_pro
+                 .select_random_packs(card_set, count_range, total_packs))
+
+        self.parent().reset_selection()
+
+        for pack in packs:
+            self.parent().add_item(pack)
 
 
 class CheckableListWidget(QListWidget):
@@ -508,7 +540,7 @@ class CheckableListWidget(QListWidget):
     def __init__(self) -> None:
         super().__init__()
 
-    def addItems(self, items: set[str | None] | enum.EnumMeta,
+    def add_items(self, items: set[str | None] | enum.EnumMeta,
                  set_classes: set[CardSetClass]) -> None:
 
         for item in items:
@@ -516,7 +548,7 @@ class CheckableListWidget(QListWidget):
                 continue
             name = item
             if isinstance(name, enum.Enum):
-                name = name.name
+                name = name.name.replace("_", " ")
 
             list_item = QListWidgetItem(name)  # type: ignore
             list_item.setFlags(list_item.flags() |
