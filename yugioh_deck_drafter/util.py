@@ -66,7 +66,7 @@ def new_line_text(text: str, max_line_length: int) -> str:
                 name_processed += "-\n"
             else:
                 name_processed = (name_processed[:last_space] + "\n"
-                                + name_processed[last_space+1:])
+                                  + name_processed[last_space+1:])
         name_processed += t
     return name_processed
 

@@ -5,6 +5,7 @@ import random
 import re
 import logging
 from functools import partial
+from dataclasses import dataclass, field
 
 from PyQt6.QtCore import (
     Qt,
@@ -31,7 +32,8 @@ from PyQt6.QtGui import (
     QImage,
     QCursor,
     QDrag,
-    QMouseEvent
+    QMouseEvent,
+    QUndoStack
 )
 
 from PyQt6.QtWidgets import (
@@ -55,11 +57,37 @@ from PyQt6.QtWidgets import (
     QButtonGroup
 )
 
-from yugioh_deck_drafter.modules.ygo_data import CardModel, CardSetModel, DeckModel
+from yugioh_deck_drafter.modules.ygo_data import (CardModel, CardSetModel,
+                                                  DeckModel)
 from yugioh_deck_drafter import util
 
 if TYPE_CHECKING:
     from yugioh_deck_drafter.__main__ import MainWindow
+
+
+@dataclass
+class PackOpeningState:
+    """Needed data for drafting decks with the Drafting Dialog.
+
+    Attributes:
+        selection_per_pack (int): Counter for how many selections the drafter
+            has left for the current pack. Must be 0 or less to proceed through
+            the drafting process.
+        opened_set_packs (int): Keeps track of how many pack bundles have been
+            opened so far.
+        total_packs (int): The total number of packs that have been opened so
+            far.
+        discard_stage_cnt (int): How many discard stages have occured, mainly
+            to trigger deck completion.
+        
+    """
+
+    opened_set_packs: int = field(default=0)
+    total_packs: int = field(default=0)
+    selection_per_pack: int = field(default=0)
+    selections_left: int = field(default=0)
+    discard_stage_cnt: int = field(default=0)
+    selections: list[CardButton | CardModel] = field(default_factory=list)
 
 
 class DraftingDialog(QDialog):
@@ -70,16 +98,8 @@ class DraftingDialog(QDialog):
     Attributes:
         W/H (int): Base size for the dialog itself.
         CARDS_PER_PACK (int): How many cards each pack contains.
-        main/extra/side deck (list): Mostly for storing the selected card data.
-        selection_per_pack (int): Counter for how many selections the drafter
-            has left for the current pack. Must be 0 or less to proceed through
-            the drafting process.
-        opened_set_packs (int): Keeps track of how many pack bundles have been
-            opened so far.
-        total_packs (int): The total number of packs that have been opened so
-            far.
-        discard_stage_cnt (int): How many discard stages have occured, mainly
-            to trigger deck completion.
+        deck (DeckModel): Mostly for storing the selected card data and
+            tranferring between widgets.
 
     Args:
         parent (MainWindow): For retrieving, managing and finalzing the
@@ -99,11 +119,7 @@ class DraftingDialog(QDialog):
         self.deck_name = deck_name
 
         self.deck = DeckModel(deck_name)
-
-        self.opened_set_packs = 0
-        self.total_packs = 0
-        self.selection_per_pack = 0
-        self.discard_stage_cnt = 0
+        self.drafting_model = PackOpeningState()
 
         self.setMinimumSize(self.W, self.H)
 
@@ -127,11 +143,17 @@ class DraftingDialog(QDialog):
 
         self.button_layout.addStretch(60)
 
+        self.reset_selection = QPushButton("Reset Pack Selection")
+        self.button_layout.addWidget(self.reset_selection)
+        self.reset_selection.pressed.connect(self.clear_pack_selection)
+
+        self.button_layout.addStretch(2)
+
         self.card_picks_left = QLabel()
         self.card_picks_left.setObjectName("indicator")
         self.button_layout.addWidget(self.card_picks_left, 20)
 
-        self.button_layout.addStretch(2)
+        self.button_layout.addStretch(4)
 
         self.cards_picked = QLabel()
         self.cards_picked.setObjectName("indicator")
@@ -156,8 +178,6 @@ class DraftingDialog(QDialog):
         self.next_button = QPushButton("Start")
         self.next_button.pressed.connect(self.sel_next_set)
         self.button_layout.addWidget(self.next_button)
-
-        self.picked_cards: list[CardButton] = []
 
         self.main_layout.addLayout(self.button_layout)
 
@@ -187,23 +207,24 @@ class DraftingDialog(QDialog):
             self.main_layout.removeItem(self.stretch)
             del self.stretch
 
-        if self.selection_per_pack > 0:
-            text = f"Select at least {self.selection_per_pack} more cards."
+        if self.drafting_model.selections_left > 0:
+            text = "Select at least {0} more cards."
+            text = text.format(self.drafting_model.selections_left)
             logging.error(text)
             QMessageBox.warning(self, "Select More Cards", text,
                                 QMessageBox.StandardButton.Ok)
             return
 
-        if self.picked_cards:
+        if self.drafting_model.selections:
             self.add_card_to_deck()
 
-        if self.total_packs % 10 == 0 and self.total_packs:
+        if self.check_discard_stage():
             self.discard_stage()
-            self.selection_per_pack = 0
+            self.drafting_model.selections_left = 0
 
         self.next_button.setText("Next")
 
-        if self.discard_stage_cnt == 4:
+        if self.drafting_model.discard_stage_cnt == 4:
             logging.error("Selection complete!")
             msg_class = QMessageBox
             mbutton = msg_class.StandardButton
@@ -223,10 +244,11 @@ class DraftingDialog(QDialog):
 
         sel_packs = self.parent().selected_packs
 
-        set_data = sel_packs[self.opened_set_packs]
+        set_data = sel_packs[self.drafting_model.opened_set_packs]
 
-        self.total_packs += 1
-        self.packs_opened.setText(f"Pack No.: {self.total_packs}")
+        self.drafting_model.total_packs += 1
+        (self.packs_opened
+         .setText(f"Pack No.: {self.drafting_model.total_packs}"))
         self.current_pack.setText("Current Pack: %s" % set_data.set_name)
 
         if not set_data.probabilities:
@@ -236,24 +258,30 @@ class DraftingDialog(QDialog):
                                                            card_data)
             set_data.probabilities = tuple(probabilities)
 
-        if self.total_packs % 10 == 0 and self.total_packs:
+        if self.check_discard_stage():
             self.next_button.setText("Discard Stage")
 
         self.open_pack(set_data)
         set_data.count -= 1
 
         if set_data.count == 0:
-            self.opened_set_packs += 1
+            self.drafting_model.opened_set_packs += 1
+
+    def check_discard_stage(self) -> bool:
+        ten_div = self.drafting_model.total_packs % 10 == 0
+        tot_pack = bool(self.drafting_model.total_packs)
+        return ten_div and tot_pack
 
     def add_card_to_deck(self):
         """Adds cards to the deck from the picked cards in the current opended
         pack.
         """
-        for cardbutton in list(self.picked_cards):
-            self.card_layout.removeWidget(cardbutton)
-
-            card = cardbutton.card_model
-            cardbutton.deleteLater()
+        for cardbutton in list(self.drafting_model.selections):
+            card = cardbutton
+            if isinstance(card, CardButton):
+                self.card_layout.removeWidget(card)
+                card.deleteLater()
+                card = card.card_model
 
             if self.ygo_data.check_extra_monster(card):
                 self.deck.extra.append(card)
@@ -273,8 +301,10 @@ class DraftingDialog(QDialog):
         """
         util.clean_layout(self.card_layout)
 
-        for _ in range(len(self.picked_cards)):
-            card = self.picked_cards.pop(0)
+        for _ in range(len(self.drafting_model.selections)):
+            card = self.drafting_model.selections.pop(0)
+            if isinstance(card, CardModel):
+                continue
             card.deleteLater()
             del card
 
@@ -290,7 +320,7 @@ class DraftingDialog(QDialog):
         """Filters out common rarity cards out of a set."""
         return card.rarity != "Common"
 
-    def open_pack(self, set_data: CardSetModel):
+    def open_pack(self, set_data: CardSetModel) -> None:
         """ Opens a pack with probablities supplied and adds its to the layout.
 
         The last card get new probabilities as its atleast a rare.
@@ -303,23 +333,16 @@ class DraftingDialog(QDialog):
         (logging
          .debug(f"Opening a pack from {set_data.set_name}.".center(60, "-")))
 
-        self.selection_per_pack += 2
-        logging.debug(f"{self.selection_per_pack} Cards Plus Available.")
+        self.drafting_model.selections_left += 2
+        sel_left = self.drafting_model.selections_left
+        self.drafting_model.selection_per_pack = sel_left
+        logging.debug("%s Card Selection(s) Available.",
+                      self.drafting_model.selection_per_pack)
         self.update_counter_label()
-
-        card_set = set_data.card_set
-        prob = set_data.probabilities
 
         row = 0
         for column in range(self.CARDS_PER_PACK):
-            if column == 8:
-                rare_cards = list(filter(self.filter_common, card_set))
-                rprob = self.ygo_data.generate_weights(set_data.set_name,
-                                                       rare_cards,  
-                                                       extra=True)
-                card_data = random.choices(rare_cards, weights=rprob, k=1)
-            else:
-                card_data = random.choices(card_set, weights=prob, k=1)
+            card_data = self.select_pack_card(set_data, column)
 
             row = 0
             if column % 2 != 0:
@@ -327,13 +350,50 @@ class DraftingDialog(QDialog):
                 row = 1
                 column -= 1
 
-            card = CardButton(card_data[0], self)
+            card = CardButton(card_data, self)
 
             self.card_buttons.append(card)
             card.toggled.connect(self.update_selection)
             self.card_layout.addWidget(card, row, column, 1, 1)
 
         self.repaint()
+
+    def select_pack_card(
+        self,
+        set_data: CardSetModel,
+        pack_index: int
+    ) -> CardModel:
+        """Selects a random card based on the weights previously generated.
+
+        Will select a rare or higher if its the 8 + 1 column, unless there are
+            not enough rares in a set. 
+
+        Args:
+            set_data (CardSetModel): The set to select the card from.
+            pack_index (int): Current card being opened for checking when it 
+                100% should be a rare or above.
+
+        Returns:
+            CardModel: Select card model for display and information.
+        """
+
+        card_set = set_data.card_set
+        prob = set_data.probabilities
+        if pack_index == 8:
+            rare_cards = list(filter(self.filter_common, card_set))
+            rprob = self.ygo_data.generate_weights(set_data.set_name,
+                                                   rare_cards,
+                                                   extra=True)
+
+            try:
+                card_data = random.choices(rare_cards, weights=rprob, k=1)[0]
+            except IndexError:
+                return self.select_pack_card(set_data, pack_index=0)
+
+        else:
+            card_data = random.choices(card_set, weights=prob, k=1)[0]
+
+        return card_data
 
     def parent(self) -> MainWindow:
         """Overriden function to remove the type alert."""
@@ -351,26 +411,20 @@ class DraftingDialog(QDialog):
         for item in list(self.card_buttons):
             item.blockSignals(True)
 
-            item_in = item in self.picked_cards
-
+            item_in = item in self.drafting_model.selections
+            three = self.check_card_count(item.card_model) == 3
             fus_monster = self.ygo_data.check_extra_monster(item.card_model)
-            three = self.check_dup_card_count(item.card_model) == 3
 
             if (item.isChecked()
                and not three
-               and (self.selection_per_pack > 0 or fus_monster)):
+               and (self.drafting_model.selections_left > 0 or fus_monster)):
                 if not item_in:
                     logging.debug(f"Adding card {item.accessibleName()}")
-                    self.picked_cards.append(item)
-                    if not fus_monster:
-                        self.selection_per_pack -= 1
+                    self.add_card_to_selection(item)
 
             elif not item.isChecked() and item_in:
                 logging.debug(f"Removing card {item.accessibleName()}")
-                index = self.picked_cards.index(item)
-                self.picked_cards.pop(index)
-                if not fus_monster:
-                    self.selection_per_pack += 1
+                self.remove_card_from_selection(item)
 
             elif not item_in and not fus_monster:
                 item.setChecked(False)
@@ -378,10 +432,52 @@ class DraftingDialog(QDialog):
             self.update_counter_label()
             item.blockSignals(False)
 
+    def add_card_to_selection(
+        self,
+        card_model: CardModel | CardButton
+    ) -> None:
+        """Adds a card to selection and decrements selections left in the
+        current pack.
+
+        Args:
+            card_model (CardModel | CardButton): Target card to add to
+                selection.
+        """
+        self.drafting_model.selections.append(card_model)
+
+        if isinstance(card_model, CardButton):
+            card_model = card_model.card_model
+
+        if not self.ygo_data.check_extra_monster(card_model):
+            self.drafting_model.selections_left -= 1
+
+        self.update_counter_label()
+
+    def remove_card_from_selection(
+        self,
+        card_model: CardModel | CardButton
+    ) -> None:
+        """Removes a card from selection and increments the selection if
+        the card is not a extra deck monster.
+
+        Args:
+            card_model (CardModel | CardButton): Target card to remove.
+        """
+        index = self.drafting_model.selections.index(card_model)
+        self.drafting_model.selections.pop(index)
+
+        if isinstance(card_model, CardButton):
+            card_model = card_model.card_model
+
+        if not self.ygo_data.check_extra_monster(card_model):
+            self.drafting_model.selections_left += 1
+
+        self.update_counter_label()
+
     def update_counter_label(self):
         """Updates the card count indicator labels in the GUI."""
 
-        remaining = f"Remaining Picks: {self.selection_per_pack}"
+        remaining = f"Remaining Picks: {self.drafting_model.selections_left}"
         self.card_picks_left.setText(remaining)
         picked = len(self.deck.main) + len(self.deck.side)
 
@@ -391,7 +487,7 @@ class DraftingDialog(QDialog):
         tip += f"Side Deck: {len(self.deck.side)}"
         self.cards_picked.setToolTip(tip)
 
-    def check_dup_card_count(self, card: CardModel) -> int:
+    def check_card_count(self, card: CardModel) -> int:
         """Checks the amount of the same card present in the deck.
 
         Args:
@@ -414,8 +510,10 @@ class DraftingDialog(QDialog):
         count += count_cards(card, self.deck.extra)
         count += count_cards(card, self.deck.side)
 
-        for item in self.picked_cards:
-            if item.accessibleName() == card.name:
+        for item in self.drafting_model.selections:
+            if isinstance(item, CardButton):
+                item = item.card_model
+            if item.name == card.name:
                 count += 1
 
         return count
@@ -423,15 +521,15 @@ class DraftingDialog(QDialog):
     def discard_stage(self):
         """Calculates the amount to be discarded and starts the dialog."""
 
-        discard = self.total_packs + (self.total_packs // 5)
+        discard = self.drafting_model.total_packs
+        discard += (self.drafting_model.total_packs // 5)
         dialog = DeckViewer(self, discard)
 
         dialog.setWindowTitle("Card Removal Stage")
 
         if dialog.exec():
             self.deck = dialog.new_deck
-
-            self.discard_stage_cnt += 1
+            self.drafting_model.discard_stage_cnt += 1
 
     def preview_deck(self):
         """Spawns the deck viewer for previewing the deck on demand."""
@@ -453,6 +551,23 @@ class DraftingDialog(QDialog):
     def resizeEvent(self, event: QResizeEvent | None):
         QApplication.processEvents()
         return super().resizeEvent(event)
+
+    @pyqtSlot()
+    def clear_pack_selection(self):
+        """Resets current pack selection fully."""
+        selection_count = len(self.drafting_model.selections)
+        for _ in range(selection_count):
+            item = self.drafting_model.selections.pop(-1)
+            if isinstance(item, CardButton):
+                with QSignalBlocker(item):
+                    item.setChecked(False)
+                    item.setDisabled(False)
+                item = item.card_model
+
+        sel_left = self.drafting_model.selection_per_pack
+        self.drafting_model.selections_left = sel_left
+
+        self.update_counter_label()
 
 
 class CardButton(QPushButton):
@@ -565,7 +680,6 @@ class CardButton(QPushButton):
         option.initFrom(self)
 
         rect = event.rect()
-        # height = rect.height()
 
         painter = QPainter(self)
         HINT = QPainter.RenderHint
@@ -637,7 +751,7 @@ class CardButton(QPushButton):
                 return
             self.discard_stage_menu(menu)
         else:
-            if self.parent().selection_per_pack < 1:
+            if self.parent().drafting_model.selections_left < 1:
                 return
 
             self.drafting_menu(menu)
@@ -645,11 +759,15 @@ class CardButton(QPushButton):
         menu.exec(pos)
 
     def drafting_menu(self, menu: QMenu) -> None:
-        """Menu that pop ups when drafting the deck."""
+        """Menu that pop ups when drafting the deck.
+
+        Args:
+            menu (QMenu): Menu to add the additonal actions to.
+        """
         if self.card_model.card_type == "Fusion Monster":
             poly = "Polymerization"
 
-            if self.parent().selection_per_pack > 1:
+            if self.parent().drafting_model.selections_left > 1:
                 fusion = menu.addAction("Add All Fusion Parts")
                 fusion.triggered.connect(self.add_all_assocc)  # type: ignore
 
@@ -674,7 +792,11 @@ class CardButton(QPushButton):
                 return
 
     def discard_stage_menu(self, menu: QMenu) -> None:
-        """Menu that pop ups when in the discard stage of drafting."""
+        """Menu that pop ups when in the discard stage of drafting.
+
+        Args:
+            menu (QMenu): Menu to add the additonal actions to.
+        """
 
         self.viewer: DeckViewer
         if self.isChecked():
@@ -748,6 +870,7 @@ class CardButton(QPushButton):
             return
 
         data = self.parent().ygo_data.grab_card(card_name)
+
         if data is None:
             logging.error("Card does not exist.")
             self.setChecked(False)
@@ -772,14 +895,11 @@ class CardButton(QPushButton):
         Args:
             card (YGOCard): Model of the card to be added.
         """
-        if self.parent().check_dup_card_count(card) == 3:
+        if self.parent().check_card_count(card) == 3:
             logging.error(f"Three {card.name} cards in deck.")
             return
 
-        self.parent().deck.main.append(card)
-        if self.parent().ygo_data.check_extra_monster(card):
-            self.parent().selection_per_pack -= 1
-        self.parent().update_counter_label()
+        self.parent().add_card_to_selection(card)
 
     def parent(self) -> DraftingDialog:
         """Override to clear typing issues when calling this function."""

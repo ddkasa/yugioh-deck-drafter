@@ -189,9 +189,9 @@ class YugiObj:
         """
         count_bool = card_set.card_count >= set_filter.card_count
         date_bool = card_set.set_date <= set_filter.set_date
-        type_bool = any(x in card_set.set_class for x in set_filter.set_classes)
+        cls_bool = any(x in card_set.set_class for x in set_filter.set_classes)
 
-        return count_bool and date_bool and type_bool
+        return count_bool and date_bool and cls_bool
 
     def infer_set_types(self, set_name: str) -> set[CardSetClass]:
         """Parses the name of a card set and generates set classes for
@@ -317,7 +317,12 @@ class YugiObj:
 
         return request.json()["data"]
 
-    def create_card(self, data: dict, set_data: CardSetModel | None) -> CardModel:
+    def create_card(
+        self,
+        data: dict,
+        set_data: CardSetModel | None
+    ) -> CardModel:
+
         """Create a card datamodel from given JSON Data.
 
         Creates a cardmodel which uses the first rarity data found which
@@ -346,7 +351,7 @@ class YugiObj:
                     break
 
         card = CardModel(data["name"], data["desc"], data["id"], data["type"],
-                       data, rarity, set_data)
+                         data, rarity, set_data)
 
         return card
 
@@ -438,6 +443,9 @@ class YugiObj:
         while pack_counter < max_packs:
             chosen_pack = choice(pack_set)
             total_pack = randint(count_range.start, count_range.stop)
+            if chosen_pack.card_count < 10:
+                total_pack = 1
+
             chosen_pack.count = min(max_packs - pack_counter, total_pack)
             packs_to_add.append(chosen_pack)
             pack_counter += chosen_pack.count
