@@ -194,7 +194,8 @@ class MainWindow(QWidget):
 
     @pyqtSlot()
     def pack_list_context_menu(self):
-        """"""
+        """Filtering and selection options for the set pack dropdown menu.
+        """
         pos = QCursor().pos()
         menu = QMenu(self.select_pack)
 

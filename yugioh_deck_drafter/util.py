@@ -15,6 +15,20 @@ from PyQt6.QtWidgets import QLayout, QLayoutItem, QWidget
 
 def get_or_insert(pixmap_path: str | Path, format: str = ".jpg",
                   data: Optional[bytes] = None) -> QPixmap:
+    """Manages loading and cache operations for QPixmaps.
+
+    Args:
+        pixmap_path (str | Path): Path of the image being loaded or where to
+            save to.
+        format (str, optional): Format of the images being loaded.
+            Defaults to ".jpg".
+        data (Optional[bytes], optional): Data if an image is being loaded
+            from a GET requesta. Defaults to None.
+
+    Returns:
+        QPixmap: A pointer to an image that has been saved and loaded into
+            cache.
+    """
     if isinstance(pixmap_path, Path):
         pixmap_path = str(pixmap_path)
     cached_pixmap = QPixmapCache.find(pixmap_path)
@@ -30,6 +44,16 @@ def get_or_insert(pixmap_path: str | Path, format: str = ".jpg",
 
 
 def new_line_text(text: str, max_line_length: int) -> str:
+    """Generate a new string with target line length.
+
+    Args:
+        text (str): String to be transformed into multiline.
+        max_line_length (int): What the maximum characters a line should
+            contain.
+
+    Returns:
+        str: Transformed multiline string.
+    """
     logging.debug(f"{max_line_length}, {text}, {len(text)}")
     if "\n" in text:
         return text
@@ -48,6 +72,11 @@ def new_line_text(text: str, max_line_length: int) -> str:
 
 
 def clean_layout(layout: QLayout):
+    """Removes and deletes widgets from the supplied layout.
+
+    Args:
+        layout (QLayout): Any type of Qt Layout with widgets inserted.
+    """
     for i in range(layout.count()):
         item = layout.itemAt(i)
         widget = check_item_validation(item)
@@ -58,6 +87,14 @@ def clean_layout(layout: QLayout):
 
 
 def check_item_validation(item: QLayoutItem | None) -> QWidget | None:
+    """Simple helper function for dealing with layouts.
+
+    Args:
+        item (QLayoutItem | None): The item to be checked.
+
+    Returns:
+        QWidget | None: Either return None or the widget if it exists.
+    """
     if item is None:
         return
     widget = item.widget()
@@ -67,6 +104,15 @@ def check_item_validation(item: QLayoutItem | None) -> QWidget | None:
 
 
 def get_operation(number: int) -> tuple[str, int]:
+    """Gets an operation in readable format for GUI usage and turns the value 
+    supplied into an absolute
+
+    Args:
+        number (int): Number to derive the operation from.
+
+    Returns:
+        tuple[str, int]: Operation and absolute number (int) in a tuple.
+    """
     operation = "Remove"
     if number < 0:
         operation = "Add"
@@ -81,6 +127,17 @@ def round_down_int(value: int, multiple: int = 10):
 
 
 def sanitize_file_path(name: str, max_len=255) -> Path:
+    """Sanitizing a file path for easier saving purposes at the end of the
+    drafting process.
+
+    Args:
+        name (str): String to tb ereformated and cleaned.
+        max_len (int, optional): Maximum length of the file name.
+            Defaults to 255.
+
+    Returns:
+        Path: A file path ready to be used for saving.
+    """
     name = name.replace("[", "-").replace("]", "-")
     sanitized_name = re.sub(r'[\\/:"*?<>|]', '', name)
     sanitized_name = unicodedata.normalize('NFC', sanitized_name)
@@ -89,6 +146,7 @@ def sanitize_file_path(name: str, max_len=255) -> Path:
 
 
 class DateSerializer(JSONEncoder):
+    """Subclass for easier debugging of received API structures."""
     def default(self, obj):
         if isinstance(obj, date):
             return obj.isoformat()
