@@ -91,7 +91,7 @@ class DeckModel:
 
 @dataclass(frozen=True, unsafe_hash=True)
 class CardSetFilter:
-    card_count: int = field(default=1)
+    card_count: int = field(default=3)
     set_date: date = field(default_factory=date.today)
     set_classes: set[CardSetClass]\
         = field(default_factory=lambda: {s for s in CardSetClass})
@@ -277,23 +277,31 @@ class YugiObj:
 
         return image
 
-    def get_set_art(self, set_model: CardModel) -> QPixmap | None:
-        image_store = Path(r"assets\images\card_art")
-        image_store.mkdir(parents=True, exist_ok=True)
+    def get_set_art(self, set_model: CardSetModel) -> QPixmap | None:
+        """Collects set art from YGOPRODECK for the set_model provided.
 
-        card_art_id = card.card_id
-        image_path = image_store / str(str(card_art_id) + ".jpg")
+        Args:
+            set_model (CardSetModel): Set model where the set_code will be
+                taken from.
+
+        Returns:
+            QPixmap | None: _description_
+        """
+        image_store = Path(r"assets\images\set_art")
+        image_store.mkdir(parents=True, exist_ok=True)
+        set_code = set_model.set_code
+        image_path = image_store / str(str(set_code) + ".jpg")
 
         if image_path.exists():
             return util.get_or_insert(image_path)
 
-        url = f"https://images.ygoprodeck.com/images/cards/{card_art_id}.jpg"
-        request = requests.get(url, timeout=10)
+        url = "https://images.ygoprodeck.com/images/sets/{0}.jpg"
+        request = requests.get(url.format(set_code), timeout=10)
         if request.status_code != 200:
             # Add a default image here in the future.
             logging.error("Failed to fetch card image. Using Default")
             logging.error("Status Code: %s", request.status_code)
-            return None
+            return
 
         data = request.content
         with image_path.open("wb") as image_file:

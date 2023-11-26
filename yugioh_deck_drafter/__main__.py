@@ -66,9 +66,7 @@ class MainWindow(QWidget):
 
     def init_ui(self) -> None:
         """Intializes layouts and widgets for the UI."""
-        self.pack_filter = None
-        
-        self.view_widget = QStackedWidget()
+        self.pack_filter = self.DEFAULT_FILTER
 
         self.main_layout = QVBoxLayout()
         self.setLayout(self.main_layout)
@@ -513,7 +511,7 @@ class PackFilterDialog(QDialog):
         self.main_layout.addLayout(self.form)
 
         self.min_card_count = QSpinBox()
-        self.min_card_count.setMinimum(1)
+        self.min_card_count.setMinimum(3)
         self.min_card_count.setValue(previous_filter.card_count)
         (self.min_card_count
          .setToolTip("Minimum card threshold allowed inside a set."))
@@ -731,7 +729,8 @@ if __name__ == "__main__":
     def excepthook(type_, value, traceback_):
         """Exception hook and display."""
         traceback.print_exception(type_, value, traceback_)
-        sys.exit(1)
+        # QFatal(traceback_)
+        # sys.exit(1)
 
     sys.excepthook = excepthook
 

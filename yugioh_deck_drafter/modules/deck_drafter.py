@@ -54,7 +54,8 @@ from PyQt6.QtWidgets import (
     QCompleter,
     QLineEdit,
     QButtonGroup,
-    QStackedWidget
+    QStackedWidget,
+    QProgressBar
 )
 
 from yugioh_deck_drafter.modules.ygo_data import (CardModel, CardSetModel,
@@ -115,6 +116,7 @@ class DraftingDialog(QDialog):
     def __init__(self, parent: MainWindow, deck_name: str,
                  flags=Qt.WindowType.Dialog):
         super().__init__(parent, flags)
+
         self.setWindowTitle("Card Pack Opener")
         self.deck_name = deck_name
 
@@ -127,30 +129,71 @@ class DraftingDialog(QDialog):
 
         self.init_ui()
 
+        self.sel_next_set()
+
     def init_ui(self) -> None:
         """Intializes layouts and widgets for the UI."""
         self.pack_filter = None
-        self.view_widget = QStackedWidget()
 
-        self.loading_widget = QWidget()
-        self.loading_layout = QHBoxLayout()
-        self.set_art_widget = QLabel()
-        self.loading_widget.setLayout(self.loading_layout)
+        self.main_layout = QVBoxLayout()
+        self.setLayout(self.main_layout)
+        self.view_widget = QStackedWidget()
+        self.main_layout.addWidget(self.view_widget)
+
+        self.loading_widget = self.setup_loading_widget()
         self.view_widget.addWidget(self.loading_widget)
 
         self.drafting_widget = self.setup_drafting_widget()
         self.view_widget.addWidget(self.drafting_widget)
 
+    def setup_loading_widget(self) -> QWidget:
+        self.loading_widget = QWidget()
+        self.loading_layout = QHBoxLayout()
+
+        QAF = Qt.AlignmentFlag
+
+        self.set_layout = QVBoxLayout()
+
+        self.set_art_widget = QLabel()
+        self.set_art_widget.setSizePolicy(QSizePolicy.Policy.Minimum,
+                                          QSizePolicy.Policy.Minimum)
+        self.set_art_widget.setAlignment(QAF.AlignCenter)
+        self.set_layout.addWidget(self.set_art_widget, 70)
+        self.set_art_widget.setMaximumSize(400, 708)
+
+        self.set_name_label = QLabel("Set")
+        self.set_name_label.setAlignment(QAF.AlignCenter)
+        self.set_layout.addWidget(self.set_name_label, 10)
+
+        self.loading_layout.addLayout(self.set_layout, 30)
+
+        self.progess_layout = QVBoxLayout()
+        self.loading_bar = QProgressBar()
+        self.loading_bar.setMinimum(0)
+        self.loading_bar.setMaximum(9)
+        self.loading_bar.setSizePolicy(QSizePolicy.Policy.Minimum,
+                                       QSizePolicy.Policy.Minimum)
+        self.progess_layout.addWidget(self.loading_bar, 70, QAF.AlignVCenter)
+
+        self.loading_label = QLabel("Loading")
+        self.loading_label.setAlignment(QAF.AlignHCenter | QAF.AlignTop)
+        self.progess_layout.addWidget(self.loading_label, 30)
+
+        self.loading_layout.addLayout(self.progess_layout, 70)
+
+        self.loading_widget.setLayout(self.loading_layout)
+        return self.loading_widget
+
     def setup_drafting_widget(self) -> QWidget:
         self.drafting_widget = QWidget()
 
-        self.main_layout = QVBoxLayout()
-        self.main_layout.addStretch(1)
-        self.stretch = self.main_layout.itemAt(0)
+        self.drafting_layout = QVBoxLayout()
+        self.drafting_layout.addStretch(1)
+        self.stretch = self.drafting_layout.itemAt(0)
 
         self.card_layout = QGridLayout()
         self.card_layout.setAlignment(Qt.AlignmentFlag.AlignAbsolute)
-        self.main_layout.addLayout(self.card_layout)
+        self.drafting_layout.addLayout(self.card_layout)
 
         self.card_buttons: list[CardButton] = []  # Contains the card widgets
 
@@ -198,12 +241,10 @@ class DraftingDialog(QDialog):
         self.next_button.pressed.connect(self.sel_next_set)
         self.button_layout.addWidget(self.next_button)
 
-        self.main_layout.addLayout(self.button_layout)
+        self.drafting_layout.addLayout(self.button_layout)
 
-        self.drafting_widget.setLayout(self.main_layout)
+        self.drafting_widget.setLayout(self.drafting_layout)
 
-        self.sel_next_set()
-        
         return self.drafting_widget
 
     def sel_next_set(self):
@@ -225,7 +266,7 @@ class DraftingDialog(QDialog):
         """
 
         if hasattr(self, "stretch"):
-            self.main_layout.removeItem(self.stretch)
+            self.drafting_layout.removeItem(self.stretch)
             del self.stretch
 
         if self.drafting_model.selections_left > 0:
@@ -235,6 +276,8 @@ class DraftingDialog(QDialog):
             QMessageBox.warning(self, "Select More Cards", text,
                                 QMessageBox.StandardButton.Ok)
             return
+
+        self.view_widget.setCurrentWidget(self.loading_widget)
 
         if self.drafting_model.selections:
             self.add_card_to_deck()
@@ -266,6 +309,7 @@ class DraftingDialog(QDialog):
         sel_packs = self.parent().selected_packs
 
         set_data = sel_packs[self.drafting_model.opened_set_packs]
+        self.load_set_art()
 
         self.drafting_model.total_packs += 1
         (self.packs_opened
@@ -287,6 +331,15 @@ class DraftingDialog(QDialog):
 
         if set_data.count == 0:
             self.drafting_model.opened_set_packs += 1
+
+    def load_set_art(self):
+        logging.debug("Loading Set Art into GUI")
+        sel_packs = self.parent().selected_packs
+        set_data = sel_packs[self.drafting_model.opened_set_packs]
+        self.set_name_label.setText(set_data.set_name)
+        set_art = self.parent().yugi_pro.get_set_art(set_data)
+        if set_art is not None:
+            self.set_art_widget.setPixmap(set_art)
 
     def check_discard_stage(self) -> bool:
         ten_div = self.drafting_model.total_packs % 10 == 0
@@ -364,6 +417,9 @@ class DraftingDialog(QDialog):
         for column in range(self.CARDS_PER_PACK):
             card_data = self.select_pack_card(set_data, column)
 
+            self.loading_bar.setValue(column + 1)
+            self.loading_label.setText("Loading: %s" % card_data.name)
+
             row = 0
             if column % 2 != 0:
                 QApplication.processEvents()
@@ -371,12 +427,16 @@ class DraftingDialog(QDialog):
                 column -= 1
 
             card = CardButton(card_data, self)
+   
+
 
             self.card_buttons.append(card)
             card.toggled.connect(self.update_selection)
             self.card_layout.addWidget(card, row, column, 1, 1)
 
         self.repaint()
+        self.view_widget.setCurrentWidget(self.drafting_widget)
+        self.loading_bar.setValue(0)
 
     def select_pack_card(
         self,
@@ -407,7 +467,7 @@ class DraftingDialog(QDialog):
 
             try:
                 card_data = random.choices(rare_cards, weights=rprob, k=1)[0]
-            except IndexError:
+            except (IndexError, ValueError):
                 return self.select_pack_card(set_data, pack_index=0)
 
         else:
@@ -617,7 +677,7 @@ class CardButton(QPushButton):
 
     def __init__(self, data: CardModel, parent: DraftingDialog,
                  viewer: Optional['DeckViewer'] = None) -> None:
-        super().__init__()
+        super().__init__(parent=parent)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
         if isinstance(viewer, DeckViewer):
@@ -923,7 +983,7 @@ class CardButton(QPushButton):
 
     def parent(self) -> DraftingDialog:
         """Override to clear typing issues when calling this function."""
-        return super().parent()  # type: ignore
+        return super().parent().parent().parent() # type: ignore
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
         """Movement function for when dragging cards between decks."""
@@ -1334,8 +1394,6 @@ class CardSearch(QDialog):
     def accept(self) -> None:
         """Overriden except method in order to highlight and return the correct
         card model.
-
-
         """
         for item in self.card_buttons:
             if item.isChecked():
