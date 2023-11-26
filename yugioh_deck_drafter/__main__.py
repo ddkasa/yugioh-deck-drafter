@@ -13,7 +13,7 @@ from PyQt6.QtCore import (Qt, pyqtSlot, QSignalBlocker)
 
 from PyQt6.QtWidgets import (QApplication, QPushButton, QWidget,
                              QComboBox, QVBoxLayout, QListWidget, QSlider,
-                             QHBoxLayout, QListWidgetItem, QSpinBox, 
+                             QHBoxLayout, QListWidgetItem, QSpinBox,
                              QLabel, QFileDialog, QMenu, QMessageBox,
                              QInputDialog, QDialog, QFormLayout, QDateEdit)
 
@@ -32,10 +32,16 @@ class MainWindow(QWidget):
     """Main Window Class managing Pack Selection and general utilities.
 
     Attributes:
-
+        DEFAULT_PACK_COUNT (int): Default amount of packs when adding new ones
+        PACK_MAX (int): Maximum amount of packs that are used for drafting
+        OMEGA_PATH (Path): Path for direct imports of cards.
+        DEFAULT_FILTER (CardSetFilter): For comparing default values with
+            new filter objects.
+        p_count (int): Count of packs in the selection.
+        selected_packs(list): Models of packs that were selected.
 
     Args:
-        QWidget (_type_): _description_
+        debug (bool): For debugging purposes in the window.
     """
 
     DEFAULT_PACK_COUNT: Final[int] = 10
@@ -135,10 +141,10 @@ class MainWindow(QWidget):
     def list_context_menu(self):
         """Create and display a context menu for managing the pack list widget.
 
-        This function generates a context menu when triggered at a specific
-        position within the widget.
-        The context menu provides an option to remove an item from the
-        list, triggered by selecting 'Remove Item'.
+        The context menu provides an options for manipulating the QListWidget
+            showing CardSet selections.
+        Certain actions will be disabled if conditions meet to keep the ui more
+            intuitive.
         """
         pos = QCursor().pos()
 
@@ -188,8 +194,17 @@ class MainWindow(QWidget):
 
     @pyqtSlot()
     def pack_list_context_menu(self):
+        """"""
         pos = QCursor().pos()
-        menu = QMenu(self.sel_card_set_list)
+        menu = QMenu(self.select_pack)
+
+        reset_dropdwn = QAction("Reset Dropdown")
+        (reset_dropdwn.triggered
+         .connect(lambda: self.select_pack.setCurrentIndex(-1)))
+        reset_dropdwn.setDisabled(self.select_pack.currentIndex() == -1)
+        menu.addAction(reset_dropdwn)
+
+        menu.addSeparator()
 
         pack_filter = QAction("Filter Packs")
         pack_filter.setDisabled(self.check_for_filter_dia())
@@ -214,10 +229,13 @@ class MainWindow(QWidget):
             label = card_set.set_name
             cnt = card_set.count
         else:
+            index = self.select_pack.currentIndex()
+            if index == -1:
+                return
+
             label = self.select_pack.currentText()
             cnt = self.no_pack_indi.value()
 
-            index = self.select_pack.currentIndex()
             card_set = self.yugi_pro.card_set[index]
 
             cnt = self.no_pack_indi.value()
@@ -478,7 +496,6 @@ class PackFilterDialog(QDialog):
             information.
 
     """
-
     def __init__(self, parent: MainWindow,
                  card_set: list[CardSetModel],
                  previous_filter: CardSetFilter) -> None:
@@ -526,6 +543,12 @@ class PackFilterDialog(QDialog):
         self.setLayout(self.main_layout)
 
     def create_filter(self) -> CardSetFilter:
+        """Generates a filter objects from the selected values in the dialog
+        GUI.
+
+        Returns:
+            CardSetFilter: Set filter object filled in with GUI value choices.
+        """
         checked_classes = self.checkable_items.checked_items_to_set()
         checked_enums = set()
 
@@ -539,6 +562,15 @@ class PackFilterDialog(QDialog):
         return card_filter
 
     def filter_cards(self, pack_filter: CardSetFilter) -> list[CardSetModel]:
+        """Filters out cards ouit of the base_set and return a new list.
+
+        Args:
+            pack_filter (CardSetFilter): Filter object create with classmethod
+                create_filter()
+
+        Returns:
+            list[CardSetModel]: A list of Card Set as per filter.
+        """
         filt_func = partial(self.parent().yugi_pro.filter_out_card_sets,
                             set_filter=pack_filter)
         new_sets = filter(filt_func, self.card_set)
@@ -546,6 +578,7 @@ class PackFilterDialog(QDialog):
         return list(new_sets)
 
     def accept(self) -> None:
+        """Overriden accept function in order to triger filtering the GUI."""
         self.filter = self.create_filter()
         return super().accept()
 
@@ -626,7 +659,7 @@ class CheckableListWidget(QListWidget):
         super().__init__()
 
     def add_items(self, items: set[str | None] | enum.EnumMeta,
-                 set_classes: set[CardSetClass]) -> None:
+                  set_classes: set[CardSetClass]) -> None:
 
         for item in items:
             if item is None:
