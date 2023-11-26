@@ -38,7 +38,11 @@ class CardSetClass(enum.Enum):
     Structure_Deck = enum.auto()
     Duelist_Pack = enum.auto()
     Champion_Pack = enum.auto()
-
+    Anniversary = enum.auto()
+    Premium = enum.auto()
+    Deck = enum.auto()
+    Demo = enum.auto()
+    Advent_Calendar = enum.auto()
 
 @dataclass
 class CardSetModel:
@@ -81,6 +85,14 @@ class DeckModel:
     main: list[CardModel] = field(default_factory=lambda: [])
     extra: list[CardModel] = field(default_factory=lambda: [])
     side: list[CardModel] = field(default_factory=lambda: [])
+
+
+@dataclass(frozen=True, unsafe_hash=True)
+class CardSetFilter:
+    card_count: int = field(default=1)
+    set_date: date = field(default_factory=date.today)
+    set_classes: set[CardSetClass]\
+        = field(default_factory=lambda: {s for s in CardSetClass})
 
 
 class YugiObj:
@@ -158,27 +170,25 @@ class YugiObj:
     def filter_out_card_sets(
         self,
         card_set: CardSetModel,
-        minimum_count: int = 10,
-        min_date: Optional[date] = None,
-        set_type: Optional[set[str]] = None
+        set_filter: CardSetFilter
     ) -> bool:
         """Filters out card_sets based on the criteria.
 
+        To be used with a filter function or a seperate loop.
+
         Args:
-            card_set (CardSetModel): _description_
-            minimum_count (Minimal): Minimum amount of cards in the set.
-            date (Optional[date], optional): _description_. Defaults to None.
-            set_type (str): Set type mostly matches against the name of the
-                set.
+            card_set (CardSetModel): The card_set to check
+            set_filter (CardSetFilter): Datamodel containing the info on what
+                to check agaisnt.
 
         Returns:
             bool: If card set matches the count, date and set type it returns.
                 true.
         """
-        count_bool = card_set.card_count >= minimum_count
-        date_bool = min_date is None or card_set.set_date >= min_date
-        type_bool = (set_type is None
-                     or any(x in card_set.set_name for x in set_type))
+        count_bool = card_set.card_count >= set_filter.card_count
+        date_bool = card_set.set_date <= set_filter.set_date
+        type_bool = any(x in card_set.set_class for x in set_filter.set_classes)
+
         return count_bool and date_bool and type_bool
 
     def infer_set_types(self, set_name: str) -> set[CardSetClass]:

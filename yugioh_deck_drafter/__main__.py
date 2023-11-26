@@ -1,12 +1,14 @@
 """Main Deck Builder Python Script"""
 
+
 from typing import Final, Optional, Iterable
 import logging
 import sys
 import traceback
 from datetime import date
-from dataclasses import dataclass, field
 from pathlib import Path
+from functools import partial
+import enum
 
 from PyQt6.QtCore import (Qt, pyqtSlot, QPoint, QSignalBlocker, QDate)
 
@@ -22,34 +24,35 @@ from PyQt6.QtGui import (QPixmapCache, QCursor, QStandardItemModel,
 from yugioh_deck_drafter import util
 from yugioh_deck_drafter.modules.deck_drafter import DraftingDialog
 from yugioh_deck_drafter.modules.ygo_data import (DeckModel, CardSetModel,
-                                                  YugiObj, CardSetClass)
-
-@dataclass
-class PackFilter:
-    card_count: int = field()
-    pack_date: date = field(default_factory=date.today)
-    pack_class: set[CardSetClass] = field(default_factory=set)
+                                                  YugiObj, CardSetClass,
+                                                  CardSetFilter)
 
 
 class MainWindow(QWidget):
-    """Main Window Class managing Pack Selection and general utilities."""
+    """Main Window Class managing Pack Selection and general utilities.
+
+    Attributes:
+
+
+    Args:
+        QWidget (_type_): _description_
+    """
 
     DEFAULT_PACK_COUNT: Final[int] = 10
     PACK_MAX: Final[int] = 40
     OMEGA_PATH = Path(r"C:\Program Files (x86)\YGO Omega")
     DEFAULT_IMPORT = OMEGA_PATH / r"YGO Omega_Data\Files\Imports"
 
+    DEFAULT_FILTER = CardSetFilter()
+
     def __init__(self, debug: bool = False):
         super().__init__()
 
         self.debug = debug
-        self.yugi_pro_connect = YugiObj()
+        self.yugi_pro = YugiObj()
 
         self.selected_packs: list[CardSetModel] = []
         self.p_count: int = 0
-
-        self.filter = False
-
         self.init_ui()
 
         self.update_pack_count()
@@ -57,6 +60,8 @@ class MainWindow(QWidget):
 
     def init_ui(self) -> None:
         """Intializes layouts and widgets for the UI."""
+        self.pack_filter = None
+
         self.main_layout = QVBoxLayout()
         self.setLayout(self.main_layout)
 
@@ -163,8 +168,8 @@ class MainWindow(QWidget):
         menu.addAction(pack_filter)
 
         reset_filter = QAction("Reset Filter")
-        reset_filter.setDisabled(not self.filter)
-        pack_filter.triggered.connect(lambda: self.filter_packs(True))
+        reset_filter.setDisabled(self.filter == self.DEFAULT_FILTER)
+        reset_filter.triggered.connect(lambda: self.filter_packs(True))
         menu.addAction(reset_filter)
 
         menu.exec(pos)
@@ -180,7 +185,7 @@ class MainWindow(QWidget):
             return
 
         index = self.select_pack.currentIndex()
-        data = self.yugi_pro_connect.card_set[index]
+        data = self.yugi_pro.card_set[index]
 
         cnt = self.no_pack_indi.value()
 
@@ -301,7 +306,7 @@ class MainWindow(QWidget):
         deck_name = util.sanitize_file_path(deck.name)
         file_name = Path(f"{deck_name}.ydk")
         file_path = path / file_name
-        deck_file = self.yugi_pro_connect.to_ygodk_format(deck)
+        deck_file = self.yugi_pro.to_ygodk_format(deck)
 
         with file_path.open("w", encoding="utf-8") as file:
             file.write(deck_file)
@@ -324,21 +329,31 @@ class MainWindow(QWidget):
 
     @pyqtSlot(bool)
     def filter_packs(self, reset: bool = False):
-        """For filtering out unwanted packs from selection."""
+        """For filtering out unwanted packs from selection or resetting the
+        current selection"""
 
-        card_set = self.yugi_pro_connect.card_set.copy()
+        card_set = self.yugi_pro.card_set.copy()
 
         if reset:
-            self.filter = False
-            packs = [item.set_name for item in card_set]
-            self.select_pack.addItems(packs)
+            self.filter = self.DEFAULT_FILTER
+            self.add_packs_to_selection(card_set)
             return
 
-        self.filter = True
-        dialog = PackFilterDialog(self)
+        dialog = PackFilterDialog(self, card_set, self.filter)
 
         if dialog.exec():
-            return
+            self.filter = dialog.filter
+            new_sets = dialog.filter_cards(dialog.filter)
+            self.add_packs_to_selection(new_sets)
+
+    def add_packs_to_selection(self, card_set: list[CardSetModel]) -> None:
+        """Clears and adds a new card set to the dropdown selection menu."""
+
+        with QSignalBlocker(self.select_pack):
+            self.select_pack.clear()
+            self.current_card_set = card_set
+            packs = [item.set_name for item in card_set]
+            self.select_pack.addItems(packs)
 
 
 class PackFilterDialog(QDialog):
@@ -358,10 +373,12 @@ class PackFilterDialog(QDialog):
 
     """
 
-    def __init__(self, parent: MainWindow) -> None:
+    def __init__(self, parent: MainWindow, card_set: list[CardSetModel],
+                 previous_filter: CardSetFilter) -> None:
         super().__init__(parent=parent)
         self.setWindowTitle("Filter Sets")
         self.setModal(False)
+        self.card_set = card_set
 
         self.main_layout = QVBoxLayout()
 
@@ -370,18 +387,19 @@ class PackFilterDialog(QDialog):
 
         self.min_card_count = QSpinBox()
         self.min_card_count.setMinimum(1)
-        self.min_card_count.setValue(10)
+        self.min_card_count.setValue(previous_filter.card_count)
         (self.min_card_count
          .setToolTip("Minimum card threshold allowed inside a set."))
         self.form.addRow("Minimum Cards", self.min_card_count)
 
         self.max_date = QDateEdit()
-        self.max_date.setDate(QDate.currentDate())
-        self.max_date.setToolTip("Insert packs up this date.")
+        self.max_date.setDate(previous_filter.set_date)
+        self.max_date.setToolTip("Filter out packs after this date.")
         self.form.addRow("Max Date", self.max_date)
 
         self.checkable_items = CheckableListWidget()
-        self.checkable_items.addItems(YugiObj.CARD_CLASS_NAMES)
+        self.checkable_items.addItems(CardSetClass,
+                                      previous_filter.set_classes)
         self.form.addRow("Card Sets", self.checkable_items)
 
         self.button_layout = QHBoxLayout()
@@ -400,6 +418,34 @@ class PackFilterDialog(QDialog):
 
         self.setLayout(self.main_layout)
 
+    def create_filter(self) -> CardSetFilter:
+        checked_classes = self.checkable_items.checked_items_to_set()
+        checked_enums = set()
+
+        for item in checked_classes:
+            enum_item = CardSetClass[item.replace(" ", "_")]
+            checked_enums.add(enum_item)
+
+        card_filter = CardSetFilter(self.min_card_count.value(),
+                                    self.max_date.date().toPyDate(),
+                                    checked_enums)
+        return card_filter
+
+    def filter_cards(self, pack_filter: CardSetFilter) -> list[CardSetModel]:
+        filt_func = partial(self.parent().yugi_pro.filter_out_card_sets,
+                            set_filter=pack_filter)
+        new_sets = filter(filt_func, self.card_set)
+
+        return list(new_sets)
+
+    def accept(self) -> None:
+        self.filter = self.create_filter()
+        return super().accept()
+
+    def parent(self) -> MainWindow:
+        """Overriden method to avoid type hint issues."""
+        return super().parent()  # type: ignore
+
 
 class RandomPacks(PackFilterDialog):
     """Randomizes and pick random packs with certain constraints selected which
@@ -413,10 +459,11 @@ class RandomPacks(PackFilterDialog):
         parent (parent): Widget to parent the dialog to and access additonal
             information.
     """
-    def __init__(self, parent: MainWindow) -> None:
-        super().__init__(parent=parent)
+    def __init__(self, parent: MainWindow, card_set: list[CardSetModel],
+                 previous_filter: CardSetFilter) -> None:
+        super().__init__(parent=parent, card_set=card_set,
+                         previous_filter=previous_filter)
         self.setWindowTitle("Randomise Sets")
-
 
         self.total_packs = QSpinBox()
         self.total_packs.setValue(5)
@@ -441,11 +488,12 @@ class RandomPacks(PackFilterDialog):
     def randomise_packs(self) -> None:
         """Randomises packs and adds sets to the MainWindow card set list based
         on the values chosen in the GUI"""
-        self.parent().yugi_pro_connect.card_set
+        self.parent().yugi_pro.card_set
 
-    def parent(self) -> MainWindow:
-        """Overriden method to avoid type hint issues."""
-        return super().parent()  # type: ignore
+        new_filter = self.create_filter()
+        card_set = self.filter_cards(new_filter)
+        
+        
 
 
 class CheckableListWidget(QListWidget):
@@ -460,24 +508,34 @@ class CheckableListWidget(QListWidget):
     def __init__(self) -> None:
         super().__init__()
 
-    def addItems(self, items: list[str]) -> None:
-        items = [name.title() for name in items]
+    def addItems(self, items: set[str | None] | enum.EnumMeta,
+                 set_classes: set[CardSetClass]) -> None:
 
         for item in items:
-            list_item = QListWidgetItem(item)
+            if item is None:
+                continue
+            name = item
+            if isinstance(name, enum.Enum):
+                name = name.name
+
+            list_item = QListWidgetItem(name)  # type: ignore
             list_item.setFlags(list_item.flags() |
                                Qt.ItemFlag.ItemIsUserCheckable)
-            list_item.setCheckState(Qt.CheckState.Checked)
+
+            check_state = Qt.CheckState.Unchecked
+            if item in set_classes:
+                check_state = Qt.CheckState.Checked
+
+            list_item.setCheckState(check_state)
             self.addItem(list_item)
 
-    def checked_items_to_list(self) -> list:
-        check_items = []
-
+    def checked_items_to_set(self) -> set[str]:
+        check_items = set()
         for i in range(self.count()):
-            item = self.itemAt(i)
+            item = self.item(i)
             if item is None or item.checkState() != Qt.CheckState.Checked:
                 continue
-            check_items.append(item)
+            check_items.add(item.text())
 
         return check_items
 

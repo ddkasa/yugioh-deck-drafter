@@ -107,7 +107,7 @@ class DraftingDialog(QDialog):
 
         self.setMinimumSize(self.W, self.H)
 
-        self.ygo_data = parent.yugi_pro_connect
+        self.ygo_data = parent.yugi_pro
 
         self.main_layout = QVBoxLayout()
         self.main_layout.addStretch(1)
@@ -247,7 +247,7 @@ class DraftingDialog(QDialog):
 
     def add_card_to_deck(self):
         """Adds cards to the deck from the picked cards in the current opended
-        pack.        
+        pack.
         """
         for cardbutton in list(self.picked_cards):
             self.card_layout.removeWidget(cardbutton)
