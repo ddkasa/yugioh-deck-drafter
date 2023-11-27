@@ -15,7 +15,8 @@ from PyQt6.QtWidgets import (QApplication, QPushButton, QWidget,
                              QComboBox, QVBoxLayout, QListWidget, QSlider,
                              QHBoxLayout, QListWidgetItem, QSpinBox,
                              QLabel, QFileDialog, QMenu, QMessageBox,
-                             QInputDialog, QDialog, QFormLayout, QDateEdit)
+                             QInputDialog, QDialog, QFormLayout, QDateEdit,
+                             QAbstractButton)
 
 from PyQt6.QtGui import (QPixmapCache, QCursor, QAction)
 
@@ -49,10 +50,13 @@ class MainWindow(QWidget):
     OMEGA_PATH = Path(r"C:\Program Files (x86)\YGO Omega")
     DEFAULT_IMPORT = OMEGA_PATH / r"YGO Omega_Data\Files\Imports"
 
+    DEFAULT_SAVE = Path("saves")
+
     DEFAULT_FILTER = CardSetFilter()
 
     def __init__(self, debug: bool = False):
         super().__init__()
+        self.DEFAULT_SAVE.mkdir(parents=True, exist_ok=True)
 
         self.debug = debug
         self.yugi_pro = YugiObj()
@@ -335,7 +339,11 @@ class MainWindow(QWidget):
         name_dia.setWindowTitle("Deck Name")
         name_dia.setLabelText("Choose a name for your deck.")
         name_dia.setModal(not self.debug)
-        name_dia.show()
+
+        if self.debug:
+            name_dia.show()
+        else:
+            name_dia.exec()
         deck_name = name_dia.textValue()
 
         logging.info("Opening Selection Dialog.")
@@ -344,29 +352,10 @@ class MainWindow(QWidget):
             dialog.show()
 
         elif dialog.exec():
-
-            if self.DEFAULT_IMPORT.exists():
-                path = self.DEFAULT_IMPORT
-            else:
-                file_dia = QFileDialog(self)
-                file_dia.setDefaultSuffix(".ygo")
-                file_dia.setWindowTitle("Select a Folder")
-                while True:
-                    if file_dia.exec():
-                        if file_dia.directory().exists():
-                            break
-
-                file_dia.selectFile(dialog.deck.name + ".ygo")
-                path = Path(str(file_dia.directory().path()))
-
-            self.save_deck_dialog(dialog.deck, path)
-
-            QMessageBox.information(self, "File Saved",
-                                    f"File was saved to {path}!",
-                                    QMessageBox.StandardButton.Ok)
+            self.save_deck_dialog(dialog.deck)
         return
 
-    def save_deck_dialog(self, deck: DeckModel, path: Path) -> None:
+    def save_deck_dialog(self, deck: DeckModel) -> None:
         """Converts and saves the provided deck to path.
 
         Sanitizes the provided path(Path) first and then converts the deck to
@@ -377,13 +366,63 @@ class MainWindow(QWidget):
                 including the side/extra deck.
             path (Path): Path to where the YDK file will be saved.
         """
-        deck_name = util.sanitize_file_path(deck.name)
-        file_name = Path(f"{deck_name}.ydk")
-        file_path = path / file_name
         deck_file = self.yugi_pro.to_ygodk_format(deck)
 
-        with file_path.open("w", encoding="utf-8") as file:
+        deck_name = util.sanitize_file_path(deck.name)
+        file_name = Path(f"{deck_name}.ydk")
+
+        file_path = self.DEFAULT_SAVE
+
+        default_path = file_path / file_name
+        with default_path.open("w", encoding="utf-8") as file:
             file.write(deck_file)
+
+        message_box = QMessageBox(QMessageBox.Icon.Question,
+                                  "Save Location",
+                                  "Where would you like to save?")
+
+        message_box.addButton("Default",
+                              QMessageBox.ButtonRole.ActionRole)
+        cust_button = message_box.addButton(
+            "Custom Location",
+            QMessageBox.ButtonRole.ActionRole)
+        import_button = None
+        if self.DEFAULT_IMPORT.exists():
+            import_button = message_box.addButton(
+                "Imports Folder",
+                QMessageBox.ButtonRole.ActionRole)
+
+        message_box.exec()
+
+        if message_box.clickedButton() == cust_button:
+            file_dia = QFileDialog(self)
+            file_dia.setDirectory(str(self.DEFAULT_SAVE))
+            file_dia.setDefaultSuffix(".ygo")
+            file_dia.setWindowTitle("Select a Folder")
+            while True:
+                if file_dia.exec():
+                    if file_dia.directory().exists():
+                        break
+
+            file_dia.selectFile(deck.name + ".ygo")
+            file_path = Path(str(file_dia.directory().path())) / file_name
+
+        elif (self.DEFAULT_IMPORT.exists() 
+              and message_box.clickedButton() == import_button):
+            file_path = self.DEFAULT_IMPORT / file_name
+
+        else:
+            file_path = default_path
+
+        try:
+            with file_path.open("w", encoding="utf-8") as file:
+                file.write(deck_file)
+        except FileNotFoundError:
+            return self.save_deck_dialog(deck)
+
+        QMessageBox.information(self, "File Saved",
+                                f"File was saved to {file_path}!",
+                                QMessageBox.StandardButton.Ok)
 
     @pyqtSlot()
     def reset_selection(self) -> None:

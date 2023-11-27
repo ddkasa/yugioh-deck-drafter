@@ -289,6 +289,7 @@ class DraftingDialog(QDialog):
             try:
                 self.discard_stage()
             except ValueError:
+                self.view_widget.setCurrentWidget(self.drafting_widget)
                 return
             self.drafting_model.selections_left = 0
 
@@ -362,8 +363,6 @@ class DraftingDialog(QDialog):
         for cardbutton in list(self.drafting_model.selections):
             card = cardbutton
             if isinstance(card, CardButton):
-                self.card_layout.removeWidget(card)
-                card.deleteLater()
                 card = card.card_model
 
             if self.ygo_data.check_extra_monster(card):
@@ -616,11 +615,13 @@ class DraftingDialog(QDialog):
 
         if self.parent().debug:
             dialog.show()
-        elif dialog.exec():
-            self.deck = dialog.new_deck
-            self.drafting_model.discard_stage_cnt += 1
         else:
-            raise ValueError("Discard Not Successful")
+            confirmation = dialog.exec()
+            if confirmation:
+                self.deck = dialog.new_deck
+                self.drafting_model.discard_stage_cnt += 1
+            else:
+                raise ValueError("Discard Not Successful")
 
     def preview_deck(self):
         """Spawns the deck viewer for previewing the deck on demand."""
