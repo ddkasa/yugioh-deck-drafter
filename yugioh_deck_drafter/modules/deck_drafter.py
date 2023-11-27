@@ -117,9 +117,9 @@ class DraftingDialog(QDialog):
     def __init__(self, parent: MainWindow, deck_name: str,
                  flags=Qt.WindowType.Dialog):
         super().__init__(parent, flags)
+        self.setModal(not parent.debug)
 
         self.setWindowTitle("Card Pack Opener")
-        self.deck_name = deck_name
 
         self.deck = DeckModel(deck_name)
         self.drafting_model = PackOpeningState()
@@ -137,7 +137,6 @@ class DraftingDialog(QDialog):
         self.setLayout(self.main_layout)
         self.view_widget = QStackedWidget()
         self.main_layout.addWidget(self.view_widget)
-
 
         self.drafting_widget = self.setup_drafting_widget()
         self.view_widget.addWidget(self.drafting_widget)
@@ -615,12 +614,13 @@ class DraftingDialog(QDialog):
 
         dialog.setWindowTitle("Card Removal Stage")
 
-
-        if dialog.exec():
+        if self.parent().debug:
+            dialog.show()
+        elif dialog.exec():
             self.deck = dialog.new_deck
             self.drafting_model.discard_stage_cnt += 1
         else:
-            raise ValueError("Dicard Not Successful")
+            raise ValueError("Discard Not Successful")
 
     def preview_deck(self):
         """Spawns the deck viewer for previewing the deck on demand."""
@@ -1000,8 +1000,11 @@ class CardButton(QPushButton):
         """Override to clear typing issues when calling this function."""
         return super().parent().parent().parent()  # type: ignore
 
-    def mouseMoveEvent(self, event: QMouseEvent) -> None:
+    def mouseMoveEvent(self, event: QMouseEvent | None) -> None:
         """Movement function for when dragging cards between decks."""
+        if event is None:
+            return
+
         if self.viewer is None:
             return
         if event.buttons() == Qt.MouseButton.LeftButton:
@@ -1044,6 +1047,7 @@ class DeckViewer(QDialog):
     MAX_COLUMNS: Final[int] = 10
     def __init__(self, parent: DraftingDialog, discard: int = 0):
         super().__init__(parent)
+        self.setModal(not parent.parent().debug)
 
         self.setWindowTitle("Deck Viewer")
         self.resize(1745, 860)  # Base on 1080 ratio

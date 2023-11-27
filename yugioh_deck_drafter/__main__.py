@@ -334,23 +334,30 @@ class MainWindow(QWidget):
         name_dia = QInputDialog(self)
         name_dia.setWindowTitle("Deck Name")
         name_dia.setLabelText("Choose a name for your deck.")
+        name_dia.setModal(not self.debug)
+        name_dia.show()
         deck_name = name_dia.textValue()
 
         logging.info("Opening Selection Dialog.")
         dialog = DraftingDialog(self, deck_name)
+        if self.debug:
+            dialog.show()
 
-        if dialog.exec():
+        elif dialog.exec():
+
             if self.DEFAULT_IMPORT.exists():
                 path = self.DEFAULT_IMPORT
             else:
                 file_dia = QFileDialog(self)
+                file_dia.setDefaultSuffix(".ygo")
                 file_dia.setWindowTitle("Select a Folder")
                 while True:
                     if file_dia.exec():
                         if file_dia.directory().exists():
                             break
 
-                path = Path(str(file_dia.directory()))
+                file_dia.selectFile(dialog.deck.name + ".ygo")
+                path = Path(str(file_dia.directory().path()))
 
             self.save_deck_dialog(dialog.deck, path)
 
@@ -390,10 +397,10 @@ class MainWindow(QWidget):
     @pyqtSlot()
     def randomize_packs(self) -> None:
         """Launches a dialog for randomizing card_set picks."""
-
         dialog = RandomPacks(self, self.yugi_pro.card_set.copy(),
                              self.filter)
-        dialog.show()   
+        dialog.setModal(not self.debug)
+        dialog.show()
         dialog.exec()
 
     @pyqtSlot(bool)
@@ -424,6 +431,7 @@ class MainWindow(QWidget):
             packs = [item.set_name for item in card_set]
             self.select_pack.addItems(packs)
 
+    @pyqtSlot()
     def copy_pack_selection(self) -> None:
         """Copies current pack selection into clipboard for sharing or saving.
         """
@@ -444,6 +452,7 @@ class MainWindow(QWidget):
 
         clipboard.copy(copied_text)
 
+    @pyqtSlot(str)
     def paste_pack_selection(self, clip_data: str) -> None:
         """Pastes clipboard data into the list widget which displays selected
         packs.
@@ -497,7 +506,8 @@ class PackFilterDialog(QDialog):
             information.
 
     """
-    def __init__(self, parent: MainWindow,
+    def __init__(self, 
+                 parent: MainWindow,
                  card_set: list[CardSetModel],
                  previous_filter: CardSetFilter) -> None:
         super().__init__(parent=parent)
@@ -618,7 +628,7 @@ class RandomPacks(PackFilterDialog):
         self.pack_increments = QSpinBox()
         self.pack_increments.setValue(5)
         self.pack_increments.setMinimum(5)
-        self.pack_increments.setMaximum(20)
+        self.pack_increments.setMaximum(25)
         self.pack_increments.setSingleStep(1)
         self.form.addRow("Pack Increments", self.pack_increments)
 

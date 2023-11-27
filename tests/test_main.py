@@ -1,5 +1,10 @@
 import pytest
+from pytestqt.qtbot import QtBot
+from random import choice
+
 from PyQt6.QtCore import Qt
+
+from PyQt6.QtWidgets import QInputDialog, QWidget, QApplication
 
 from yugioh_deck_drafter import __main__ as main
 from yugioh_deck_drafter.modules import deck_drafter
@@ -19,6 +24,16 @@ def main_window_fill():
     yield main_window
 
 
+def find_dialog(parent: QWidget, dialog: type):
+    children = parent.children()
+    for item in children:
+        if isinstance(item, dialog):
+            item: dialog
+            return item
+    else:
+        raise AttributeError("No Dialog present in children.")
+
+
 def test_main_win_functionality(main_window_fill: main.MainWindow, qtbot):
     main_window = main_window_fill
     main_window.show()
@@ -30,52 +45,54 @@ def test_main_win_functionality(main_window_fill: main.MainWindow, qtbot):
 
 def test_dialog(main_window_fill: main.MainWindow, qtbot):
     main_window = main_window_fill
+    qtbot.addWidget(main_window)
     main_window.show()
+    main_window.start_button.click()
 
-    start_button = main_window.start_button
+    name_input: QInputDialog = find_dialog(main_window, QInputDialog)
+    name_input.setTextValue("Test_Deck")
+    name_input.accept()
 
-    qtbot.addWidget(start_button)
-
-    dia = main_window.start_drafting()
+    dia = find_dialog(main_window, main.DraftingDialog)
 
     assert isinstance(dia, main.DraftingDialog)
 
 
-def test_card_picks(main_window_fill: main.MainWindow, qtbot):
+def test_card_picks(main_window_fill: main.MainWindow, qtbot: QtBot):
     pack_count = 40
-
-    def find_dialog(children: list):
-        for item in children:
-            if isinstance(item, deck_drafter.DeckViewer):
-                return item
-        else:
-            raise ValueError("No DeckViewer dialog present in children.")
 
     main_window = main_window_fill
     main_window.show()
 
-    dialog = main.DraftingDialog(main_window, "test_deck",
-                                 Qt.WindowType.Widget)
+    main_window.start_button.click()
+
+    name_input: QInputDialog = find_dialog(main_window, QInputDialog)
+
+    name_input.setTextValue("Test_Deck")
+    name_input.accept()
+
+    dialog = find_dialog(main_window, deck_drafter.DraftingDialog)
+
     qtbot.addWidget(dialog)
     dialog.show()
+    dialog.next_button.click()
 
     stages = pack_count // 40
     for stage in range(stages):
-        for i in range(10):
-            b_clicks = 0
-            for button in dialog.card_buttons:
-
+        for _ in range(10):
+            while dialog.drafting_model.selections_left > 0:
+                button = choice(dialog.card_buttons)
                 if button.card_model.card_type == "Fusion Monster":
                     continue
-                button.toggle()
-                b_clicks += 1
 
-                if dialog.selection_per_pack <= 0:
-                    break
+                qtbot.addWidget(button)
+                qtbot.mouseClick(button, Qt.MouseButton.RightButton, delay=10)
+
+                qtbot.mouseClick(button, Qt.MouseButton.LeftButton)
 
             dialog.next_button.click()
 
-        discard_stage: deck_drafter.DeckViewer = find_dialog(dialog.children())
+        discard_stage = find_dialog(dialog, deck_drafter.DeckViewer)
 
         qtbot.addWidget(discard_stage)
 
