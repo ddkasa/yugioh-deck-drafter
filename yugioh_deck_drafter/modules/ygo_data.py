@@ -25,6 +25,8 @@ from yugioh_deck_drafter import util
 
 
 class CardSetClass(enum.Enum):
+    """Enumeration for filtering and selecting specfic types of card
+    sets."""
     Booster_Pack = enum.auto()
     Promotional = enum.auto()
     Starter_Deck = enum.auto()
@@ -46,6 +48,7 @@ class CardSetClass(enum.Enum):
     Advent_Calendar = enum.auto()
     Collector_Box = enum.auto()
     Collection = enum.auto()
+
 
 @dataclass
 class CardSetModel:
@@ -72,12 +75,12 @@ class CardModel(NamedTuple):
     Some data is stored in the raw JSON[dict] format so that could be
     parsed more cleanly in the future
     """
-    name: str = field()
-    description: str = field()
-    card_id: int = field()  
-    card_type: str = field()
-    raw_data: dict[str, Any] = field()
-    rarity: str = field(default="Common")
+    name: str
+    description: str
+    card_id: int
+    card_type: str
+    raw_data: dict[str, Any]
+    rarity: str = "Common"
     card_set: Optional[CardSetModel] = None
 
 
@@ -92,6 +95,9 @@ class DeckModel:
 
 @dataclass(frozen=True, unsafe_hash=True)
 class CardSetFilter:
+    """Filter object for filtering out specfic types of card sets for
+    selection.
+    """
     card_count: int = field(default=3)
     set_date: date = field(default_factory=date.today)
     set_classes: set[CardSetClass]\

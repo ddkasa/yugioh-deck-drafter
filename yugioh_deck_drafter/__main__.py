@@ -15,8 +15,7 @@ from PyQt6.QtWidgets import (QApplication, QPushButton, QWidget,
                              QComboBox, QVBoxLayout, QListWidget, QSlider,
                              QHBoxLayout, QListWidgetItem, QSpinBox,
                              QLabel, QFileDialog, QMenu, QMessageBox,
-                             QInputDialog, QDialog, QFormLayout, QDateEdit,
-                             QAbstractButton)
+                             QInputDialog, QDialog, QFormLayout, QDateEdit)
 
 from PyQt6.QtGui import (QPixmapCache, QCursor, QAction)
 
@@ -65,12 +64,13 @@ class MainWindow(QWidget):
         self.p_count: int = 0
         self.init_ui()
 
+        self.pack_filter = self.DEFAULT_FILTER
+
         self.update_pack_count()
         self.filter_packs(True)
 
     def init_ui(self) -> None:
         """Intializes layouts and widgets for the UI."""
-        self.pack_filter = self.DEFAULT_FILTER
 
         self.main_layout = QVBoxLayout()
         self.setLayout(self.main_layout)
@@ -194,6 +194,12 @@ class MainWindow(QWidget):
         menu.exec(pos)
 
     def check_for_filter_dia(self) -> bool:
+        """Function to check if the filter dialog is already running to prevent
+        the user from opening another.
+
+        Returns:
+            bool: False if not open and true if open.
+        """
         return any(isinstance(c, PackFilterDialog) for c in self.children())
 
     @pyqtSlot()
@@ -287,15 +293,28 @@ class MainWindow(QWidget):
 
     def retrieve_set_list_info(self, item: QListWidgetItem | str
                                ) -> tuple[str, int]:
+        """Reformats a string with a count and the name of the set back
+        into a int and str.
+
+        Args:
+            item (QListWidgetItem | str): Item to be checked, either can
+                be a list item to be extracted or a ready string.
+
+        Raises:
+            ValueError: If the item is not a valid str it raises an
+                error.
+
+        Returns:
+            tuple[str, int]: Name of the pack and pack count in a tuple.
+        """
         text = item
         if isinstance(text, QListWidgetItem):
             text = text.text()
         try:
             cnt, label = text.split("x ")
+            return label, int(cnt)
         except ValueError as v:
             raise v
-
-        return label, int(cnt)
 
     def update_indi(self, value: int) -> None:
         """Updates pack count indicators depending on the values provided
@@ -466,7 +485,6 @@ class MainWindow(QWidget):
 
         with QSignalBlocker(self.select_pack):
             self.select_pack.clear()
-            self.current_card_set = card_set
             packs = [item.set_name for item in card_set]
             self.select_pack.addItems(packs)
 
@@ -522,6 +540,20 @@ class MainWindow(QWidget):
             self.add_item(card_set)
 
     def find_card_set(self, label: str) -> CardSetModel:
+        """Find a cardset from all the available cardsets and
+        add return it.
+
+        Args:
+            label (str): Name of the target cardset.
+
+        Raises:
+            KeyError: If the card_set is not available or the
+                name is invalid it returns a key erro.
+
+        Returns:
+            CardSetModel: CardSet with the same names as the
+                target label.
+        """
         for item in self.yugi_pro.card_set:
             if item.set_name == label:
                 return item
