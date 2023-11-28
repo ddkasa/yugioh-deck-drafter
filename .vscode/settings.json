@@ -1,0 +1,19 @@
+{  
+    "python.autoComplete.extraPaths": [
+        "./**",
+    ],
+    "python.languageServer": "Default", 
+    "python.analysis.typeCheckingMode": "basic",
+    "editor.rulers": [79, 20],
+    "workbench.colorCustomizations": {
+        "editorRuler.foreground": "#ffffff50"
+    },
+    "python.testing.pytestArgs": [
+        "tests"
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true,
+    "python.analysis.extraPaths": [
+        "./**"
+    ],
+}

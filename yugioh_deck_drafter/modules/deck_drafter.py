@@ -32,7 +32,8 @@ from PyQt6.QtGui import (
     QImage,
     QCursor,
     QDrag,
-    QMouseEvent
+    QMouseEvent,
+    QCloseEvent
 )
 
 from PyQt6.QtWidgets import (
@@ -55,7 +56,7 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QButtonGroup,
     QStackedWidget,
-    QProgressBar
+    QProgressBar,
 )
 
 from yugioh_deck_drafter.modules.ygo_data import (CardModel, CardSetModel,
@@ -662,7 +663,33 @@ class DraftingDialog(QDialog):
         self.update_counter_label()
 
     def minimumSize(self) -> QSize:
-        return QSize(1344, 824)  # Base on 1080 screen resolution
+        """Minimum size for the drafting for clearer reading.
+
+        Returns:
+            QSize: Minimum size of the window based on 1080p resolution.
+        """
+        return QSize(1344, 824)
+
+    def closeEvent(self, event: QCloseEvent | None):
+        """Overriden closeEvent to catch closing out the window as an
+        accidental closing can lose a lot of progress.
+
+        Args:
+            event (QCloseEvent): event to be catched and declined/accepted.
+        """
+        if event is None:
+            return
+        close = QMessageBox.question(
+            self,
+            "Quit",
+            "Are you sure want to quit the drafting process?",
+            (QMessageBox.StandardButton.No
+                | QMessageBox.StandardButton.Yes)
+            )
+        if close == QMessageBox.StandardButton.Yes:
+            event.accept()
+        else:
+            event.ignore()
 
 
 class CardButton(QPushButton):
