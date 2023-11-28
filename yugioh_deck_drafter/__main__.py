@@ -737,11 +737,17 @@ class CheckableListWidget(QListWidget):
         checked_items_to_list: Quick function for return checked items.
     """
 
-    def __init__(self) -> None:
-        super().__init__()
-
     def add_items(self, items: set[str | None] | enum.EnumMeta,
                   set_classes: set[CardSetClass]) -> None:
+        """Extra addItems method for quick adding Enums as a list ontop of 
+        strings
+
+        Args:
+            items (set[str  |  None] | enum.EnumMeta): A set of enumerations or
+                strings for adding to the list
+            set_classes (set[CardSetClass]): A list of enums previously checked
+                by the user or defaults.
+        """
 
         for item in items:
             if item is None:
@@ -762,6 +768,12 @@ class CheckableListWidget(QListWidget):
             self.addItem(list_item)
 
     def checked_items_to_set(self) -> set[str]:
+        """Custom method tfor quickly collecting all checked items inside the
+        list.
+
+        Returns:
+            set[str]: Items that were checked inside the widget.
+        """
         check_items = set()
         for i in range(self.count()):
             item = self.item(i)
@@ -782,7 +794,7 @@ def main(argv: list):
     logging.info("Starting %s!", NAME)
 
     app = QApplication(argv)
-    app.setStyle("Fusion")
+    app.setStyle("fusion")
 
     QPixmapCache.setCacheLimit(100000)
 

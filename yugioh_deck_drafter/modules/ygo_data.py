@@ -120,7 +120,7 @@ class YugiObj:
         PROB (defaultdict): probablities for each type of card rarity.
     """
 
-    CACHE = requests_cache.CachedSession("cache\\ygoprodeck.sqlite",
+    CACHE = requests_cache.CachedSession(str(Path("cache/ygoprodeck.sqlite")),
                                          backend="sqlite")
     PROB: Final[defaultdict[str, float]] = defaultdict(
         lambda: 2.8571428571,
@@ -259,7 +259,7 @@ class YugiObj:
             QPixmap | None: Image in a pixmap format ready to displayed on the
                 PyQt GUI.
         """
-        image_store = Path(r"assets\images\card_art")
+        image_store = Path("assets/images/card_art")
         image_store.mkdir(parents=True, exist_ok=True)
 
         card_art_id = card.card_id
@@ -294,7 +294,7 @@ class YugiObj:
         Returns:
             QPixmap | None: _description_
         """
-        image_store = Path(r"assets\images\set_art")
+        image_store = Path(r"assets/images/set_art")
         image_store.mkdir(parents=True, exist_ok=True)
         set_code = set_model.set_code
         image_path = image_store / str(str(set_code) + ".jpg")
@@ -339,7 +339,7 @@ class YugiObj:
                                  timeout=10)
 
         if request.status_code != 200:
-            logging.warning(f"Failed to fetch card {subtype}. Skipping!")
+            logging.warning("Failed to fetch card %s. Skipping!", subtype)
             logging.warning("Status Code: %s", request.status_code)
             return
 
@@ -362,7 +362,7 @@ class YugiObj:
         if request.status_code != 200:
             logging.warning("Failed to grab %s. Skipping!", name)
             logging.warning("Status Code: %s", request.status_code)
-            return
+            return None
 
         return request.json()["data"]
 
