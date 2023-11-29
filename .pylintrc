@@ -433,7 +433,9 @@ disable=raw-checker-failed,
         use-implicit-booleaness-not-comparison-to-zero,
         too-many-instance-attributes,
         no-name-in-module,
-        attribute-defined-outside-init
+        attribute-defined-outside-init,
+        invalid-name,
+        useless-parent-delegation
 
 # Enable the message, report, category or checker with the given id(s). You can
 # either give multiple identifier separated by comma (,) or put this option

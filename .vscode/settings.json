@@ -16,4 +16,5 @@
     "python.analysis.extraPaths": [
         "./**"
     ],
+    "editor.stickyScroll.scrollWithEditor": false,
 }

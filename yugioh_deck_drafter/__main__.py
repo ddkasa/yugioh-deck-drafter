@@ -470,7 +470,7 @@ class MainWindow(QMainWindow):
             quick (bool, optional): If enabled it will just randomise the cards
                 with the current card_set filter and skip opening the dialog.
                 Defaults to False.
-        """
+        """        
         dialog = RandomPacks(self, self.yugi_pro.card_set.copy(),
                              self.filter)
         if quick:
@@ -773,7 +773,7 @@ class CheckableListWidget(QListWidget):
                 continue
             name = item
             if isinstance(name, enum.Enum):
-                name = name.name.replace("_", " ")
+                name = name.name.replace("_", " ").title()
 
             list_item = QListWidgetItem(name)  # type: ignore
             list_item.setFlags(list_item.flags() |
@@ -787,7 +787,7 @@ class CheckableListWidget(QListWidget):
             self.addItem(list_item)
 
     def checked_items_to_set(self) -> set[str]:
-        """Custom method tfor quickly collecting all checked items inside the
+        """Custom method for quickly collecting all checked items inside the
         list.
 
         Returns:
@@ -798,7 +798,7 @@ class CheckableListWidget(QListWidget):
             item = self.item(i)
             if item is None or item.checkState() != Qt.CheckState.Checked:
                 continue
-            check_items.add(item.text())
+            check_items.add(item.text().upper())
 
         return check_items
 
