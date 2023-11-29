@@ -4,9 +4,13 @@ QScrollArea {
     }
 
 
-M
+QWidget {
+    background: black;
+    color: white;
+}
 
-# QLabel
+
+/* QLabel */
 QLabel {
     background: black;
     color: white;
@@ -21,3 +25,5 @@ QLabel#subtitle {
     font-weight: 400;
     font-size: 16px;
     }
+
+/* QPushButton */

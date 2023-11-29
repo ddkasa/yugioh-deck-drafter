@@ -26,28 +26,28 @@ from yugioh_deck_drafter import util
 
 class CardSetClass(enum.Enum):
     """Enumeration for filtering and selecting specfic types of card
-    sets."""
-    Booster_Pack = enum.auto()
-    Promotional = enum.auto()
-    Starter_Deck = enum.auto()
-    Tournament = enum.auto()
-    Tin = enum.auto()
-    Participation = enum.auto()
-    Special_Edition = enum.auto()
-    Exclusive = enum.auto()
-    Prize = enum.auto()
-    Movie = enum.auto()
-    Master_Collection = enum.auto()
-    Structure_Deck = enum.auto()
-    Duelist_Pack = enum.auto()
-    Champion_Pack = enum.auto()
-    Anniversary = enum.auto()
-    Premium = enum.auto()
-    Deck = enum.auto()
-    Demo = enum.auto()
-    Advent_Calendar = enum.auto()
-    Collector_Box = enum.auto()
-    Collection = enum.auto()
+    sets. Matched against the names of sets to allow for categorising."""
+    BOOSTER_PACK = enum.auto()
+    PROMOTIONAL = enum.auto()
+    STARTER_DECK = enum.auto()
+    TOURNAMENT = enum.auto()
+    TIN = enum.auto()
+    PARTICIPATION = enum.auto()
+    SPECIAL_EDITION = enum.auto()
+    EXCLUSIVE = enum.auto()
+    PRIZE = enum.auto() 
+    MOVIE = enum.auto()
+    MASTER_COLLECTION = enum.auto()
+    STRUCTURE_DECK = enum.auto()
+    DUELIST_PACK = enum.auto()
+    CHAMPION_PACK = enum.auto()
+    ANNIVERSARY = enum.auto()
+    PREMIUM = enum.auto()
+    DECK = enum.auto()
+    DEMO = enum.auto()
+    ADVENT_CALENDAR = enum.auto()
+    COLLECTOR_BOX = enum.auto()
+    COLLECTION = enum.auto()
 
 
 @dataclass
@@ -218,10 +218,10 @@ class YugiObj:
         set_classes: set[CardSetClass] = set()
         for set_class in self.CARD_CLASS_NAMES:
             if set_class in set_name.lower():
-                sclass = CardSetClass[set_class.title().replace(" ", "_")]
+                sclass = CardSetClass[set_class.upper().replace(" ", "_")]
                 set_classes.add(sclass)
         if not set_classes:
-            set_classes.add(CardSetClass.Booster_Pack)
+            set_classes.add(CardSetClass.BOOSTER_PACK)
 
         return set_classes
 
@@ -484,8 +484,21 @@ class YugiObj:
         pack_set: list[CardSetModel],
         count_range: range,
         max_packs: int = 40
-        ) -> list[CardSetModel]:
+    ) -> list[CardSetModel]:
+        """Selects random packs based integer
+        Args:
+            pack_set (list[CardSetModel]): Collection of card_sets to select
+                from.
+            count_range (range): Minimum and Maximum amount of cards per
+                selection. Might be limited by numbers of cards in a set or
+                how cards have already been added.
+            max_packs (int, optional): Total amount of packs to be selected.
+                Defaults to 40.
 
+        Returns:
+            list[CardSetModel]: Randomised list of card sets based on the
+                parameters.
+        """
         pack_counter = 0
         packs_to_add = []
 
