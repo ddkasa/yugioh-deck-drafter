@@ -1,0 +1,23 @@
+QScrollArea {
+    border: 1px solid gray;
+    border-radius: 2px;
+    }
+
+
+M
+
+# QLabel
+QLabel {
+    background: black;
+    color: white;
+
+}
+
+QLabel#indicator {
+    border: 1px solid gray;
+    border-radius: 2px;
+    }
+QLabel#subtitle {
+    font-weight: 400;
+    font-size: 16px;
+    }

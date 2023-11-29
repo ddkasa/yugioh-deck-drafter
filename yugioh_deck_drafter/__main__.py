@@ -11,11 +11,12 @@ import re
 
 from PyQt6.QtCore import (Qt, pyqtSlot, QSignalBlocker)
 
-from PyQt6.QtWidgets import (QApplication, QPushButton, QWidget,
+from PyQt6.QtWidgets import (QApplication, QPushButton, QWidget, QMainWindow,
                              QComboBox, QVBoxLayout, QListWidget, QSlider,
                              QHBoxLayout, QListWidgetItem, QSpinBox,
                              QLabel, QFileDialog, QMenu, QMessageBox,
-                             QInputDialog, QDialog, QFormLayout, QDateEdit)
+                             QInputDialog, QDialog, QFormLayout, QDateEdit,
+                             QSizePolicy)
 
 from PyQt6.QtGui import (QPixmapCache, QCursor, QAction)
 
@@ -28,7 +29,7 @@ from yugioh_deck_drafter.modules.ygo_data import (DeckModel, CardSetModel,
                                                   CardSetFilter)
 
 
-class MainWindow(QWidget):
+class MainWindow(QMainWindow):
     """Main Window Class managing Pack Selection and general utilities.
 
     Attributes:
@@ -62,7 +63,11 @@ class MainWindow(QWidget):
 
         self.selected_packs: list[CardSetModel] = []
         self.p_count: int = 0
+
+        self.main_widget = QWidget()
+        self.setCentralWidget(self.main_widget)
         self.init_ui()
+
 
         self.pack_filter = self.DEFAULT_FILTER
 
@@ -71,9 +76,8 @@ class MainWindow(QWidget):
 
     def init_ui(self) -> None:
         """Intializes layouts and widgets for the UI."""
-
         self.main_layout = QVBoxLayout()
-        self.setLayout(self.main_layout)
+        self.main_widget.setLayout(self.main_layout)
 
         self.select_layout = QHBoxLayout()
         self.main_layout.addLayout(self.select_layout)
@@ -81,22 +85,24 @@ class MainWindow(QWidget):
         CMP = Qt.ContextMenuPolicy.CustomContextMenu
 
         self.select_pack = QComboBox()
-        self.select_layout.addWidget(self.select_pack, 50)
+        self.select_layout.addWidget(self.select_pack, 3)
         self.select_pack.setContextMenuPolicy(CMP)
         (self.select_pack.customContextMenuRequested
          .connect(self.pack_list_context_menu))
 
-        self.select_layout.addStretch(10)
+        self.select_layout.addStretch(1)
 
+        QSP = QSizePolicy.Policy
         self.no_packs = QSlider()
-        self.no_packs.setSingleStep(10)
+        self.no_packs.setSizePolicy(QSP.Minimum, QSP.Preferred)
+        self.no_packs.setSingleStep(5)
         self.no_packs.setTickPosition(QSlider.TickPosition.TicksBelow)
         self.no_packs.setTickInterval(10)
         self.no_packs.setOrientation(Qt.Orientation.Horizontal)
-        self.no_packs.setMinimum(10)
+        self.no_packs.setMinimum(5)
         self.no_packs.setValue(self.DEFAULT_PACK_COUNT)
         self.no_packs.setMaximum(self.PACK_MAX)
-        self.select_layout.addWidget(self.no_packs, 40)
+        self.select_layout.addWidget(self.no_packs, 1)
         self.no_packs.setContextMenuPolicy(CMP)
         (self.no_packs.customContextMenuRequested
          .connect(self.pack_list_context_menu))
@@ -168,6 +174,10 @@ class MainWindow(QWidget):
         random_packs.setDisabled(self.check_for_filter_dia())
         menu.addAction(random_packs)
         random_packs.triggered.connect(self.randomize_packs)
+
+        quick_random = QAction("Quick Randomise")
+        quick_random.triggered.connect(lambda: self.randomize_packs(True))
+        menu.addAction(quick_random)
 
         menu.addSeparator()
 
@@ -453,13 +463,24 @@ class MainWindow(QWidget):
         self.update_pack_count()
 
     @pyqtSlot()
-    def randomize_packs(self) -> None:
-        """Launches a dialog for randomizing card_set picks."""
+    def randomize_packs(self, quick: bool = False) -> None:
+        """Launches a dialog for randomizing card_set picks.
+
+        Args:
+            quick (bool, optional): If enabled it will just randomise the cards
+                with the current card_set filter and skip opening the dialog.
+                Defaults to False.
+        """
         dialog = RandomPacks(self, self.yugi_pro.card_set.copy(),
                              self.filter)
+        if quick:
+            return dialog.randomise_packs()
+
         dialog.setModal(not self.debug)
         dialog.show()
         dialog.exec()
+
+        return None
 
     @pyqtSlot(bool)
     def filter_packs(self, reset: bool = False):
@@ -712,8 +733,6 @@ class RandomPacks(PackFilterDialog):
         on the values chosen in the GUI"""
         logging.info("Randomising Cards and adding to ListWidget.")
 
-        self.parent().yugi_pro.card_set
-
         new_filter = self.create_filter()
         card_set = self.filter_cards(new_filter)
         count_range = range(5, self.pack_increments.value())
@@ -789,34 +808,21 @@ def main(argv: list):
        Main Function for starting the card set picking and deck drafting
        process.
     """
-    NAME = "YU-GI-OH Deck Creator"
+    app_name = "YU-GI-OH Deck Creator"
 
-    logging.info("Starting %s!", NAME)
+    logging.info("Starting %s!", app_name)
 
     app = QApplication(argv)
-    app.setStyle("fusion")
+    # app.setStyle("windows")
 
     QPixmapCache.setCacheLimit(100000)
 
     main_window = MainWindow()
-    main_window.setWindowTitle(NAME)
+    main_window.setWindowTitle(app_name)
 
-    style = """
-        QScrollArea {
-            border: 1px solid gray;
-            border-radius: 2px;
-            }
-        QLabel#indicator {
-            color: white;
-            border: 1px solid gray;
-            border-radius: 2px;
-            }
-        QLabel#subtitle {
-            color: white;
-            font-weight: 400;
-            font-size: 16px;
-            }
-        """
+    stylesheet = Path("yugioh_deck_drafter/styles/style.qss")
+    with stylesheet.open("r", encoding="utf-8") as file:
+        style = file.read()
 
     main_window.setStyleSheet(style)
     main_window.show()
