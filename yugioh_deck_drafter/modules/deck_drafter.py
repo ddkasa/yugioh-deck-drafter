@@ -6,7 +6,6 @@ import re
 import logging
 from functools import partial
 from dataclasses import dataclass, field
-from PyQt6 import QtCore
 
 from PyQt6.QtCore import (
     Qt,
@@ -185,6 +184,7 @@ class DraftingDialog(QDialog):
         self.progess_layout.addWidget(self.loading_label, 50)
 
         self.loading_bar = QProgressBar()
+        self.loading_bar.setAlignment(QAF.AlignCenter)
         self.loading_bar.setMinimum(0)
         self.loading_bar.setMaximum(9)
         self.loading_bar.setSizePolicy(QSizePolicy.Policy.Expanding,
@@ -216,13 +216,13 @@ class DraftingDialog(QDialog):
         self.button_layout = QHBoxLayout()
 
         self.check_deck_button = QPushButton("View Deck")
-        self.button_layout.addWidget(self.check_deck_button)
+        self.button_layout.addWidget(self.check_deck_button, 4)
         self.check_deck_button.pressed.connect(self.preview_deck)
 
         self.button_layout.addStretch(60)
 
         self.reset_selection = QPushButton("Reset Selection")
-        self.button_layout.addWidget(self.reset_selection)
+        self.button_layout.addWidget(self.reset_selection, 4)
         self.reset_selection.pressed.connect(self.clear_pack_selection)
 
         self.button_layout.addStretch(2)
@@ -255,7 +255,7 @@ class DraftingDialog(QDialog):
 
         self.next_button = QPushButton("Start")
         self.next_button.pressed.connect(self.sel_next_set)
-        self.button_layout.addWidget(self.next_button)
+        self.button_layout.addWidget(self.next_button, 4)
 
         self.drafting_layout.addLayout(self.button_layout)
 
@@ -841,7 +841,6 @@ class CardButton(QPushButton):
         pen_width = 5
         pen = QPen()
         if self.isChecked():
-            pen_width *= 1.25
             pen.setColor(Qt.GlobalColor.red)
             pen.setWidthF(pen_width)
             painter.setPen(pen)
@@ -852,15 +851,14 @@ class CardButton(QPushButton):
         else:
             painter.setPen(Qt.PenStyle.NoPen)
 
-        pen.setJoinStyle(Qt.PenJoinStyle.BevelJoin)  # type: ignore
+        pen.setJoinStyle(Qt.PenJoinStyle.MiterJoin)  # type: ignore
 
         new_rect = self.rect_generator(rect, pen_width)
-
         painter.drawRect(new_rect)
 
         if self.card_model.rarity != "Common":
             painter.save()
-            pen_width = 10
+            pen_width = 5
             new_rect = self.rect_generator(rect, pen_width)
             cmp = QPainter.CompositionMode.CompositionMode_ColorDodge
             painter.setCompositionMode(cmp)
@@ -1107,7 +1105,6 @@ class CardButton(QPushButton):
         self.resize(size)
 
 
-
 class DeckViewer(QDialog):
     """Deck viewer window for previewing and managing the deck through the
        drafting phases.
@@ -1130,7 +1127,7 @@ class DeckViewer(QDialog):
     """
     MAX_COLUMNS: Final[int] = 10
 
-    def __init__(self, parent: DraftingDialog, discard: int = 0):
+    def __init__(self, parent: DraftingDialog, discard: int = 0) ->:
         super().__init__(parent)
         self.setModal(not parent.parent().debug)
 
@@ -1232,13 +1229,7 @@ class DeckViewer(QDialog):
 
             card_button = CardButton(card, self.parent(), self)
 
-            if isinstance(scroll_bar, QScrollArea):
-                vscroll = scroll_bar.verticalScrollBar()
-                if vscroll is not None:
-                    vscroll.valueChanged.connect(card_button.repaint)
-                hscroll = scroll_bar.horizontalScrollBar()
-                if hscroll is not None:
-                    hscroll.valueChanged.connect(card_button.repaint)
+            self.connect_scroll_bar(scroll_bar, card_button)
 
             if not self.discard:
                 card_button.setCheckable(False)
@@ -1246,7 +1237,7 @@ class DeckViewer(QDialog):
                 card_button.toggled.connect(self.removal_count)
                 card_button.setChecked(check)
 
-            card_button.setSizePolicy(QSP.Fixed, QSP.Fixed)
+            card_button.setSizePolicy(QSP.Expanding, QSP.MinimumExpanding)
             container.append(card_button)
             if isinstance(layout, QHBoxLayout):
                 layout.addWidget(card_button)
@@ -1258,6 +1249,27 @@ class DeckViewer(QDialog):
 
         if isinstance(layout, QHBoxLayout):
             layout.insertStretch(-1, 1)
+
+    def connect_scroll_bar(
+        self,
+        scroll_bar: QScrollArea,
+        card_button: CardButton
+    ) -> None:
+        """Connects scrolling signal to a repaint function of the cards in
+        order to avoid render artifacting.
+
+        Args:
+            scroll_bar (QScrollArea): Scroll area to source the scrollbars
+                from.
+            card_button (CardButton): Cardbutton to repaint.
+        """
+        if isinstance(scroll_bar, QScrollArea):
+            vscroll = scroll_bar.verticalScrollBar()
+            if vscroll is not None:
+                vscroll.valueChanged.connect(card_button.repaint)
+            hscroll = scroll_bar.horizontalScrollBar()
+            if hscroll is not None:
+                hscroll.valueChanged.connect(card_button.repaint)
 
     def mv_card(self, card: CardButton, deck: Literal["main", "side"]):
         """Moves a card[CardButton] between the side and main deck.
@@ -1435,6 +1447,7 @@ class CardSearch(QDialog):
 
         if not isinstance(self.data, list):
             self.reject()
+            return
 
         self.main_layout = QVBoxLayout()
 
@@ -1449,7 +1462,7 @@ class CardSearch(QDialog):
 
         CMP = Qt.ContextMenuPolicy
 
-        for i, item in enumerate(self.data):
+        for item in self.data:
             card_button = CardButton(item, parent, None)
             card_button.setContextMenuPolicy(CMP.NoContextMenu)
             self.card_buttons.append(card_button)
@@ -1570,7 +1583,7 @@ class DeckWidget(QWidget):
         deck_type (str): Type of Deck {Side/Extra/Main} for label purposes.
         parent (DeckSlider): to access and manage the layout within the
                              DeckViewer and allow scrolling the layout
-    """
+    # """
 
     def __init__(self, deck_type: str, parent: DeckSlider):
         super().__init__(parent)
@@ -1578,7 +1591,7 @@ class DeckWidget(QWidget):
         self.name = deck_type
         QSP = QSizePolicy.Policy
 
-        self.setSizePolicy(QSP.Minimum, QSP.Minimum)
+        self.setSizePolicy(QSP.MinimumExpanding, QSP.MinimumExpanding)
 
     def paintEvent(self, event: QPaintEvent | None):
         """Draws the basic paint event of the widget.
@@ -1632,8 +1645,7 @@ class DeckDragWidget(DeckWidget):
         deck_type (str): Type of deck {Side/Extra/Main} for label purposes.
         parent (DeckSlider): To access and manage the layout within the
                              DeckViewer and allow scrolling the layout
-        orientation (Qt.Orientation): For choosing which directions the cards
-                                      slide.
+        orientation (Qt.Orientation): For choosing which directions the cardss
     """
 
     orderChanged = pyqtSignal()

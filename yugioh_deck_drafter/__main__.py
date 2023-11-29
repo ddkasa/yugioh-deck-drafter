@@ -263,8 +263,8 @@ class MainWindow(QMainWindow):
             card_set.count = cnt
 
         item = QListWidgetItem(f"{cnt}x {label}")
-        self.sel_card_set_list.addItem(item)
 
+        self.sel_card_set_list.addItem(item)
         self.selected_packs.append(card_set)
 
         self.update_pack_count()
@@ -470,13 +470,15 @@ class MainWindow(QMainWindow):
             quick (bool, optional): If enabled it will just randomise the cards
                 with the current card_set filter and skip opening the dialog.
                 Defaults to False.
-        """        
-        dialog = RandomPacks(self, self.yugi_pro.card_set.copy(),
-                             self.filter)
-        if quick:
-            return dialog.randomise_packs()
+        """
+        dialog = RandomPacks(self, self.yugi_pro.card_set.copy(), self.filter)
 
-        dialog.setModal(not self.debug)
+        if quick:
+            dialog.randomise_packs()
+            dialog.reject()
+            dialog.deleteLater()
+            return None
+
         dialog.show()
         dialog.exec()
 
@@ -706,6 +708,7 @@ class RandomPacks(PackFilterDialog):
                  previous_filter: CardSetFilter) -> None:
         super().__init__(parent=parent, card_set=card_set,
                          previous_filter=previous_filter)
+        self.setModal(False)
         self.setWindowTitle("Randomise Sets")
 
         self.total_packs = QSpinBox()

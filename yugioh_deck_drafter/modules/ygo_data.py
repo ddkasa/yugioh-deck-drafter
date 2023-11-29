@@ -35,7 +35,7 @@ class CardSetClass(enum.Enum):
     PARTICIPATION = enum.auto()
     SPECIAL_EDITION = enum.auto()
     EXCLUSIVE = enum.auto()
-    PRIZE = enum.auto() 
+    PRIZE = enum.auto()
     MOVIE = enum.auto()
     MASTER_COLLECTION = enum.auto()
     STRUCTURE_DECK = enum.auto()
@@ -122,6 +122,7 @@ class YugiObj:
 
     CACHE = requests_cache.CachedSession(str(Path("cache/ygoprodeck.sqlite")),
                                          backend="sqlite")
+
     PROB: Final[defaultdict[str, float]] = defaultdict(
         lambda: 2.8571428571,
         {"Common": 80,
@@ -230,6 +231,7 @@ class YugiObj:
         url = "https://db.ygoprodeck.com/api/v7/cardinfo.php?cardset={0}"
         request = self.CACHE.get(url.format(card_set.set_name),
                                  timeout=20)
+
         data = request.json()
         if request.status_code != 200 or not isinstance(data, dict):
             logging.critical("Failed to fetch Card Sets. Exiting!")

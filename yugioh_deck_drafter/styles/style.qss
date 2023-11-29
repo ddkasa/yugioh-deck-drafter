@@ -1,9 +1,8 @@
 /* Widgets */
 QScrollArea {
     border: 1px solid gray;
-    border-radius: 2px;
+    border-radius: 5px;
     }
-
 
 QWidget {
     background: #1e0f24;
@@ -15,16 +14,30 @@ QWidget {
 /* QLabel */
 QLabel {
     color: #F05941;
-
 }
 
 QLabel#indicator {
     border: 1px solid gray;
-    border-radius: 2px;
+    border-radius: 5px;
     }
 QLabel#subtitle {
     font-weight: 400;
     font-size: 16px;
     }
 
-/* QPushButton */
+
+/* Buttons */
+QPushButton::hover, QToolButton::hover  {
+    border: 3px solid #ffa4a44e;
+    border-radius: 5px;
+}
+
+
+/* QMenu */
+QMenu::item:disabled {
+    color: #ffa45a4e;
+}
+
+QMenu::item:selected {
+    color: #ffa4a44e;
+}

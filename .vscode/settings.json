@@ -17,4 +17,5 @@
         "./**"
     ],
     "editor.stickyScroll.scrollWithEditor": false,
+    "pylint.cwd": "${workspaceFolder}/yugioh_deck_drafter",
 }
