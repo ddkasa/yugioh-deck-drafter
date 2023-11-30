@@ -4,7 +4,7 @@
     ],
     "python.languageServer": "Default", 
     "python.analysis.typeCheckingMode": "basic",
-    "editor.rulers": [79, 20],
+    "editor.rulers": [79],
     "workbench.colorCustomizations": {
         "editorRuler.foreground": "#ffffff50"
     },

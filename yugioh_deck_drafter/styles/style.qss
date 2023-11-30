@@ -21,6 +21,7 @@ QLabel#indicator {
     border-radius: 5px;
     }
 QLabel#subtitle {
+    
     font-weight: 400;
     font-size: 16px;
     }

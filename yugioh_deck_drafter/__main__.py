@@ -482,6 +482,8 @@ class MainWindow(QMainWindow):
         dialog.show()
         dialog.exec()
 
+
+
         return None
 
     @pyqtSlot(bool)

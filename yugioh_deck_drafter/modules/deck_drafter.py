@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Optional, Final, Literal
 import random
 import re
 import logging
+import math
 from functools import partial
 from dataclasses import dataclass, field
 
@@ -15,7 +16,8 @@ from PyQt6.QtCore import (
     QRectF,
     QRect,
     QSignalBlocker,
-    QMimeData
+    QMimeData,
+    QPoint
     )
 
 from PyQt6.QtGui import (
@@ -37,6 +39,7 @@ from PyQt6.QtGui import (
 )
 
 from PyQt6.QtWidgets import (
+    QLayoutItem,
     QWidget,
     QDialog,
     QGridLayout,
@@ -57,6 +60,7 @@ from PyQt6.QtWidgets import (
     QButtonGroup,
     QStackedWidget,
     QProgressBar,
+    QLayout
 )
 
 from yugioh_deck_drafter.modules.ygo_data import (CardModel, CardSetModel,
@@ -216,13 +220,13 @@ class DraftingDialog(QDialog):
         self.button_layout = QHBoxLayout()
 
         self.check_deck_button = QPushButton("View Deck")
-        self.button_layout.addWidget(self.check_deck_button, 4)
+        self.button_layout.addWidget(self.check_deck_button, 20)
         self.check_deck_button.pressed.connect(self.preview_deck)
 
         self.button_layout.addStretch(60)
 
         self.reset_selection = QPushButton("Reset Selection")
-        self.button_layout.addWidget(self.reset_selection, 4)
+        self.button_layout.addWidget(self.reset_selection, 20)
         self.reset_selection.pressed.connect(self.clear_pack_selection)
 
         self.button_layout.addStretch(2)
@@ -255,7 +259,7 @@ class DraftingDialog(QDialog):
 
         self.next_button = QPushButton("Start")
         self.next_button.pressed.connect(self.sel_next_set)
-        self.button_layout.addWidget(self.next_button, 4)
+        self.button_layout.addWidget(self.next_button, 20)
 
         self.drafting_layout.addLayout(self.button_layout)
 
@@ -450,10 +454,9 @@ class DraftingDialog(QDialog):
 
             self.loading_bar.setValue(column + 1)
             self.loading_label.setText(f"Loading: {card_data.name}")
-
+            QApplication.processEvents()
             row = 0
             if column % 2 != 0:
-                QApplication.processEvents()
                 row = 1
                 column -= 1
 
@@ -1102,7 +1105,7 @@ class CardButton(QPushButton):
             width = round(size.height() * self.ASPECT_RATIO[0])
             size.setWidth(width)
 
-        self.resize(size)
+        self.setGeometry(QRect(self.pos(), size))
 
 
 class DeckViewer(QDialog):
@@ -1127,7 +1130,7 @@ class DeckViewer(QDialog):
     """
     MAX_COLUMNS: Final[int] = 10
 
-    def __init__(self, parent: DraftingDialog, discard: int = 0) ->:
+    def __init__(self, parent: DraftingDialog, discard: int = 0) -> None:
         super().__init__(parent)
         self.setModal(not parent.parent().debug)
 
@@ -1237,7 +1240,7 @@ class DeckViewer(QDialog):
                 card_button.toggled.connect(self.removal_count)
                 card_button.setChecked(check)
 
-            card_button.setSizePolicy(QSP.Expanding, QSP.MinimumExpanding)
+            card_button.setSizePolicy(QSP.Expanding, QSP.Preferred)
             container.append(card_button)
             if isinstance(layout, QHBoxLayout):
                 layout.addWidget(card_button)
@@ -1591,7 +1594,7 @@ class DeckWidget(QWidget):
         self.name = deck_type
         QSP = QSizePolicy.Policy
 
-        self.setSizePolicy(QSP.MinimumExpanding, QSP.MinimumExpanding)
+        self.setSizePolicy(QSP.Preferred, QSP.Preferred)
 
     def paintEvent(self, event: QPaintEvent | None):
         """Draws the basic paint event of the widget.
@@ -1645,17 +1648,14 @@ class DeckDragWidget(DeckWidget):
         deck_type (str): Type of deck {Side/Extra/Main} for label purposes.
         parent (DeckSlider): To access and manage the layout within the
                              DeckViewer and allow scrolling the layout
-        orientation (Qt.Orientation): For choosing which directions the cardss
     """
 
     orderChanged = pyqtSignal()
 
-    def __init__(self, deck_type: str, parent: DeckSlider,
-                 orientation=Qt.Orientation.Horizontal):
+    def __init__(self, deck_type: str, parent: DeckSlider):
         super(DeckDragWidget, self).__init__(deck_type, parent)
         self.name = deck_type
         self.setAcceptDrops(True)
-        self.orientation = orientation
 
         self.main_layout = QHBoxLayout()
         self.main_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
@@ -1694,10 +1694,7 @@ class DeckDragWidget(DeckWidget):
             if widget is None:
                 continue
 
-            if self.orientation == Qt.Orientation.Vertical:
-                drop_here = pos.y() < widget.y() + widget.size().height() // 2
-            else:
-                drop_here = pos.x() < widget.x() + widget.size().width() // 2
+            drop_here = pos.x() < widget.x() + widget.size().width() // 2
 
             if drop_here:
                 self.main_layout.insertWidget(n - 1, widget)
@@ -1719,3 +1716,72 @@ class DeckDragWidget(DeckWidget):
         widget.deleteLater()
         widget.setParent(None)  # type: ignore
         self.orderChanged.emit()
+
+
+class CardLayout(QLayout):
+
+    def __init__(
+        self,
+        rows: int = 1,
+        parent: Optional[QWidget] = None
+    ) -> None:
+        super().__init__(parent)
+        self._rows = rows
+        self._card_items = []
+
+    def addItem(self, cards: QLayoutItem | None) -> None:
+        if cards is None:
+            return
+        self._card_items.append(cards)
+
+    def sizeHint(self) -> QSize:
+        card_size = CardButton.BASE_SIZE
+        width = (card_size.width() * self.columns())
+        height = (card_size.height() + self.spacing()) * self.rows
+        size_hint = QSize(width, height)
+        return size_hint
+
+    def itemAt(self, index: int) -> QLayoutItem | None:
+        try:
+            return self._card_items[index]
+        except IndexError:
+            return
+
+    def takeAt(self, index: int) -> QLayoutItem | None:
+        try:
+            return self._card_items.pop(index)
+        except IndexError:
+            return
+
+    def count(self) -> int:
+        return len(self._card_items)
+
+    def minimumSize(self) -> QSize:
+        return self.sizeHint()
+
+    def hasHeightForWidth(self) -> bool:
+        return True
+
+    def heightForWidth(self, width: int) -> int:
+        return round(width * CardButton.ASPECT_RATIO[1])
+
+    def setGeometry(self, rect: QRect) -> None:
+        spacing = self.spacing()
+        width = rect.width() // self.rows - spacing
+
+        size = QSize(width, self.heightForWidth(width))
+        pt = QPoint(spacing, spacing)
+
+        for i, item in enumerate(self._card_items):
+            if i % self.rows == 0 and i:
+                pt = QPoint(spacing, pt.y())
+                pt.setY(pt.y() + size.height() + spacing)
+            item.setGeometry(QRect(pt, size))
+            pt.setX(pt.x() + size.width() + spacing)
+
+    def columns(self) -> int:
+        return math.ceil(self.count() / self.rows)
+
+    @property
+    def rows(self) -> int:
+        return self._rows
