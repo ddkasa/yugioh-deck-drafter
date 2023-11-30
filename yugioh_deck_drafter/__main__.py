@@ -1,32 +1,29 @@
 """Main Deck Builder Python Script"""
 
-from typing import Final, Optional
+import enum
 import logging
+import re
 import sys
 import traceback
-from pathlib import Path
 from functools import partial
-import enum
-import re
-
-from PyQt6.QtCore import (Qt, pyqtSlot, QSignalBlocker)
-
-from PyQt6.QtWidgets import (QApplication, QPushButton, QWidget, QMainWindow,
-                             QComboBox, QVBoxLayout, QListWidget, QSlider,
-                             QHBoxLayout, QListWidgetItem, QSpinBox,
-                             QLabel, QFileDialog, QMenu, QMessageBox,
-                             QInputDialog, QDialog, QFormLayout, QDateEdit,
-                             QSizePolicy)
-
-from PyQt6.QtGui import (QPixmapCache, QCursor, QAction)
+from pathlib import Path
+from typing import Final, Optional
 
 import pyperclip as clipboard
+from PyQt6.QtCore import QSignalBlocker, Qt, pyqtSlot
+from PyQt6.QtGui import QAction, QCursor, QPixmapCache
+from PyQt6.QtWidgets import (QApplication, QComboBox, QDateEdit, QDialog,
+                             QFileDialog, QFormLayout, QHBoxLayout,
+                             QInputDialog, QLabel, QListWidget,
+                             QListWidgetItem, QMainWindow, QMenu, QMessageBox,
+                             QPushButton, QSizePolicy, QSlider, QSpinBox,
+                             QVBoxLayout, QWidget)
 
 from yugioh_deck_drafter import util
 from yugioh_deck_drafter.modules.deck_drafter import DraftingDialog
-from yugioh_deck_drafter.modules.ygo_data import (DeckModel, CardSetModel,
-                                                  YugiObj, CardSetClass,
-                                                  CardSetFilter)
+from yugioh_deck_drafter.modules.ygo_data import (CardSetClass, CardSetFilter,
+                                                  CardSetModel, DeckModel,
+                                                  YugiObj)
 
 
 class MainWindow(QMainWindow):

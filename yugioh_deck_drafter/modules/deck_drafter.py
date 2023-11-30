@@ -1,72 +1,29 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Optional, Final, Literal, NamedTuple
-import sys
-import random
-import re
+
 import logging
 import math
-from functools import partial
+import random
+import re
+import sys
 from dataclasses import dataclass, field
-from PyQt6 import QtCore, QtGui
+from functools import partial
+from typing import TYPE_CHECKING, Final, Literal, NamedTuple, Optional
 
-from PyQt6.QtCore import (
-    Qt,
-    QSize,
-    pyqtSlot,
-    pyqtSignal,
-    QRectF,
-    QRect,
-    QSignalBlocker,
-    QMimeData,
-    QPoint
-    )
+from PyQt6.QtCore import (QMimeData, QPoint, QRect, QRectF, QSignalBlocker,
+                          QSize, Qt, pyqtSignal, pyqtSlot)
+from PyQt6.QtGui import (QBrush, QCursor, QDrag, QDragEnterEvent,
+                         QDropEvent, QFont, QImage, QKeyEvent, QMouseEvent,
+                         QPainter, QPaintEvent, QPen, QPixmap)
+from PyQt6.QtWidgets import (QApplication, QButtonGroup, QCompleter, QDialog,
+                             QHBoxLayout, QLabel, QLayout, QLayoutItem,
+                             QLineEdit, QMenu, QMessageBox, QProgressBar,
+                             QPushButton, QScrollArea, QSizePolicy, QWidget,
+                             QStackedWidget, QStyle, QStyleOptionButton,
+                             QVBoxLayout)
 
-from PyQt6.QtGui import (
-    QResizeEvent,
-    QDropEvent,
-    QDragEnterEvent,
-    QPainter,
-    QPaintEvent,
-    QFont,
-    QKeyEvent,
-    QBrush,
-    QPen,
-    QPixmap,
-    QImage,
-    QCursor,
-    QDrag,
-    QMouseEvent,
-    QCloseEvent
-)
-
-from PyQt6.QtWidgets import (
-    QLayoutItem,
-    QWidget,
-    QDialog,
-    QGridLayout,
-    QVBoxLayout,
-    QHBoxLayout,
-    QPushButton,
-    QLabel,
-    QMessageBox,
-    QScrollArea,
-    QSizePolicy,
-    QApplication,
-    QStyleOptionButton,
-    QStyle,
-    QMenu,
-    QSpacerItem,
-    QCompleter,
-    QLineEdit,
-    QButtonGroup,
-    QStackedWidget,
-    QProgressBar,
-    QLayout
-)
-
+from yugioh_deck_drafter import util
 from yugioh_deck_drafter.modules.ygo_data import (CardModel, CardSetModel,
                                                   DeckModel)
-from yugioh_deck_drafter import util
 
 if TYPE_CHECKING:
     from yugioh_deck_drafter.__main__ import MainWindow
@@ -113,6 +70,8 @@ class DraftingDialog(QDialog):
         CARDS_PER_PACK (int): How many cards each pack contains.
         deck (DeckModel): Mostly for storing the selected card data and
             tranferring between widgets.
+        drafting_model (DeckModel): Holds important drafting information for
+            checking different stages of the drafting process.
 
     Args:
         parent (MainWindow): For retrieving, managing and finalzing the
@@ -1688,6 +1647,20 @@ class DeckDragWidget(DeckWidget):
 
 
 class CardLayout(QLayout):
+    """Layout for displaying cards in a proper aspect ration and taking up size
+    correctly.
+
+    Attributes | Args:
+        rows (int): Total rows to be displayed when showing added items. If at
+            default (-1) it will uses the column count to determine row count.
+        columns (int): Total columns for the layout. Defaults to 10.
+        v_scroll, h_scroll (bool): Check if its okay to expanding in either
+            direction. Will prioritize vertical scrolling if both values are
+            true. Defaults to False.
+        aspect_ratio (NamedTuple): Original aspect ratio from the cards used
+            for sizing up the layout items
+        card_items (list): Where the layout items are stored.
+    """
 
     def __init__(
         self,
@@ -1697,21 +1670,30 @@ class CardLayout(QLayout):
         parent: Optional[QWidget] = None
     ) -> None:
         super().__init__(parent)
-        self._columns = columns
         self._rows = rows
+        self._columns = max(columns, 1)
         self.v_scroll, self.h_scroll = scroll
         self._aspect_ratio = CardButton.ASPECT_RATIO
         self._card_items: list[QLayoutItem] = []
 
-    def addWidget(self, widget: QWidget | None) -> None:
-        return super().addWidget(widget)
-
     def addItem(self, cards: QLayoutItem | None) -> None:
+        """Overriden abstract method for adding item to the list.
+
+        Args:
+            cards (QLayoutItem | None): Item to be added to the item_list.
+        """
         if cards is None:
             return
         self._card_items.append(cards)
 
     def sizeHint(self) -> QSize:
+        """Overrided abstract SizeHint method for keeping to size of the layout
+        for minimum item sin the cards.
+
+        Returns:
+            QSize: Minimum size of the layout.
+        """
+        # This might need overhaul in the future in order to be more flexible.
         card_size = CardButton.BASE_SIZE
         width = (card_size.width() + self.spacing()) * self.columns()
         height = (card_size.height() + self.spacing()) * self.rows()
@@ -1719,30 +1701,67 @@ class CardLayout(QLayout):
         return size_hint
 
     def itemAt(self, index: int) -> QLayoutItem | None:
+        """Overriden abstract method in order to select items in the layout.
+        """
         try:
             return self._card_items[index]
         except IndexError:
             return
 
     def takeAt(self, index: int) -> QLayoutItem | None:
+        """Overriden abstract method in order to remove items from the layout.
+        """
         try:
             return self._card_items.pop(index)
         except IndexError:
             return
 
     def count(self) -> int:
+        """For checking the size of the layout and managing sizes.
+
+        Returns:
+            int: How many items that have been added to the layout.
+        """
         return len(self._card_items)
 
     def minimumSize(self) -> QSize:
+        """Minimum Size of the layout based on the SizeHint which should be 
+        reimplemented in the future."""
         return self.sizeHint()
 
     def heightForWidth(self, width: int) -> int:
+        """Returns the height in ratio of the given width.
+
+        Args:
+            width (int): Width of the current item.
+
+        Returns:
+            int: Height of the item scaled on the preset ratio.
+        """
         return math.ceil(width * self._aspect_ratio.height)
 
     def widthForHeight(self, height: int) -> int:
+        """Width of the item based on the height on the height of the item.
+
+        Args:
+            height (int): Height of the current item.
+
+        Returns:
+            int: Width of the item scaled on the preset ratio.
+        """
         return math.ceil(height * self._aspect_ratio.width)
 
     def setGeometry(self, rect: QRect) -> None:
+        """Main function of the layout which determines the sizing, direction
+        and positioning of each layout item.
+
+        *Will need a refactor in the future in order to be more flexible with a
+            refactor of the sizhint and minimum size functions.
+        *Also will need a refactor in order to clean the function a bit more.
+
+        Args:
+            rect (QRect): Size of the layout where to disperse the items on.
+        """
         if not self.count():
             return super().setGeometry(rect)
 
@@ -1786,11 +1805,25 @@ class CardLayout(QLayout):
         self.update()
 
     def columns(self) -> int:
+        """Returns a total amount of columns depening on what the row attribute
+        was set at.
+
+        Returns:
+            int: Either a set amount of columns or the row implementation of
+                the widget.
+        """
         if self._rows < 1:
             return self._columns
         return math.ceil(self.count() / self.rows())
 
     def rows(self) -> int:
+        """Total amount of rows inside the layout depedning on if they are set
+        to 0.
+
+        Returns:
+            int: Row count depening on the preset rows or columns inside the
+                layout.
+        """
         if self._rows > 0:
             return self._rows
         return math.ceil(self.count() / self._columns)

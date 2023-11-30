@@ -4,20 +4,19 @@ Classes & Functions for managing the YGOPRODECK API communication, modelling
 card sets/cards and exporting to the .ydk format.
 """
 
-import sys
-from typing import NamedTuple, Optional, Any, Final
-import logging
-from datetime import date, datetime
-from dataclasses import dataclass, field
-from pathlib import Path
-from urllib.parse import quote
-from collections import defaultdict
-from random import randint, choice
 import enum
+import logging
+import sys
+from collections import defaultdict
+from dataclasses import dataclass, field
+from datetime import date, datetime
+from pathlib import Path
+from random import choice, randint
+from typing import Any, Final, NamedTuple, Optional
+from urllib.parse import quote
 
 import requests
 import requests_cache
-
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import QMessageBox
 
