@@ -7,6 +7,7 @@ import logging
 import math
 from functools import partial
 from dataclasses import dataclass, field
+from PyQt6 import QtCore, QtGui
 
 from PyQt6.QtCore import (
     Qt,
@@ -459,7 +460,6 @@ class DraftingDialog(QDialog):
             self.loading_bar.setValue(column + 1)
             self.loading_label.setText(f"Loading: {card_data.name}")
             QApplication.processEvents()
-   
 
             card = CardButton(card_data, self)
 
@@ -738,10 +738,14 @@ class CardButton(QPushButton):
     BASE_SIZE = QSize(164, 242)
     ASPECT_RATIO = AspectRatio(0.650793651, 1.4756097561)
 
-    def __init__(self, data: CardModel,
-                 parent: DraftingDialog,
-                 viewer: Optional['DeckViewer'] = None) -> None:
+    def __init__(
+        self,
+        data: CardModel,
+        parent: DraftingDialog,
+        viewer: Optional['DeckViewer'] = None
+    ) -> None:
         super().__init__(parent=parent)
+
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
         if isinstance(viewer, DeckViewer):
@@ -779,21 +783,8 @@ class CardButton(QPushButton):
         """
         return self.BASE_SIZE
 
-    # def sizeHint(self) -> QSize:
-    #     """Overriden size to keep the card ratio in control
-
-    #     Returns:
-    #         QSize: SizeHint with with the height in ratio with the width.
-    #     """
-
-    #     size_hint = super().sizeHint()
-    #     if size_hint.width() > size_hint.height():
-    #         height = round(size_hint.width() * self.ASPECT_RATIO.height)
-    #         size_hint.setHeight(height)
-    #     else:
-    #         width = round(size_hint.height() * self.ASPECT_RATIO.width)
-    #         size_hint.setWidth(width)
-    #     return size_hint
+    def sizeHint(self) -> QSize:
+        return self.minimumSize()
 
     def filter_assocciated(self) -> set:
         """Filters out asscciated cards for quick adding with the submenu.
@@ -1207,11 +1198,6 @@ class DeckViewer(QDialog):
 
         layout = scroll_bar.main_layout
         cards = cards.copy()
-        if isinstance(layout, QHBoxLayout):
-            for i in range(layout.count()):
-                item = layout.itemAt(i)
-                if isinstance(item, QSpacerItem):
-                    layout.removeItem(item)
 
         QSP = QSizePolicy.Policy
         QAF = Qt.AlignmentFlag
@@ -1222,12 +1208,6 @@ class DeckViewer(QDialog):
                 row += 1
                 column = 0
 
-            if isinstance(layout, QGridLayout):
-                item = layout.itemAtPosition(row, column)
-                if item is not None:
-                    if item.widget() is not None:
-                        column += 1
-                        continue
 
             card = cards.pop(0)
 
@@ -1241,18 +1221,11 @@ class DeckViewer(QDialog):
                 card_button.toggled.connect(self.removal_count)
                 card_button.setChecked(check)
 
-            card_button.setSizePolicy(QSP.Expanding, QSP.Preferred)
+            card_button.setSizePolicy(QSP.Maximum, QSP.Maximum)
             container.append(card_button)
-            if isinstance(layout, QHBoxLayout):
-                layout.addWidget(card_button)
-                continue
 
-            layout.addWidget(card_button, row, column,
-                             QAF.AlignJustify)  # type: ignore
+            layout.addWidget(card_button)  # type: ignore
             column += 1
-
-        if isinstance(layout, QHBoxLayout):
-            layout.insertStretch(-1, 1)
 
     def connect_scroll_bar(
         self,
@@ -1548,24 +1521,25 @@ class DeckSlider(QScrollArea):
                  parent: DeckViewer | CardSearch) -> None:
         super().__init__(parent)
 
-        QAF = Qt.AlignmentFlag
+        QSP = QSizePolicy.Policy
         SBP = Qt.ScrollBarPolicy
-        self.setHorizontalScrollBarPolicy(SBP.ScrollBarAsNeeded)
+        self.setHorizontalScrollBarPolicy(SBP.ScrollBarAlwaysOff)
 
         if deck_type != "Main Deck":
             self.main_widget = DeckDragWidget(deck_type, self)
             self.main_layout = self.main_widget.main_layout
 
-            self.setWidgetResizable(True)
             self.setVerticalScrollBarPolicy(SBP.ScrollBarAlwaysOff)
+            self.main_widget.setSizePolicy(QSP.Preferred, QSP.Fixed)
         else:
             self.setVerticalScrollBarPolicy(SBP.ScrollBarAlwaysOn)
             self.main_widget = DeckWidget(deck_type, self)
-            self.main_layout = QGridLayout(self)
-            self.main_layout.setAlignment(QAF.AlignTop | QAF.AlignLeft)
+            self.main_layout = CardLayout(parent=self.main_widget,
+                                          scroll=(True, False))
             self.main_widget.setLayout(self.main_layout)
-            self.setWidgetResizable(True)
+            self.main_widget.setSizePolicy(QSP.Fixed, QSP.Preferred)
 
+        self.setWidgetResizable(True)
         self.setWidget(self.main_widget)
 
         vscroll = self.verticalScrollBar()
@@ -1593,9 +1567,7 @@ class DeckWidget(QWidget):
         super().__init__(parent)
         self.scroll_area = parent
         self.name = deck_type
-        QSP = QSizePolicy.Policy
-
-        self.setSizePolicy(QSP.Preferred, QSP.Preferred)
+       
 
     def paintEvent(self, event: QPaintEvent | None):
         """Draws the basic paint event of the widget.
@@ -1639,6 +1611,14 @@ class DeckWidget(QWidget):
                          | Qt.AlignmentFlag.AlignCenter),
                          self.name)
 
+    # def resizeEvent(self, event: QResizeEvent | None) -> None:
+    #     if event is None:
+    #         return
+    #     pref_size = self.scroll_area.rect().size()
+    #     if event.size() != pref_size:
+    #         self.resize(pref_size)
+    #     return super().resizeEvent(event)
+
 
 class DeckDragWidget(DeckWidget):
     """Widget for visually managing dragging cards around the layouts.
@@ -1658,7 +1638,9 @@ class DeckDragWidget(DeckWidget):
         self.name = deck_type
         self.setAcceptDrops(True)
 
-        self.main_layout = QHBoxLayout()
+        self.main_layout = CardLayout(rows=1,
+                                      parent=self,
+                                      scroll=(False, True))
         self.main_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
         self.setLayout(self.main_layout)
@@ -1723,16 +1705,21 @@ class CardLayout(QLayout):
 
     def __init__(
         self,
-        rows: int = 1,
+        rows: int = -1,
+        columns: int = 10,
+        scroll: tuple[bool, bool] = (False, False),
         parent: Optional[QWidget] = None
     ) -> None:
         super().__init__(parent)
-        self._aspect_ratio = CardButton.ASPECT_RATIO
+        self._columns = columns
         self._rows = rows
+        self.v_scroll, self.h_scroll = scroll
+        self._aspect_ratio = CardButton.ASPECT_RATIO
         self._card_items: list[QLayoutItem] = []
+        self.setContentsMargins(5, 5, 5, 5)
 
-    def addWidget(self, w: QWidget | None) -> None:
-        return super().addWidget(w)
+    def addWidget(self, widget: QWidget | None) -> None:
+        return super().addWidget(widget)
 
     def addItem(self, cards: QLayoutItem | None) -> None:
         if cards is None:
@@ -1742,7 +1729,7 @@ class CardLayout(QLayout):
     def sizeHint(self) -> QSize:
         card_size = CardButton.BASE_SIZE
         width = (card_size.width() + self.spacing()) * self.columns()
-        height = (card_size.height() + self.spacing()) * self.rows
+        height = (card_size.height() + self.spacing()) * self.rows()
         size_hint = QSize(width, height)
         return size_hint
 
@@ -1765,32 +1752,60 @@ class CardLayout(QLayout):
         return self.sizeHint()
 
     def heightForWidth(self, width: int) -> int:
-        return round(width * self._aspect_ratio.height)
+        return math.ceil(width * self._aspect_ratio.height)
 
-    def hasHeightForWidth(self) -> bool:
-        return True
+    def widthForHeight(self, height: int) -> int:
+        return math.ceil(height * self._aspect_ratio.width)
 
     def setGeometry(self, rect: QRect) -> None:
-        
         if not self.count():
-            return
+            return super().setGeometry(rect)
+
         spacing = self.spacing()
-        width = (rect.width() // self.columns()) - (spacing * 2)
-        height = self.heightForWidth(width)
+
+        full_height = rect.height()
+        full_width = rect.width()
+
+        ver_spacing = spacing
+        hor_spacing = spacing
+
+        if self.v_scroll:
+            width = (full_width // self.columns())
+            width -= spacing
+            height = self.heightForWidth(width)
+        elif self.h_scroll:
+            height = full_height // self.rows()
+            height -= spacing * 2
+            width = self.widthForHeight(height)
+        else:
+            full_height -= (spacing * 2)
+            full_width -= (spacing * 2)
+            height = full_height // self.rows()
+            width = math.ceil(height * self._aspect_ratio.width)
+            height = self.heightForWidth(width)
+
+            if self._rows > 0:
+                ver_spacing = (full_height % height) // self.rows()
+                hor_spacing = (full_width % width) // self.columns()
 
         size = QSize(width, height)
         pt = QPoint(spacing, spacing)
 
         for i, item in enumerate(self._card_items):
             if i % self.columns() == 0 and i:
-                pt = QPoint(spacing, pt.y())
-                pt.setY(pt.y() + size.height() + spacing)
+                pt.setX(spacing)
+                pt.setY(pt.y() + height + ver_spacing)
             item.setGeometry(QRect(pt, size))
-            pt.setX(pt.x() + size.width() + spacing)
+            pt.setX(pt.x() + width + hor_spacing)
+
+        self.update()
 
     def columns(self) -> int:
-        return math.ceil(self.count() / self.rows)
+        if self._rows < 1:
+            return self._columns
+        return math.ceil(self.count() / self.rows())
 
-    @property
     def rows(self) -> int:
-        return self._rows
+        if self._rows > 0:
+            return self._rows
+        return math.ceil(self.count() / self._columns)
