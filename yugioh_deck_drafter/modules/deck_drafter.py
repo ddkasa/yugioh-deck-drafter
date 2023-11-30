@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Optional, Final, Literal, NamedTuple
-
+import sys
 import random
 import re
 import logging
@@ -73,8 +73,9 @@ if TYPE_CHECKING:
 
 
 class AspectRatio(NamedTuple):
-    width: float
-    height: float
+    """Aspect ratio for resizing widgets properly."""
+    width: float = 1.0
+    height: float = 1.0
 
 
 @dataclass
@@ -746,6 +747,8 @@ class CardButton(QPushButton):
     ) -> None:
         super().__init__(parent=parent)
 
+        self.drafting_dialog = parent
+
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
         if isinstance(viewer, DeckViewer):
@@ -797,7 +800,15 @@ class CardButton(QPushButton):
         """
         pattern = re.compile(r'(?<!\\)"(.*?[^\\])"')
         matches = re.findall(pattern, self.accessibleDescription())
-        return set(matches)
+
+        filt_matches = set()
+        for item in matches:
+            data = self.parent().ygo_data.grab_card(item)
+            if data is None:
+                continue
+            filt_matches.add(item)
+
+        return filt_matches
 
     def paintEvent(self, event: QPaintEvent | None) -> None:
         """Overriden PaintEvent for painting the card art and additonal
@@ -1064,7 +1075,7 @@ class CardButton(QPushButton):
 
     def parent(self) -> DraftingDialog:
         """Override to clear typing issues when calling this function."""
-        return super().parent().parent().parent()  # type: ignore
+        return self.drafting_dialog  # type: ignore
 
     def mouseMoveEvent(self, event: QMouseEvent | None) -> None:
         """Movement function for when dragging cards between decks."""
@@ -1083,21 +1094,6 @@ class CardButton(QPushButton):
             drag.setPixmap(pixmap)
 
             drag.exec(Qt.DropAction.MoveAction)
-
-    # def resizeEvent(self, event: QResizeEvent | None) -> None:
-    #     """Resize event to set the minimum size of an object."""
-    #     if event is None:
-    #         return
-    #     event.accept()
-    #     size = event.size()
-    #     if size.width() < size.height():
-    #         height = round(size.width() * self.ASPECT_RATIO[1])
-    #         size.setHeight(height)
-    #     else:
-    #         width = round(size.height() * self.ASPECT_RATIO[0])
-    #         size.setWidth(width)
-
-    #     self.setGeometry(QRect(self.pos(), size))
 
 
 class DeckViewer(QDialog):
@@ -1125,7 +1121,6 @@ class DeckViewer(QDialog):
     def __init__(self, parent: DraftingDialog, discard: int = 0) -> None:
         super().__init__(parent)
         self.setModal(not parent.parent().debug)
-
         self.setWindowTitle("Deck Viewer")
         self.resize(1745, 860)  # Base on 1080 ratio
 
@@ -1530,7 +1525,7 @@ class DeckSlider(QScrollArea):
             self.main_layout = self.main_widget.main_layout
 
             self.setVerticalScrollBarPolicy(SBP.ScrollBarAlwaysOff)
-            self.main_widget.setSizePolicy(QSP.Preferred, QSP.Fixed)
+            self.main_widget.setSizePolicy(QSP.Preferred, QSP.Ignored)
         else:
             self.setVerticalScrollBarPolicy(SBP.ScrollBarAlwaysOn)
             self.main_widget = DeckWidget(deck_type, self)
@@ -1567,7 +1562,6 @@ class DeckWidget(QWidget):
         super().__init__(parent)
         self.scroll_area = parent
         self.name = deck_type
-       
 
     def paintEvent(self, event: QPaintEvent | None):
         """Draws the basic paint event of the widget.
@@ -1610,14 +1604,6 @@ class DeckWidget(QWidget):
         painter.drawText(new_rect, (Qt.TextFlag.TextWordWrap
                          | Qt.AlignmentFlag.AlignCenter),
                          self.name)
-
-    # def resizeEvent(self, event: QResizeEvent | None) -> None:
-    #     if event is None:
-    #         return
-    #     pref_size = self.scroll_area.rect().size()
-    #     if event.size() != pref_size:
-    #         self.resize(pref_size)
-    #     return super().resizeEvent(event)
 
 
 class DeckDragWidget(DeckWidget):
@@ -1716,7 +1702,6 @@ class CardLayout(QLayout):
         self.v_scroll, self.h_scroll = scroll
         self._aspect_ratio = CardButton.ASPECT_RATIO
         self._card_items: list[QLayoutItem] = []
-        self.setContentsMargins(5, 5, 5, 5)
 
     def addWidget(self, widget: QWidget | None) -> None:
         return super().addWidget(widget)
@@ -1770,11 +1755,11 @@ class CardLayout(QLayout):
         hor_spacing = spacing
 
         if self.v_scroll:
-            width = (full_width // self.columns())
+            width = full_width // self.columns()
             width -= spacing
             height = self.heightForWidth(width)
         elif self.h_scroll:
-            height = full_height // self.rows()
+            height = full_height
             height -= spacing * 2
             width = self.widthForHeight(height)
         else:

@@ -1,7 +1,7 @@
 /* Widgets */
 QScrollArea {
-    border: 1px solid gray;
-    border-radius: 5px;
+    border: 1px solid #BE3144;
+    /* border-radius: 5px; */
     }
 
 QWidget {
@@ -9,7 +9,6 @@ QWidget {
     color:rgb(240, 89, 65);
     border-color: #BE3144;
 }
-
 
 /* QLabel */
 QLabel {
