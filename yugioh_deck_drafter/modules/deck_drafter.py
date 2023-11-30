@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Optional, Final, Literal
+from typing import TYPE_CHECKING, Optional, Final, Literal, NamedTuple
 
 import random
 import re
@@ -69,6 +69,11 @@ from yugioh_deck_drafter import util
 
 if TYPE_CHECKING:
     from yugioh_deck_drafter.__main__ import MainWindow
+
+
+class AspectRatio(NamedTuple):
+    width: float
+    height: float
 
 
 @dataclass
@@ -212,7 +217,7 @@ class DraftingDialog(QDialog):
         self.drafting_layout.addStretch(1)
         self.stretch = self.drafting_layout.itemAt(0)
 
-        self.card_layout = QGridLayout()
+        self.card_layout = CardLayout(2)
         self.drafting_layout.addLayout(self.card_layout)
 
         self.card_buttons: list[CardButton] = []  # Contains the card widgets
@@ -448,23 +453,19 @@ class DraftingDialog(QDialog):
 
         self.update_counter_label()
 
-        row = 0
         for column in range(self.CARDS_PER_PACK):
             card_data = self.select_pack_card(set_data, column)
 
             self.loading_bar.setValue(column + 1)
             self.loading_label.setText(f"Loading: {card_data.name}")
             QApplication.processEvents()
-            row = 0
-            if column % 2 != 0:
-                row = 1
-                column -= 1
+   
 
             card = CardButton(card_data, self)
 
             self.card_buttons.append(card)
             card.toggled.connect(self.update_selection)
-            self.card_layout.addWidget(card, row, column, 1, 1)
+            self.card_layout.addWidget(card)
 
         self.repaint()
         self.view_widget.setCurrentWidget(self.drafting_widget)
@@ -735,7 +736,7 @@ class CardButton(QPushButton):
                 in terms of menu and draggability.
     """
     BASE_SIZE = QSize(164, 242)
-    ASPECT_RATIO = 0.650793651, 1.4756097561
+    ASPECT_RATIO = AspectRatio(0.650793651, 1.4756097561)
 
     def __init__(self, data: CardModel,
                  parent: DraftingDialog,
@@ -778,21 +779,21 @@ class CardButton(QPushButton):
         """
         return self.BASE_SIZE
 
-    def sizeHint(self) -> QSize:
-        """Overriden size to keep the card ratio in control
+    # def sizeHint(self) -> QSize:
+    #     """Overriden size to keep the card ratio in control
 
-        Returns:
-            QSize: SizeHint with with the height in ratio with the width.
-        """
+    #     Returns:
+    #         QSize: SizeHint with with the height in ratio with the width.
+    #     """
 
-        size_hint = super().sizeHint()
-        if size_hint.width() > size_hint.height():
-            height = round(size_hint.width() * self.ASPECT_RATIO[1])
-            size_hint.setHeight(height)
-        else:
-            width = round(size_hint.height() * self.ASPECT_RATIO[0])
-            size_hint.setWidth(width)
-        return size_hint
+    #     size_hint = super().sizeHint()
+    #     if size_hint.width() > size_hint.height():
+    #         height = round(size_hint.width() * self.ASPECT_RATIO.height)
+    #         size_hint.setHeight(height)
+    #     else:
+    #         width = round(size_hint.height() * self.ASPECT_RATIO.width)
+    #         size_hint.setWidth(width)
+    #     return size_hint
 
     def filter_assocciated(self) -> set:
         """Filters out asscciated cards for quick adding with the submenu.
@@ -1092,20 +1093,20 @@ class CardButton(QPushButton):
 
             drag.exec(Qt.DropAction.MoveAction)
 
-    def resizeEvent(self, event: QResizeEvent | None) -> None:
-        """Resize event to set the minimum size of an object."""
-        if event is None:
-            return
-        event.accept()
-        size = event.size()
-        if size.width() < size.height():
-            height = round(size.width() * self.ASPECT_RATIO[1])
-            size.setHeight(height)
-        else:
-            width = round(size.height() * self.ASPECT_RATIO[0])
-            size.setWidth(width)
+    # def resizeEvent(self, event: QResizeEvent | None) -> None:
+    #     """Resize event to set the minimum size of an object."""
+    #     if event is None:
+    #         return
+    #     event.accept()
+    #     size = event.size()
+    #     if size.width() < size.height():
+    #         height = round(size.width() * self.ASPECT_RATIO[1])
+    #         size.setHeight(height)
+    #     else:
+    #         width = round(size.height() * self.ASPECT_RATIO[0])
+    #         size.setWidth(width)
 
-        self.setGeometry(QRect(self.pos(), size))
+    #     self.setGeometry(QRect(self.pos(), size))
 
 
 class DeckViewer(QDialog):
@@ -1726,8 +1727,12 @@ class CardLayout(QLayout):
         parent: Optional[QWidget] = None
     ) -> None:
         super().__init__(parent)
+        self._aspect_ratio = CardButton.ASPECT_RATIO
         self._rows = rows
-        self._card_items = []
+        self._card_items: list[QLayoutItem] = []
+
+    def addWidget(self, w: QWidget | None) -> None:
+        return super().addWidget(w)
 
     def addItem(self, cards: QLayoutItem | None) -> None:
         if cards is None:
@@ -1736,7 +1741,7 @@ class CardLayout(QLayout):
 
     def sizeHint(self) -> QSize:
         card_size = CardButton.BASE_SIZE
-        width = (card_size.width() * self.columns())
+        width = (card_size.width() + self.spacing()) * self.columns()
         height = (card_size.height() + self.spacing()) * self.rows
         size_hint = QSize(width, height)
         return size_hint
@@ -1759,21 +1764,25 @@ class CardLayout(QLayout):
     def minimumSize(self) -> QSize:
         return self.sizeHint()
 
+    def heightForWidth(self, width: int) -> int:
+        return round(width * self._aspect_ratio.height)
+
     def hasHeightForWidth(self) -> bool:
         return True
 
-    def heightForWidth(self, width: int) -> int:
-        return round(width * CardButton.ASPECT_RATIO[1])
-
     def setGeometry(self, rect: QRect) -> None:
+        
+        if not self.count():
+            return
         spacing = self.spacing()
-        width = rect.width() // self.rows - spacing
+        width = (rect.width() // self.columns()) - (spacing * 2)
+        height = self.heightForWidth(width)
 
-        size = QSize(width, self.heightForWidth(width))
+        size = QSize(width, height)
         pt = QPoint(spacing, spacing)
 
         for i, item in enumerate(self._card_items):
-            if i % self.rows == 0 and i:
+            if i % self.columns() == 0 and i:
                 pt = QPoint(spacing, pt.y())
                 pt.setY(pt.y() + size.height() + spacing)
             item.setGeometry(QRect(pt, size))
