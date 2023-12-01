@@ -4,14 +4,13 @@ import logging
 import math
 import random
 import re
-import sys
 from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING, Final, Literal, NamedTuple, Optional
 
 from PyQt6.QtCore import (QMimeData, QPoint, QRect, QRectF, QSignalBlocker,
                           QSize, Qt, pyqtSignal, pyqtSlot)
-from PyQt6.QtGui import (QBrush, QCursor, QDrag, QDragEnterEvent,
+from PyQt6.QtGui import (QBrush, QCursor, QDrag, QDragEnterEvent, QCloseEvent,
                          QDropEvent, QFont, QImage, QKeyEvent, QMouseEvent,
                          QPainter, QPaintEvent, QPen, QPixmap)
 from PyQt6.QtWidgets import (QApplication, QButtonGroup, QCompleter, QDialog,
@@ -92,13 +91,14 @@ class DraftingDialog(QDialog):
 
         self.setWindowTitle("Card Pack Opener")
 
+        self.ygo_data = self.parent().yugi_pro
+
         self.deck = DeckModel(deck_name)
         self.drafting_model = PackOpeningState()
         self.setSizePolicy(QSizePolicy.Policy.Minimum,
                            QSizePolicy.Policy.Minimum)
         self.resize(self.minimumSize())
 
-        self.ygo_data = parent.yugi_pro
         self.init_ui()
 
     def init_ui(self) -> None:
@@ -716,6 +716,8 @@ class CardButton(QPushButton):
         self.viewer = viewer  # type: ignore
         self.card_model = data
 
+        self.rarity_color = parent.ygo_data.RARITY_COLOURS[data.rarity]
+
         self.setAccessibleName(data.name)
         self.setAccessibleDescription(data.description)
 
@@ -816,20 +818,20 @@ class CardButton(QPushButton):
         else:
             painter.setPen(Qt.PenStyle.NoPen)
 
-        pen.setJoinStyle(Qt.PenJoinStyle.MiterJoin)  # type: ignore
+        pen.setJoinStyle(Qt.PenJoinStyle.MiterJoin)
 
         new_rect = self.rect_generator(rect, pen_width)
         painter.drawRect(new_rect)
 
         if self.card_model.rarity != "Common":
             painter.save()
-            pen_width = 5
             new_rect = self.rect_generator(rect, pen_width)
             cmp = QPainter.CompositionMode.CompositionMode_ColorDodge
             painter.setCompositionMode(cmp)
-            pen.setColor(Qt.GlobalColor.magenta)
+            pen.setColor(self.rarity_color)
             pen.setWidthF(pen_width)
             painter.setPen(pen)
+            pen.setJoinStyle(Qt.PenJoinStyle.MiterJoin)
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawRect(new_rect)
             painter.restore()
@@ -1649,6 +1651,8 @@ class DeckDragWidget(DeckWidget):
 class CardLayout(QLayout):
     """Layout for displaying cards in a proper aspect ration and taking up size
     correctly.
+    
+    Spacing determines the contents margins of the layout.
 
     Attributes | Args:
         rows (int): Total rows to be displayed when showing added items. If at
@@ -1675,6 +1679,9 @@ class CardLayout(QLayout):
         self.v_scroll, self.h_scroll = scroll
         self._aspect_ratio = CardButton.ASPECT_RATIO
         self._card_items: list[QLayoutItem] = []
+
+        marg = self.spacing()
+        self.setContentsMargins(marg, marg, marg, marg)
 
     def addItem(self, cards: QLayoutItem | None) -> None:
         """Overriden abstract method for adding item to the list.
@@ -1779,13 +1786,13 @@ class CardLayout(QLayout):
             height = self.heightForWidth(width)
         elif self.h_scroll:
             height = full_height
-            height -= spacing * 2
+            height -= spacing
             width = self.widthForHeight(height)
         else:
             full_height -= (spacing * 2)
             full_width -= (spacing * 2)
             height = full_height // self.rows()
-            width = math.ceil(height * self._aspect_ratio.width)
+            width = self.widthForHeight(height)
             height = self.heightForWidth(width)
 
             if self._rows > 0:

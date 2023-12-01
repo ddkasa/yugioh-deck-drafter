@@ -17,6 +17,8 @@ from urllib.parse import quote
 
 import requests
 import requests_cache
+
+from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import QMessageBox
 
@@ -117,6 +119,7 @@ class YugiObj:
         SIDE_DECK_TYPES (set): For filtering out extra deck monsters and
             arche types.
         PROB (defaultdict): probablities for each type of card rarity.
+        RARITY_COLORS (defaultdict): For picking and displaying rarity borders.
     """
 
     CACHE = requests_cache.CachedSession(str(Path("cache/ygoprodeck.sqlite")),
@@ -131,6 +134,14 @@ class YugiObj:
          "Secret": 2.8571428571
          })
 
+    RARITY_COLOURS: Final[defaultdict[str, Qt.GlobalColor]] = defaultdict(
+        lambda: Qt.GlobalColor.magenta,
+        {"Rare": Qt.GlobalColor.blue,
+         "Super Rare": Qt.GlobalColor.lightGray,
+         "Ultra Rare": Qt.GlobalColor.green,
+         "Secret": Qt.GlobalColor.magenta
+         })
+
     SIDE_DECK_TYPES: Final[set[str]] = {
         "Fusion Monster",
         "Link Monster",
@@ -141,6 +152,8 @@ class YugiObj:
         "XYZ Monster",
         "XYZ Pendulum Effect Monster"
         }
+
+
 
     CARD_CLASS_NAMES = [s.name.replace("_", " ").lower() for s in CardSetClass]
 

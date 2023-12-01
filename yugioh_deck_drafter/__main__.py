@@ -474,14 +474,11 @@ class MainWindow(QMainWindow):
             dialog.randomise_packs()
             dialog.reject()
             dialog.deleteLater()
-            return None
+            return
 
         dialog.show()
         dialog.exec()
-
-
-
-        return None
+        return
 
     @pyqtSlot(bool)
     def filter_packs(self, reset: bool = False):
