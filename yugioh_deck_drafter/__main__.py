@@ -805,6 +805,10 @@ def main(argv: list):
     """
        Main Function for starting the card set picking and deck drafting
        process.
+
+       Args:
+            argv (list): For any arguments you want to pass from the command
+                line.
     """
     app_name = "YU-GI-OH Deck Creator"
 
@@ -830,10 +834,20 @@ def main(argv: list):
 
 if __name__ == "__main__":
     def excepthook(type_, value, traceback_):
-        """Exception hook and display."""
+        """Exception hook and display.
+
+        Excepthook with GUI error messages for the end user.
+
+        Args:
+            type_ (type): Type of the error.
+            value (exception): Exception object of the error.
+            traceback_ (traceback): Traceback object pointing the position at
+                fault.
+        """
         traceback_text = traceback.format_exception(type_, value, traceback_)
         traceback.print_exception(type_, value, traceback_)
         text = ""
+
         for t in traceback_text:
             text += "\n" + t
 
