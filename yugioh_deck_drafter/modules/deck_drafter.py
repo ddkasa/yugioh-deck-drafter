@@ -674,6 +674,32 @@ class DraftingDialog(QDialog):
         else:
             event.ignore()
 
+    def count_card_type(
+        self,
+        card_type: str,
+        group: list[CardButton | CardModel]
+    ) -> int:
+        """Counts the target card_type inside the container provided.
+
+        Args:
+            card_type (str): Target card type to check for. Is fuzzy as the
+                method checks if the card_type is inside the models card_type.
+            group (list[CardButton  |  CardModel]): Where the cards to check
+                are located.
+
+        Returns:
+            int: Count of the card_type inside the card_model.
+        """
+
+        cnt = 0
+        for mdl in group:
+            if isinstance(mdl, CardButton):
+                mdl = mdl.card_model
+            if card_type in mdl.card_type:
+                cnt += 1
+
+        return cnt
+
 
 class CardButton(QPushButton):
     """Card class used for displaying, deleting and containg cards.
