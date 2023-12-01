@@ -81,6 +81,10 @@ class CardModel(NamedTuple):
     card_id: int
     card_type: str
     raw_data: dict[str, Any]
+    attribute: Optional[str] = None
+    attack: Optional[int] = None
+    defense: Optional[int] = None
+    level: Optional[int] = None
     rarity: str = "Common"
     card_set: Optional[CardSetModel] = None
 
@@ -413,8 +417,17 @@ class YugiObj:
                     rarity = card_set["set_rarity"]
                     break
 
-        card = CardModel(data["name"], data["desc"], data["id"], data["type"],
-                         data, rarity, set_data)
+        card = CardModel(data["name"],
+                         data["desc"],
+                         data["id"],
+                         data["type"],
+                         data,
+                         data.get("attribute"),
+                         data.get("atk"),
+                         data.get("def"),
+                         data.get("level"),
+                         rarity,
+                         set_data)
 
         return card
 

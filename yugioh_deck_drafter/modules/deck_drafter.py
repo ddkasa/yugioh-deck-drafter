@@ -504,6 +504,8 @@ class DraftingDialog(QDialog):
             self.update_counter_label()
             item.blockSignals(False)
 
+        QApplication.processEvents()
+
     def add_card_to_selection(
         self,
         card_model: CardModel | CardButton
@@ -724,7 +726,16 @@ class CardButton(QPushButton):
         self.setBaseSize(self.BASE_SIZE)
         desc = util.new_line_text(data.description, 100)
 
-        self.setToolTip(data.name + "\n" + desc)
+        ttip = data.name
+        if data.level:
+            ttip += f" | Level: {data.level}"
+        if data.attribute:
+            ttip += f" | Attribute: {data.attribute}"
+        ttip += f"\n\n{desc}"
+        if data.attack is not None:
+            ttip += f"\n\nATK: {data.attack}  |  DEF: {data.defense}"
+        self.setToolTip(ttip)
+
         self.setObjectName("card_button")
 
         QSP = QSizePolicy.Policy
@@ -805,7 +816,7 @@ class CardButton(QPushButton):
         brush = QBrush(image)
         painter.setBrush(brush)
 
-        pen_width = 5
+        pen_width = 7
         pen = QPen()
         if self.isChecked():
             pen.setColor(Qt.GlobalColor.red)

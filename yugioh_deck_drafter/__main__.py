@@ -65,7 +65,6 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.main_widget)
         self.init_ui()
 
-
         self.pack_filter = self.DEFAULT_FILTER
 
         self.update_pack_count()
@@ -825,15 +824,24 @@ def main(argv: list):
 
     main_window.setStyleSheet(style)
     main_window.show()
+
     sys.exit(app.exec())
 
 
 if __name__ == "__main__":
     def excepthook(type_, value, traceback_):
         """Exception hook and display."""
+        traceback_text = traceback.format_exception(type_, value, traceback_)
         traceback.print_exception(type_, value, traceback_)
-        # QFatal(traceback_)
-        # sys.exit(1)
+        text = ""
+        for t in traceback_text:
+            text += "\n" + t
+
+        msg = QMessageBox.critical(None, "Critical", text)
+        if msg:
+            pass
+
+        sys.exit(1)
 
     sys.excepthook = excepthook
 
