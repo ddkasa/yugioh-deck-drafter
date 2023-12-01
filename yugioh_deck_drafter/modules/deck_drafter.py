@@ -556,10 +556,33 @@ class DraftingDialog(QDialog):
         picked = len(self.deck.main) + len(self.deck.side)
 
         self.cards_picked.setText(f"Card Total: {picked}")
-        tip = f"Main Deck: {len(self.deck.main)}\n"
-        tip += f"Extra Deck: {len(self.deck.extra)}\n"
-        tip += f"Side Deck: {len(self.deck.side)}"
+
+        tip = self.generate_breakdown_ttip("main") + "\n"
+        tip += f"Extra Deck: {len(self.deck.extra)}" + "\n"
+        tip += self.generate_breakdown_ttip("side")
+
         self.cards_picked.setToolTip(tip)
+
+    def generate_breakdown_ttip(
+        self,
+        deck: Literal["main", "extra", "side"]
+    ) -> str:
+        """Generates a breakdown for each type main card of each deck."""
+        decks = {
+            "main": self.deck.main,
+            "extra": self.deck.extra,
+            "side": self.deck.side
+        }
+        sel_deck = decks[deck]
+        monster_total = self.count_card_type("Monster", sel_deck)
+        spell_total = self.count_card_type("Spell", sel_deck)
+        trap_total = self.count_card_type("Trap", sel_deck)
+
+        tip = f"""{deck.title()} Deck: {len(sel_deck)}
+        Monster: {monster_total}
+        Spell: {spell_total}
+        Traps: {trap_total}"""
+        return tip
 
     def check_card_count(self, card: CardModel) -> int:
         """Checks the amount of the same card present in the deck.
@@ -677,7 +700,7 @@ class DraftingDialog(QDialog):
     def count_card_type(
         self,
         card_type: str,
-        group: list[CardButton | CardModel]
+        group: list[CardModel] | list[CardButton]
     ) -> int:
         """Counts the target card_type inside the container provided.
 
