@@ -233,9 +233,9 @@ class DraftingDialog(QDialog):
 
         return self.drafting_widget
 
-    def sel_next_set(self):
-        """Selects the next pack and also manages the drafting session in
-        general.
+    def sel_next_set(self) -> None:
+        """MAIN Drafting Manager Method. Selects the next pack and also manages
+        the drafting session in general.
 
         1. Will check if there have been enough enough cards selected.
         1a. Returns back to the selection with a warning popup.
@@ -260,12 +260,7 @@ class DraftingDialog(QDialog):
 
             del self.stretch
 
-        if self.drafting_model.selections_left > 0:
-            text = "Select at least {0} more cards."
-            text = text.format(self.drafting_model.selections_left)
-            logging.error(text)
-            QMessageBox.warning(self, "Select More Cards", text,
-                                QMessageBox.StandardButton.Ok)
+        if not self.proceed_set_check():
             return
 
         self.view_widget.setCurrentWidget(self.loading_widget)
@@ -325,6 +320,42 @@ class DraftingDialog(QDialog):
 
         if set_data.count == 0:
             self.drafting_model.opened_set_packs += 1
+
+    def proceed_set_check(self) -> bool:
+        """Checks if the drafter can proceed to the next stage of drafting.
+
+        This also double checks if there are enough cards to pick in the dialog
+            in the first place.
+
+        Returns:
+            bool: True if all conditions are met else False.
+        """
+        if self.drafting_model.selections_left < 1:
+            return True
+
+        extra_card_types = 0
+        duplicates = 0
+        for card in self.card_buttons:
+            mdl = card.card_model
+            if self.ygo_data.check_extra_monster(mdl):
+                extra_card_types += 1
+            elif card.isChecked():
+                continue
+            elif self.check_card_count(mdl) == 3:
+                duplicates += 1
+
+        actual_selection = self.CARDS_PER_PACK
+        actual_selection -= (extra_card_types + duplicates)
+
+        if actual_selection < self.drafting_model.selections_left:
+            return True
+
+        text = "Select at least {0} more cards."
+        text = text.format(self.drafting_model.selections_left)
+        logging.info(text)
+        QMessageBox.warning(self, "Select More Cards", text,
+                            QMessageBox.StandardButton.Ok)
+        return False
 
     def load_set_art(self) -> None:
         """Loads in set art from the server or local cache and resizes it
@@ -724,6 +755,8 @@ class DraftingDialog(QDialog):
         cnt = 0
         for mdl in group:
             if isinstance(mdl, CardButton):
+                if mdl.isChecked():  # Exculdes discarded cards.
+                    continue
                 mdl = mdl.card_model
             if card_type in mdl.card_type:
                 cnt += 1
