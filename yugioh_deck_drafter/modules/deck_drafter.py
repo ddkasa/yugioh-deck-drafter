@@ -557,15 +557,15 @@ class DraftingDialog(QDialog):
 
         self.cards_picked.setText(f"Card Total: {picked}")
 
-        tip = self.generate_breakdown_ttip("main") + "\n"
+        tip = self.generate_breakdown_ttip("main").strip() + "\n"
         tip += f"Extra Deck: {len(self.deck.extra)}" + "\n"
         tip += self.generate_breakdown_ttip("side")
 
-        self.cards_picked.setToolTip(tip)
+        self.cards_picked.setToolTip(tip.strip())
 
     def generate_breakdown_ttip(
         self,
-        deck: Literal["main", "extra", "side"]
+        deck: Literal["main", "extra", "side"] | list,
     ) -> str:
         """Generates a breakdown for each type main card of each deck."""
         decks = {
@@ -573,16 +573,23 @@ class DraftingDialog(QDialog):
             "extra": self.deck.extra,
             "side": self.deck.side
         }
-        sel_deck = decks[deck]
+        sel_deck = decks[deck] if isinstance(deck, str) else deck
         monster_total = self.count_card_type("Monster", sel_deck)
         spell_total = self.count_card_type("Spell", sel_deck)
         trap_total = self.count_card_type("Trap", sel_deck)
 
-        tip = f"""{deck.title()} Deck: {len(sel_deck)}
-        Monster: {monster_total}
-        Spell: {spell_total}
-        Traps: {trap_total}"""
-        return tip
+        space = " " * 6
+        break_down = space + f"Monster: {monster_total}\n"
+        break_down += space + f"Spell: {spell_total}\n"
+        break_down += space + f"Trap: {trap_total}"
+
+        if isinstance(deck, list):
+            break_down = break_down.replace(space, "")
+            return break_down.strip()
+
+        tip = f"{deck.title()} Deck: {len(sel_deck)}\n"
+
+        return str(tip + break_down).strip()
 
     def check_card_count(self, card: CardModel) -> int:
         """Checks the amount of the same card present in the deck.
@@ -756,10 +763,9 @@ class CardButton(QPushButton):
         viewer: Optional['DeckViewer'] = None
     ) -> None:
         super().__init__(parent=parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
         self.drafting_dialog = parent
-
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
         if isinstance(viewer, DeckViewer):
             self.setAcceptDrops(True)
@@ -772,9 +778,27 @@ class CardButton(QPushButton):
         self.setAccessibleName(data.name)
         self.setAccessibleDescription(data.description)
 
-        self.setBaseSize(self.BASE_SIZE)
-        desc = util.new_line_text(data.description, 100)
+        self.construct_card_tooltip(data)
 
+        self.setObjectName("card_button")
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(self.show_menu)
+
+        QSP = QSizePolicy.Policy
+        self.setSizePolicy(QSP.MinimumExpanding, QSP.MinimumExpanding)
+        self.setCheckable(True)
+
+        self.assocc = self.filter_assocciated()
+
+        self.image = parent.ygo_data.get_card_art(self.card_model)
+
+    def construct_card_tooltip(self, data: CardModel) -> None:
+        """Generates a tooltip out of the provided card model data.
+
+        Args:
+            data (CardModel): Card model data to be used to extract the info.
+        """
+        desc = util.new_line_text(data.description, 100)
         ttip = data.name
         if data.level:
             ttip += f" | Level: {data.level}"
@@ -785,20 +809,6 @@ class CardButton(QPushButton):
             ttip += f"\n\nATK: {data.attack}  |  DEF: {data.defense}"
         self.setToolTip(ttip)
 
-        self.setObjectName("card_button")
-
-        QSP = QSizePolicy.Policy
-
-        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.customContextMenuRequested.connect(self.show_menu)
-
-        self.setSizePolicy(QSP.MinimumExpanding, QSP.MinimumExpanding)
-        self.setCheckable(True)
-
-        self.assocc = self.filter_assocciated()
-
-        self.image = parent.ygo_data.get_card_art(self.card_model)
-
     def minimumSize(self) -> QSize:
         """Overriden minimum size of the widget in order to stay legible.
 
@@ -808,6 +818,11 @@ class CardButton(QPushButton):
         return self.BASE_SIZE
 
     def sizeHint(self) -> QSize:
+        """Overriden size hint to return the minimum size at all times.
+
+        Returns:
+            QSize: Minimum size object.
+        """
         return self.minimumSize()
 
     def filter_assocciated(self) -> set:
@@ -867,32 +882,30 @@ class CardButton(QPushButton):
 
         pen_width = 7
         pen = QPen()
+        pen.setJoinStyle(Qt.PenJoinStyle.MiterJoin)
+
+        pen.setWidthF(pen_width)
         if self.isChecked():
             pen.setColor(Qt.GlobalColor.red)
-            pen.setWidthF(pen_width)
             painter.setPen(pen)
         elif option.state & QStyle.StateFlag.State_MouseOver:
             pen.setColor(Qt.GlobalColor.yellow)
-            pen.setWidth(pen_width)
             painter.setPen(pen)
         else:
             painter.setPen(Qt.PenStyle.NoPen)
-
-        pen.setJoinStyle(Qt.PenJoinStyle.MiterJoin)
-
+    
         new_rect = self.rect_generator(rect, pen_width)
         painter.drawRect(new_rect)
 
         if self.card_model.rarity != "Common":
             painter.save()
-            new_rect = self.rect_generator(rect, pen_width)
             cmp = QPainter.CompositionMode.CompositionMode_ColorDodge
             painter.setCompositionMode(cmp)
             pen.setColor(self.rarity_color)
-            pen.setWidthF(pen_width)
-            painter.setPen(pen)
             pen.setJoinStyle(Qt.PenJoinStyle.MiterJoin)
+            painter.setPen(pen)
             painter.setBrush(Qt.BrushStyle.NoBrush)
+            new_rect = self.rect_generator(rect, pen_width)
             painter.drawRect(new_rect)
             painter.restore()
 
@@ -951,7 +964,7 @@ class CardButton(QPushButton):
 
         menu.exec(pos)
 
-    def drafting_menu(self, menu: QMenu) -> None:
+    def drafting_menu(self, menu: QMenu) -> None: 
         """Menu that pop ups when drafting the deck.
 
         Args:
@@ -1224,7 +1237,6 @@ class DeckViewer(QDialog):
                 row += 1
                 column = 0
 
-
             card = cards.pop(0)
 
             card_button = CardButton(card, self.parent(), self)
@@ -1348,14 +1360,21 @@ class DeckViewer(QDialog):
         mcount = self.count("main")
         with QSignalBlocker(self.main_deck_count):
             self.main_deck_count.setText(f"Main Deck: {mcount}")
+            ttip = self.parent().generate_breakdown_ttip(self.deck)
+            self.main_deck_count.setToolTip(ttip)
 
         extra = len(self.extra)
         with QSignalBlocker(self.extra_deck_count):
             self.extra_deck_count.setText(f"Extra Deck: {extra}")
+            ttip = self.parent().generate_breakdown_ttip(self.extra)
+            self.extra_deck_count.setToolTip(ttip)
 
         side = self.count("side")
         with QSignalBlocker(self.side_deck_count):
             self.side_deck_count.setText(f"Side Deck: {side}")
+            ttip = self.parent().generate_breakdown_ttip(self.side)
+            self.side_deck_count.setToolTip(ttip)
+
 
     def accept(self) -> None:
         """Overriden accept function to check if there are the right amount of
@@ -1711,7 +1730,7 @@ class DeckDragWidget(DeckWidget):
 class CardLayout(QLayout):
     """Layout for displaying cards in a proper aspect ration and taking up size
     correctly.
-    
+
     Spacing determines the contents margins of the layout.
 
     Attributes | Args:
