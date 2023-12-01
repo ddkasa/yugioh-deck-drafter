@@ -51,6 +51,13 @@ class CardSetClass(enum.Enum):
     COLLECTION = enum.auto()
 
 
+class DeckType(enum.Enum):
+    """Enumeration for the DeckType"""
+    MAIN = enum.auto()
+    EXTRA = enum.auto()
+    SIDE = enum.auto()
+
+
 @dataclass
 class CardSetModel:
     """Datamodel for a YGO Cardset

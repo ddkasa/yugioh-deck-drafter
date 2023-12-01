@@ -7,7 +7,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QInputDialog, QWidget, QApplication
 
 from yugioh_deck_drafter import __main__ as main
-from yugioh_deck_drafter.modules import deck_drafter
+from yugioh_deck_drafter.modules import deck_drafter, ygo_data
 
 
 @pytest.fixture()
@@ -74,7 +74,6 @@ def test_card_picks(main_window_fill: main.MainWindow, qtbot: QtBot):
     dialog = find_dialog(main_window, deck_drafter.DraftingDialog)
 
     qtbot.addWidget(dialog)
-    dialog.show()
     dialog.next_button.click()
 
     stages = pack_count // 40
@@ -96,18 +95,20 @@ def test_card_picks(main_window_fill: main.MainWindow, qtbot: QtBot):
 
         qtbot.addWidget(discard_stage)
 
-        for item in discard_stage.deck:
+        main_deck_items = discard_stage.deck.widget_list()
+        for _ in range(discard_stage.deck.count()):
+            item = choice(main_deck_items)
             item.click()
             if discard_stage.removal_counter.text() == "Remove: 0":
                 break
 
         move_cnt = 0
-        for item in discard_stage.deck:
+        for item in main_deck_items:
 
             if item.isChecked():
                 continue
 
-            discard_stage.mv_card(item, "side")
+            discard_stage.mv_card(item, ygo_data.DeckType.SIDE)
             move_cnt += 1
 
             if move_cnt == 2:
@@ -122,4 +123,4 @@ def test_card_picks(main_window_fill: main.MainWindow, qtbot: QtBot):
         assert len(dialog.deck.main) == 10 * stage
         assert len(dialog.deck.side) == 2 * stage
 
-        discard_stage.close()
+        discard_stage.accept()
