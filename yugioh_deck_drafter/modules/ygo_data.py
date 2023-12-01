@@ -134,7 +134,8 @@ class YugiObj:
     """
 
     CACHE = requests_cache.CachedSession(str(Path("cache/ygoprodeck.sqlite")),
-                                         backend="sqlite")
+                                         backend="sqlite",
+                                         allowable_codes=[200])
 
     PROB: Final[defaultdict[str, float]] = defaultdict(
         lambda: 2.8571428571,
@@ -380,7 +381,7 @@ class YugiObj:
             dict | None: JSON data or nothing if the query fails.
         """
 
-        name = quote(name, safe="/:?&")
+        name = quote(name.lower(), safe="/:?&")
         url = f"https://db.ygoprodeck.com/api/v7/cardinfo.php?name={name}"
         request = self.CACHE.get(url, timeout=10)
 

@@ -8,9 +8,9 @@ import unicodedata
 
 import math
 
-from PyQt6.QtGui import QPixmap, QPixmapCache
+from PyQt6.QtGui import QPixmap, QPixmapCache, QAction
 
-from PyQt6.QtWidgets import QLayout, QLayoutItem, QWidget
+from PyQt6.QtWidgets import QLayout, QLayoutItem, QWidget, QMenu
 
 
 def get_or_insert(pixmap_path: str | Path, format: str = ".jpg",
@@ -146,11 +146,28 @@ def sanitize_file_path(name: str, max_len=255) -> Path:
 
 
 class DateSerializer(JSONEncoder):
-    """Subclass for easier debugging of received API structures."""
+    """Helper subclass for easier debugging of received API structures."""
     def default(self, obj):
         if isinstance(obj, date):
             return obj.isoformat()
         return super().default(obj)
+
+
+def action_to_list_men(
+    action: QAction,
+    container: list,
+    menu: QMenu
+) -> None:
+    """Helper function to add a action to a menu + array in order to
+    not lose it to scope.
+
+    Args:
+        action (QAction): Precreated action to be added.
+        container (list): Container to store the action in.
+        menu (QMenu): Menu to add the action to.
+        """
+    menu.addAction(action)
+    container.append(action)
 
 
 if __name__ == "__main__":

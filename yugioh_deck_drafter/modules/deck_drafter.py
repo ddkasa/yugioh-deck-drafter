@@ -12,7 +12,7 @@ from PyQt6.QtCore import (QMimeData, QPoint, QRect, QRectF, QSignalBlocker,
                           QSize, Qt, pyqtSignal, pyqtSlot)
 from PyQt6.QtGui import (QBrush, QCursor, QDrag, QDragEnterEvent, QCloseEvent,
                          QDropEvent, QFont, QImage, QKeyEvent, QMouseEvent,
-                         QPainter, QPaintEvent, QPen, QPixmap)
+                         QPainter, QPaintEvent, QPen, QPixmap, QAction)
 from PyQt6.QtWidgets import (QApplication, QButtonGroup, QCompleter, QDialog,
                              QHBoxLayout, QLabel, QLayout, QLayoutItem,
                              QLineEdit, QMenu, QMessageBox, QProgressBar,
@@ -858,7 +858,7 @@ class CardButton(QPushButton):
         """
         return self.minimumSize()
 
-    def filter_assocciated(self) -> set:
+    def filter_assocciated(self) -> set[str]:
         """Filters out asscciated cards for quick adding with the submenu.
 
         Returns:
@@ -876,6 +876,8 @@ class CardButton(QPushButton):
             if data is None:
                 continue
             filt_matches.add(item)
+
+        print(filt_matches)
 
         return filt_matches
 
@@ -983,90 +985,108 @@ class CardButton(QPushButton):
             deletion buttons.
 
         """
+        logging.info("Showing CustomMenu")
         pos = QCursor().pos()
         menu = QMenu(self)
 
         if isinstance(self.viewer, DeckViewer):
             if not self.viewer.discard:
                 return
-            self.discard_stage_menu(menu)
+            _ = self.discard_stage_menu(menu)
         else:
+            logging.info("Showing Info")
+
             if self.parent().drafting_model.selections_left < 1:
                 return
 
-            self.drafting_menu(menu)
+            logging.info("Showing Drafting Menu")
 
-        menu.exec(pos)
+            _ = self.drafting_menu(menu)
 
-    def drafting_menu(self, menu: QMenu) -> None: 
+        # if menu.actions():
+        logging.info("showing menu")
+        print(menu.actions())
+        if menu.exec(pos):
+            pass
+        self.repaint()
+
+    def drafting_menu(self, menu: QMenu) -> list[QAction]:
         """Menu that pop ups when drafting the deck.
 
         Args:
             menu (QMenu): Menu to add the additonal actions to.
         """
+        actions = []
         if self.card_model.card_type == "Fusion Monster":
             poly = "Polymerization"
+            if self.parent().drafting_model.selections_left > 1:
+                fusion = QAction("Add All Fusion Parts")
+                fusion.triggered.connect(self.add_all_assocc)
+                util.action_to_list_men(fusion, actions, menu)
+
+            poly_add = QAction("Add Polymerization")
+            poly_add.triggered.connect(lambda: self.add_assocc(poly))
+            util.action_to_list_men(poly_add, actions, menu)
+
+            for item in self.assocc:
+                acc = QAction(f"Add {item}")
+                acc.triggered.connect(partial(self.add_assocc, item))
+                util.action_to_list_men(acc, actions, menu)
+
+        elif self.assocc:
+            logging.info("Showing Assocc Menu")
+
+            for item in self.assocc:
+                acc = QAction(f"Add {item}")
+                acc.triggered.connect(partial(self.add_assocc, item))
+                util.action_to_list_men(acc, actions, menu)
 
             if self.parent().drafting_model.selections_left > 1:
-                fusion = menu.addAction("Add All Fusion Parts")
-                fusion.triggered.connect(self.add_all_assocc)  # type: ignore
+                acc = QAction("Add all Assocciated")
+                acc.triggered.connect(self.add_all_assocc)
+                util.action_to_list_men(acc, actions, menu)
 
-            poly_add = menu.addAction("Add Polymerization")
-            (poly_add.triggered  # type: ignore
-             .connect(lambda: self.add_assocc(poly)))
+        return actions
 
-            for item in self.assocc:
-                acc = menu.addAction(f"Add {item}")
-                (acc.triggered  # type: ignore
-                 .connect(partial(self.add_assocc, item)))
-
-        else:
-            for item in self.assocc:
-                acc = menu.addAction(f"Add {item}")
-                (acc.triggered  # type: ignore
-                 .connect(partial(self.add_assocc, item)))
-            if self.assocc:
-                acc = menu.addAction("Add all Assocciated")
-                acc.triggered.connect(self.add_all_assocc)  # type: ignore
-            else:
-                return
-
-    def discard_stage_menu(self, menu: QMenu) -> None:
+    def discard_stage_menu(self, menu: QMenu) -> list[QAction]:
         """Menu that pop ups when in the discard stage of drafting.
 
         Args:
             menu (QMenu): Menu to add the additonal actions to.
         """
+        actions = []
 
         self.viewer: DeckViewer
         if self.isChecked():
             card_state = "Keep Card"
         else:
             card_state = "Discard Card"
-        card_state_change = menu.addAction(card_state)
-        if card_state_change is not None:
-            card_state_change.triggered.connect(self.toggle)
+        card_state_change = QAction(card_state)
+        card_state_change.triggered.connect(self.toggle)
+        util.action_to_list_men(card_state_change, actions, menu)
 
         mv_deck = self.viewer.mv_card
 
-        if self.sub_deck == DeckType.SIDE:
-            mv_main = f"Move {self.accessibleName()} to Side Deck"
-            mv_to_side = menu.addAction(mv_main)
-            (mv_to_side.triggered  # type: ignore
-             .connect(lambda: mv_deck(self, "side")))
+        if self.sub_deck == DeckType.MAIN:
+            mv_side = f"Move {self.accessibleName()} to Side Deck"
+            mv_to_side = QAction(mv_side)
+            mv_to_side.triggered.connect(lambda: mv_deck(self, DeckType.SIDE))
+            util.action_to_list_men(mv_to_side, actions, menu)
 
-        elif self.sub_deck == DeckType.MAIN:
+        elif self.sub_deck == DeckType.SIDE:
             mv_main = f"Move {self.accessibleName()} to Main Deck"
-            mv_to_mn = menu.addAction(mv_main)
-            (mv_to_mn.triggered  # type: ignore
-             .connect(lambda: mv_deck(self, "main")))
+            mv_to_main = QAction(mv_main)
+            mv_to_main.triggered.connect(lambda: mv_deck(self, DeckType.MAIN))
+            util.action_to_list_men(mv_to_main, actions, menu)
+
+        return actions
 
     def add_all_assocc(self) -> None:
         """Adds all assocciated cards present within the assocc instance
-           variable.
+        variable.
 
-           If the monster belongs in the extra deck a Polymerization gets
-           added to the deck.
+        If the monster belongs in the extra deck a Polymerization gets added to
+        the deck.
         """
         self.setChecked(True)
         self.setDisabled(True)
@@ -1221,6 +1241,9 @@ class DeckViewer(QDialog):
         self.main_layout.addWidget(self.side_deck_widget, 20)
         self.fill_deck(parent.deck.side, self.side_deck_widget)
 
+        self.interconnect_repaint(self.main_deck_widget)
+        self.interconnect_repaint(self.side_deck_widget)
+
         self.button_layout = QHBoxLayout()
 
         if discard:
@@ -1251,6 +1274,17 @@ class DeckViewer(QDialog):
         self.main_layout.addLayout(self.button_layout)
 
         self.setLayout(self.main_layout)
+
+    def interconnect_repaint(self, widget: DeckSlider) -> None:
+        """This method interconnects Deck Widgets to repaint on drop events.
+
+        Args:
+            widget (DeckSlider): Widget to take the signal from.
+        """
+        (widget.main_widget.order_changed
+         .connect(self.main_deck_widget.main_widget.repaint))
+        (widget.main_widget.order_changed
+         .connect(self.side_deck_widget.main_widget.repaint))
 
     def fill_deck(
         self,
@@ -1604,17 +1638,15 @@ class DeckSlider(QScrollArea):
     ) -> None:
         super().__init__(parent)
         self.deck_type = deck_type
-
         QSP = QSizePolicy.Policy
         SBP = Qt.ScrollBarPolicy
-        self.
         self.setHorizontalScrollBarPolicy(SBP.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(SBP.ScrollBarAlwaysOff)
 
         self.main_widget = DeckWidget(deck_type, self)
 
         if isinstance(parent, DeckViewer):
-            self.main_widget.orderChanged.connect(parent.removal_count)
+            self.main_widget.order_changed.connect(parent.removal_count)
 
         if deck_type != DeckType.MAIN:
             self.setHorizontalScrollBarPolicy(SBP.ScrollBarAlwaysOn)
@@ -1629,7 +1661,6 @@ class DeckSlider(QScrollArea):
         self.setWidget(self.main_widget)
 
         vscroll = self.verticalScrollBar()
-        vscroll
         if vscroll is not None:
             vscroll.valueChanged.connect(self.main_widget.repaint)
         hscroll = self.horizontalScrollBar()
@@ -1650,7 +1681,7 @@ class DeckWidget(QWidget):
         main_layout (CardLayout): Varied card layout depending on the deck
             type.
     """
-    orderChanged = pyqtSignal()
+    order_changed = pyqtSignal()
 
     def __init__(self, deck_type: DeckType, parent: DeckSlider):
         super().__init__(parent)
@@ -1748,8 +1779,8 @@ class DeckWidget(QWidget):
 
             if drop_here_x or drop_here_y:
                 widget = self.main_layout.takeAt(n)
-                self.main_layout.insert_item(widget, n-1)
-                self.orderChanged.emit()
+                self.main_layout.insert_item(widget, n)
+                self.order_changed.emit()
                 break
 
         event.accept()

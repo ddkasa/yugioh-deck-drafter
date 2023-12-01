@@ -4,7 +4,7 @@ QScrollArea {
     /* border-radius: 5px; */
     }
 
-QWidget, QMessageBox {
+QWidget, QMessageBox, QListWidget {
     background: #1e0f24;
     color:rgb(240, 89, 65);
     border-color: #BE3144;
