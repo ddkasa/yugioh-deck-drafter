@@ -860,5 +860,5 @@ if __name__ == "__main__":
     sys.excepthook = excepthook
 
     fmt = "%(levelname)s | .\\yugioh_deck_drafter\\%(module)s.py:%(lineno)d -> %(message)s"
-    logging.basicConfig(stream=sys.stderr, level=logging.INFO, format=fmt)
+    logging.basicConfig(stream=sys.stderr, level=logging.DEBUG, format=fmt)
     main(sys.argv)

@@ -1,6 +1,6 @@
 /* Widgets */
 QScrollArea {
-    border: 1px solid #BE3144;
+    border: 1px solid #ffa76770;
     /* border-radius: 5px; */
     }
 
@@ -13,6 +13,45 @@ QWidget, QMessageBox, QListWidget {
 QProgressBar {
     color: white;
 }
+
+/* QScrollBar */
+
+QScrollBar {
+    background-color: transparent;
+    border-radius: 4px;
+}
+
+QScrollBar:vertical {
+    width: 8px;
+    margin: 10px, 3px, 10px, 3px;
+}
+
+QScrollBar:horizontal {
+    height: 8px;
+    margin: 3px, 10px, 3px, 10px;
+}
+
+QScrollBar::handle {
+    background-color: #35be3144;
+    border-radius: 3px;
+}
+
+QScrollBar::handle:vertical {
+    min-height: 15px;
+}
+
+QScrollBar::handle:horizontal {
+    min-width: 15px;
+}
+
+QScrollBar::add-line {
+    background: none;
+}
+
+QScrollBar::sub-line {
+    background: none;
+}
+
 
 /* QLabel */
 QLabel {
@@ -53,3 +92,4 @@ QToolTip {
     color:rgb(240, 89, 65);
     padding: 5px;
 }
+
