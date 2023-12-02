@@ -4,6 +4,7 @@ import logging
 import math
 import random
 import re
+from pathlib import Path
 from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING, Final, Literal, NamedTuple, Optional
@@ -672,6 +673,8 @@ class DraftingDialog(QDialog):
             else:
                 raise ValueError("Discard Not Successful")
 
+            self.auto_save(self.drafting_model.discard_stage_cnt)
+
     def preview_deck(self):
         """Spawns the deck viewer for previewing the deck on demand."""
         deck = DeckViewer(self)
@@ -762,6 +765,24 @@ class DraftingDialog(QDialog):
                 cnt += 1
 
         return cnt
+
+    def auto_save(self, stage: int) -> None:
+        """Auto save method for saving the current deck after each stage of the
+        game.
+
+        Args:
+            stage (int): Discard Stage for the name of the file.
+        """
+        autosave_location = self.parent().DEFAULT_SAVE / Path("autosave")
+        autosave_location.mkdir(parents=True, exist_ok=True)
+
+        data = self.ygo_data.to_ygodk_format(self.deck)
+        deck_name = self.deck.name if self.deck.name != "" else "Deck"
+        name = Path(f"{deck_name}_autosave_stage_{stage}.ydk".lower())
+        path = autosave_location / name
+
+        with path.open("w", encoding="utf-8") as autosave:
+            autosave.write(data)
 
 
 class CardButton(QPushButton):
@@ -985,7 +1006,6 @@ class CardButton(QPushButton):
             deletion buttons.
 
         """
-        logging.info("Showing CustomMenu")
         pos = QCursor().pos()
         menu = QMenu(self)
 
@@ -994,19 +1014,13 @@ class CardButton(QPushButton):
                 return
             _ = self.discard_stage_menu(menu)
         else:
-            logging.info("Showing Info")
-
             if self.parent().drafting_model.selections_left < 1:
                 return
 
-            logging.info("Showing Drafting Menu")
-
             _ = self.drafting_menu(menu)
 
-        # if menu.actions():
-        logging.info("showing menu")
-        print(menu.actions())
-        if menu.exec(pos):
+        if menu.actions():
+            menu.exec(pos)
             pass
         self.repaint()
 
