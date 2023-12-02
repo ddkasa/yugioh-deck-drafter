@@ -773,6 +773,7 @@ class DraftingDialog(QDialog):
         Args:
             stage (int): Discard Stage for the name of the file.
         """
+        logging.info("Autosaving Deck at discard stage %s", stage)
         autosave_location = self.parent().DEFAULT_SAVE / Path("autosave")
         autosave_location.mkdir(parents=True, exist_ok=True)
 
@@ -882,6 +883,9 @@ class CardButton(QPushButton):
     def filter_assocciated(self) -> set[str]:
         """Filters out asscciated cards for quick adding with the submenu.
 
+        Also checks if the items in the card are actually accessible in the
+        Ygoprodeck database.
+
         Returns:
             set: Names of the cards assocciated with this instance.
                  *At the moment it will return anything that matches, but in
@@ -894,11 +898,11 @@ class CardButton(QPushButton):
         filt_matches = set()
         for item in matches:
             data = self.parent().ygo_data.grab_card(item)
+            # Might want to use the data here instead of the name to avoid some
+            # unnecessary processing the future.
             if data is None:
                 continue
             filt_matches.add(item)
-
-        print(filt_matches)
 
         return filt_matches
 
@@ -970,6 +974,7 @@ class CardButton(QPushButton):
             return None
         if isinstance(self.viewer, DeckViewer) and self.viewer.discard:
             rect = self.rect()
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             painter.drawLine(rect.topLeft(), rect.bottomRight())
             painter.drawLine(rect.bottomLeft(), rect.topRight())
         return None
@@ -1265,6 +1270,12 @@ class DeckViewer(QDialog):
             self.removal_counter.setObjectName("indicator")
             self.button_layout.addWidget(self.removal_counter)
 
+            self.side_counter = QLabel()
+            self.side_counter.setObjectName("indicator")
+            self.button_layout.addWidget(self.side_counter)
+
+            self.button_layout.addStretch(10)
+
         self.main_deck_count = QLabel()
         self.main_deck_count.setObjectName("indicator")
         self.button_layout.addWidget(self.main_deck_count)
@@ -1441,8 +1452,10 @@ class DeckViewer(QDialog):
     def removal_count(self) -> None:
         """Updates the counters for removal, main, side and extra deck."""
         if self.discard:
-            discardcount = self.count() - self.discard
-            self.removal_counter.setText(f"Remove: {discardcount}")
+            discard_count = self.count() - self.discard
+            self.removal_counter.setText(f"Remove: {discard_count}")
+            side_count = abs(self.count(DeckType.SIDE) - self.side_length)
+            self.side_counter.setText(f"Side: {side_count}")
 
         mcount = self.count(DeckType.MAIN)
         with QSignalBlocker(self.main_deck_count):
@@ -1794,9 +1807,9 @@ class DeckWidget(QWidget):
             if drop_here_x or drop_here_y:
                 widget = self.main_layout.takeAt(n)
                 self.main_layout.insert_item(widget, n)
-                self.order_changed.emit()
                 break
 
+        self.order_changed.emit()
         event.accept()
 
 

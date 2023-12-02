@@ -165,8 +165,6 @@ class YugiObj:
         "XYZ Pendulum Effect Monster"
         }
 
-
-
     CARD_CLASS_NAMES = [s.name.replace("_", " ").lower() for s in CardSetClass]
 
     def __init__(self) -> None:
