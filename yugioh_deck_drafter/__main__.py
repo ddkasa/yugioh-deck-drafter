@@ -853,7 +853,7 @@ if __name__ == "__main__":
 
         msg = QMessageBox.critical(None, "Critical", text)
         if msg:
-            pass
+            pass    
 
         sys.exit(1)
 

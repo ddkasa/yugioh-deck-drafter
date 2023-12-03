@@ -101,6 +101,9 @@ class DraftingDialog(QDialog):
         self.resize(self.minimumSize())
 
         self.init_ui()
+        
+        dia = CardSearch("Synchro Monster", "type", self)
+        dia.exec()
 
     def init_ui(self) -> None:
         """Intializes layouts and widgets for the UI."""
@@ -1569,7 +1572,7 @@ class CardSearch(QDialog):
     doesn't have a description itself.
 
     Args:
-        attribute (str): The name of the subtype to search for 
+        attribute (str): The name of the subtype to search 
             e.g. Synchro, Pendulum
         subtype (subtype): What subtype to look for in the database.
         parent (DraftingDialog): For searching capability and checking
@@ -1583,40 +1586,44 @@ class CardSearch(QDialog):
         parent: DraftingDialog
     ) -> None:
         super().__init__(parent)
+        ttl = f"Searching for {subtype.title()}: {attribute.title()}"
+        self.setWindowTitle(ttl)
         self.setMinimumSize(960, 540)
 
         self.total_cards = 1
         self.data = parent.ygo_data.card_arche_types(attribute, subtype)
 
-        if not isinstance(self.data, list):
+        if not self.data:
             self.reject()
-            return
 
         self.main_layout = QVBoxLayout()
+
+        self.top_bar = QHBoxLayout()
+        self.main_layout.addLayout(self.top_bar)
 
         self.search_box = QLineEdit()
         self.search_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.search_box.setPlaceholderText("Search")
-        self.main_layout.addWidget(self.search_box)
+        self.top_bar.addWidget(self.search_box, 80)
+
+        self.matches_box = QLabel(f"Matches: {len(self.data)} card(s)")
+        self.matches_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.matches_box.setObjectName("indicator")
+        self.top_bar.addWidget(self.matches_box, 20)
 
         self.scroll_widget = DeckSlider(None, self)
         self.main_layout.addWidget(self.scroll_widget)
 
-        CMP = Qt.ContextMenuPolicy
-
-        for i, item in enumerate(self.data):
-            card_button = CardButton(item, parent, None)
-            card_button.setSizePolicy(QSizePolicy.Policy.MinimumExpanding,
-                                      QSizePolicy.Policy.Expanding)
-            card_button.setContextMenuPolicy(CMP.NoContextMenu)
-            self.scroll_widget.main_layout.addWidget(card_button)
-            if i > 19:  # Basic Load Limiter
-                break
-
         self.button_layout = QHBoxLayout()
-        self.canceL_button = QPushButton("Cancel")
-        self.canceL_button.pressed.connect(self.reject)
-        self.button_layout.addWidget(self.canceL_button)
+        self.cancel_button = QPushButton("Cancel")
+        self.cancel_button.pressed.connect(self.reject)
+        self.button_layout.addWidget(self.cancel_button)
+
+        self.button_layout.addStretch(20)
+
+        self.add_more_button = QPushButton("Load More Cards")
+        self.button_layout.addWidget(self.add_more_button)
+        self.add_more_button.pressed.connect(self.load_more_cards)
 
         self.button_layout.addStretch(20)
 
@@ -1629,6 +1636,23 @@ class CardSearch(QDialog):
         self.fill_search()
 
         self.setLayout(self.main_layout)
+
+        self.load_more_cards()
+
+    def load_more_cards(self):
+        self.data: list
+        CMP = Qt.ContextMenuPolicy
+        for i in range(20):
+            QApplication.processEvents()
+            if not self.data:
+                self.add_more_button.setDisabled(True)
+                break
+            card_button = CardButton(self.data.pop(i), self.parent(), None)
+            card_button.setContextMenuPolicy(CMP.NoContextMenu)
+            self.scroll_widget.main_layout.addWidget(card_button)
+
+    def parent(self) -> DraftingDialog:
+        return super().parent()  # type: ignore
 
     def fill_search(self) -> None:
         """Pre-cached the search values which matched to the name of the
@@ -1661,7 +1685,7 @@ class CardSearch(QDialog):
         """Overriden except method in order to highlight and return the correct
         card model.
         """
-        for item in self.card_buttons:
+        for item in self.scroll_widget.main_layout.widget_list():
             if item.isChecked():
                 self.selected_item = item.card_model
                 break
@@ -1690,6 +1714,8 @@ class DeckSlider(QScrollArea):
         parent: DeckViewer | CardSearch,
     ) -> None:
         super().__init__(parent)
+        self.setWidgetResizable(True)
+
         self.deck_type = deck_type
         QSP = QSizePolicy.Policy
         SBP = Qt.ScrollBarPolicy
@@ -1703,14 +1729,13 @@ class DeckSlider(QScrollArea):
 
         if deck_type != DeckType.MAIN:
             self.setHorizontalScrollBarPolicy(SBP.ScrollBarAlwaysOn)
-            self.main_widget.setSizePolicy(QSP.Expanding, QSP.Expanding)
+            self.main_widget.setSizePolicy(QSP.MinimumExpanding, QSP.Expanding)
         else:
             self.setVerticalScrollBarPolicy(SBP.ScrollBarAlwaysOn)
-            self.main_widget.setSizePolicy(QSP.Fixed, QSP.Expanding)
+            self.main_widget.setSizePolicy(QSP.Preferred, QSP.Expanding)
 
         self.main_layout = self.main_widget.main_layout
 
-        self.setWidgetResizable(True)
         self.setWidget(self.main_widget)
 
         vscroll = self.verticalScrollBar()
@@ -1750,9 +1775,9 @@ class DeckWidget(QWidget):
             self.setAcceptDrops(True)
 
         if deck_type == DeckType.MAIN:
-            self.main_layout = CardLayout(parent=parent, scroll=(True, False))
+            self.main_layout = CardLayout(parent=self, scroll=(True, False))
         else:
-            self.main_layout = CardLayout(rows=1, parent=parent,
+            self.main_layout = CardLayout(rows=1, parent=self,
                                           scroll=(False, True))
         self.setLayout(self.main_layout)
 
@@ -1860,7 +1885,7 @@ class CardLayout(QLayout):
 
     def __init__(
         self,
-        parent: DeckSlider | QVBoxLayout,
+        parent: DeckWidget | QVBoxLayout,
         rows: int = -1,
         columns: int = 10,
         scroll: tuple[bool, bool] = (False, False),
@@ -1870,6 +1895,7 @@ class CardLayout(QLayout):
         self._rows = rows
         self._columns = max(columns, 1)
         self.v_scroll, self.h_scroll = scroll
+        self.scrolling = self.v_scroll or self.h_scroll
         self._aspect_ratio = CardButton.ASPECT_RATIO
         self._card_items: list[QLayoutItem] = []
 
@@ -1886,7 +1912,7 @@ class CardLayout(QLayout):
             return
         self._card_items.append(cards)
 
-    def parent(self) -> DeckSlider | QVBoxLayout:
+    def parent(self) -> DeckWidget | QVBoxLayout:
         return self._parent
 
     def sizeHint(self) -> QSize:
@@ -1897,20 +1923,21 @@ class CardLayout(QLayout):
             QSize: Minimum size of the layout.
         """
 
-        rect = self.geometry()
+        width = 0
+        height = 0
         spacing = self.spacing()
-        ver_spacing, hor_spacing, width, height = self.sizing(rect, spacing)
 
-        width += ver_spacing
-        if not self.v_scroll:
-            width *= self.columns()
+        for item in self._card_items:
+            item_size_hint = item.widget().rect()
+            if self.h_scroll or width == 0 or not self.scrolling:
+                width += item_size_hint.width() + spacing
+            if self.v_scroll or height == 0 or not self.scrolling:
+                height += item_size_hint.height() + spacing
 
-        height += hor_spacing
-        if not self.h_scroll:
-            height *= self.rows()
+        width += spacing
+        height += spacing
 
-        size_hint = QSize(width, height)
-        return size_hint
+        return QSize(width, height)
 
     def itemAt(self, index: int) -> QLayoutItem | None:
         """Overriden abstract method in order to select items in the layout.
@@ -1989,8 +2016,6 @@ class CardLayout(QLayout):
                 pt.setY(pt.y() + height + ver_spacing)
             item.setGeometry(QRect(pt, size))
             pt.setX(pt.x() + width + hor_spacing)
-
-        self.update()
 
     def sizing(self, rect: QRect, spacing: int) -> tuple[int, int, int, int]:
         card_size = CardButton.BASE_SIZE
@@ -2073,3 +2098,7 @@ class CardLayout(QLayout):
             data.append(widget)
 
         return data
+
+
+if __name__ == "__main__":
+    pass

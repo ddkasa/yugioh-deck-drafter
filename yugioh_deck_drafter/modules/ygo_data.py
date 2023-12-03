@@ -364,7 +364,7 @@ class YugiObj:
         self,
         card_arche: str,
         subtype: str = "archetype"
-    ) -> list[CardModel] | None:
+    ) -> list[CardModel]:
         """Filters out cards with the specfied subtype
 
         Queries YGOPRODECK for specified subtype(str) with archetype included.
@@ -386,7 +386,7 @@ class YugiObj:
         if request.status_code != 200:
             logging.warning("Failed to fetch card %s. Skipping!", subtype)
             logging.warning("Status Code: %s", request.status_code)
-            return
+            return []
 
         return self.convert_raw_to_card_model(None, request.json()["data"])
 
