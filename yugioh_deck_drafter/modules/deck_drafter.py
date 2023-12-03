@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import TYPE_CHECKING, Final, NamedTuple, Optional
 
 import logging
 import math
@@ -7,13 +8,14 @@ import re
 from pathlib import Path
 from dataclasses import dataclass, field
 from functools import partial
-from typing import TYPE_CHECKING, Final, Literal, NamedTuple, Optional
 
 from PyQt6.QtCore import (QMimeData, QPoint, QRect, QRectF, QSignalBlocker,
                           QSize, Qt, pyqtSignal, pyqtSlot)
+
 from PyQt6.QtGui import (QBrush, QCursor, QDrag, QDragEnterEvent, QCloseEvent,
                          QDropEvent, QFont, QImage, QKeyEvent, QMouseEvent,
                          QPainter, QPaintEvent, QPen, QPixmap, QAction)
+
 from PyQt6.QtWidgets import (QApplication, QCompleter, QDialog, QHBoxLayout,
                              QLabel, QLayout, QLayoutItem, QLineEdit, QMenu,
                              QMessageBox, QProgressBar, QPushButton,
@@ -101,9 +103,6 @@ class DraftingDialog(QDialog):
 
         self.init_ui()
 
-        # dia = CardSearch("Synchro Monster", "type", self)
-        # dia.exec()
-
     def init_ui(self) -> None:
         """Intializes layouts and widgets for the UI."""
         self.pack_filter = None
@@ -127,7 +126,7 @@ class DraftingDialog(QDialog):
         Returns:
             QWidget: Return the main loading widget so it can be added to the
                 dialog view widget.
-        """        
+        """
         self.loading_widget = QWidget()
         self.loading_layout = QHBoxLayout()
 
@@ -591,23 +590,23 @@ class DraftingDialog(QDialog):
 
         self.cards_picked.setText(f"Card Total: {picked}")
 
-        tip = self.generate_breakdown_ttip("main").strip() + "\n"
+        tip = self.generate_breakdown_ttip(DeckType.MAIN).strip() + "\n"
         tip += f"Extra Deck: {len(self.deck.extra)}" + "\n"
-        tip += self.generate_breakdown_ttip("side")
+        tip += self.generate_breakdown_ttip(DeckType.SIDE)
 
         self.cards_picked.setToolTip(tip.strip())
 
     def generate_breakdown_ttip(
         self,
-        deck: Literal["main", "extra", "side"] | list,
+        deck: DeckType | list,
     ) -> str:
         """Generates a breakdown for each type main card of each deck."""
         decks = {
-            "main": self.deck.main,
-            "extra": self.deck.extra,
-            "side": self.deck.side
+            DeckType.MAIN: self.deck.main,
+            DeckType.EXTRA: self.deck.extra,
+            DeckType.SIDE: self.deck.side
         }
-        sel_deck = decks[deck] if isinstance(deck, str) else deck
+        sel_deck = decks[deck] if isinstance(deck, DeckType) else deck
         monster_total = self.count_card_type("Monster", sel_deck)
         spell_total = self.count_card_type("Spell", sel_deck)
         trap_total = self.count_card_type("Trap", sel_deck)
@@ -621,7 +620,7 @@ class DraftingDialog(QDialog):
             break_down = break_down.replace(space, "")
             return break_down.strip()
 
-        tip = f"{deck.title()} Deck: {len(sel_deck)}\n"
+        tip = f"{deck.name.title()} Deck: {len(sel_deck)}\n"
 
         return str(tip + break_down).strip()
 
@@ -639,6 +638,7 @@ class DraftingDialog(QDialog):
 
         def count_cards(card, deck) -> int:
             count = 0
+
             for item in deck:
                 if item.name == card.name:
                     count += 1
@@ -1080,6 +1080,12 @@ class CardButton(QPushButton):
             util.action_to_list_men(acc, action_container, menu)
 
     def search_menu(self, menu: QMenu, action_container: list) -> None:
+        """Create an action for to search for a subtype of a card.
+
+        Args:
+            menu (QMenu): Menu to add the action to.
+            action_container (list): Data structure to store the action in.
+        """        
         text = f"Search for {self.card_model.card_type}"
         search_item = QAction(text)
         search_item.triggered.connect(self.search_dialog)
@@ -1207,6 +1213,8 @@ class CardButton(QPushButton):
         return self.drafting_dialog  # type: ignore
 
     def search_dialog(self) -> None:
+        """Starts a search dialog with the instances target subtype.
+        """
         dialog = CardSearch(self.card_model.card_type, "type", self.parent())
 
         if dialog.exec():
@@ -1232,11 +1240,21 @@ class CardButton(QPushButton):
             drag.exec(Qt.DropAction.MoveAction)
 
     @property
-    def sub_deck(self):
+    def sub_deck(self) -> DeckType | None:
+        """Returns the sub_deck type of the given instance.
+
+        Returns:
+            DeckType | None: DeckType of the card instance if applicable.
+        """
         return self._sub_deck
 
     @sub_deck.setter
-    def sub_deck(self, sub_deck: DeckType | None):
+    def sub_deck(self, sub_deck: DeckType | None) -> None:
+        """Sets the sub deck of the given card.
+
+        Args:
+            sub_deck (DeckType | None): The decktype of the card model itself.
+        """        
         self._sub_deck = sub_deck
 
 
@@ -1577,21 +1595,22 @@ class CardSearch(QDialog):
             e.g. Synchro, Pendulum
         subtype (subtype): What subtype to look for in the database.
         parent (DraftingDialog): For searching capability and checking
-            duplicates.
+            duplicates.s
     """
 
     def __init__(
         self,
         attribute: str,
         subtype: str,
-        parent: DraftingDialog
+        parent: DraftingDialog,
+        max_sel: int = 1
     ) -> None:
         super().__init__(parent)
         ttl = f"Searching for {subtype.title()}: {attribute.title()}"
         self.setWindowTitle(ttl)
         self.setMinimumSize(960, 540)
 
-        self.total_cards = 1
+        self.total_cards = max_sel
         self.data = parent.ygo_data.card_arche_types(attribute, subtype)
 
         if not self.data:
@@ -1698,7 +1717,7 @@ class CardSearch(QDialog):
         (self.search_box.editingFinished
          .connect(lambda: self.highlight_search(self.search_box.text())))
 
-    def highlight_search(self, name: str):
+    def highlight_search(self, name: str) -> None:
         """Hightlights the item searched for inside the search box and toggls
         the button to the checked state.
         """
@@ -1710,21 +1729,27 @@ class CardSearch(QDialog):
         for i, item in enumerate(self.data):
             if item.name == name:
                 item = self.load_cardbutton(i, True)
+                sbar = self.scroll_widget.horizontalScrollBar()
+                sbar.setValue(sbar.maximum() + item.width())  # type: ignore
                 break
-
-        sbar = self.scroll_widget.horizontalScrollBar()
-        sbar.setValue(sbar.maximum())  # type: ignore
 
     def accept(self) -> None:
         """Overriden except method in order to highlight and return the correct
         card model.
         """
+
+        chosen_items = []
         for item in self.scroll_widget.main_layout.widget_list():
             if item.isChecked():
                 self.selected_item = item.card_model
-                break
-        else:
-            self.selected_item = self.card_buttons[0].card_model
+                chosen_items.append(self.selected_item)
+
+        if not chosen_items:
+            QMessageBox.warning(
+                self,
+                "Select more cards.",
+                "Select at least one card.")
+            return
 
         return super().accept()
 
@@ -1761,12 +1786,12 @@ class DeckSlider(QScrollArea):
         if isinstance(parent, DeckViewer):
             self.main_widget.order_changed.connect(parent.removal_count)
 
-        if deck_type != DeckType.MAIN:
-            self.setHorizontalScrollBarPolicy(SBP.ScrollBarAlwaysOn)
-            self.main_widget.setSizePolicy(QSP.MinimumExpanding, QSP.Expanding)
-        else:
+        if deck_type == DeckType.MAIN:
             self.setVerticalScrollBarPolicy(SBP.ScrollBarAlwaysOn)
             self.main_widget.setSizePolicy(QSP.Preferred, QSP.Expanding)
+        else:
+            self.setHorizontalScrollBarPolicy(SBP.ScrollBarAlwaysOn)
+            self.main_widget.setSizePolicy(QSP.MinimumExpanding, QSP.Expanding)
 
         self.main_layout = self.main_widget.main_layout
 
@@ -1775,6 +1800,7 @@ class DeckSlider(QScrollArea):
         vscroll = self.verticalScrollBar()
         if vscroll is not None:
             vscroll.valueChanged.connect(self.main_widget.repaint)
+
         hscroll = self.horizontalScrollBar()
         if hscroll is not None:
             hscroll.valueChanged.connect(self.main_widget.repaint)
@@ -1963,7 +1989,7 @@ class CardLayout(QLayout):
         spacing = self.spacing()
 
         for item in self._card_items:
-            item_size_hint = item.widget().rect()
+            item_size_hint = item.widget().rect()  # type: ignore
             if self.h_scroll or width == 0 or not self.scrolling:
                 width += item_size_hint.width() + spacing
             if self.v_scroll or height == 0 or not self.scrolling:
@@ -2052,7 +2078,23 @@ class CardLayout(QLayout):
             item.setGeometry(QRect(pt, size))
             pt.setX(pt.x() + width + hor_spacing)
 
-    def sizing(self, rect: QRect, spacing: int) -> tuple[int, int, int, int]:
+    def sizing(
+        self,
+        rect: QRect,
+        spacing: int
+    ) -> tuple[int, int, int, int]:
+        """This calculates the sizing for the layout iself and spaces it out
+        accordingly.
+
+        *Will need a refactor in the future as the calculations.
+
+        Args:
+            rect (QRect): Area to take the size of the widget from.
+            spacing (int): How much of a gap you need to add betwe
+
+        Returns:
+            tuple[int, int, int, int]: _description_
+        """
         card_size = CardButton.BASE_SIZE
         full_height = rect.height()
         full_width = rect.width()
@@ -2064,10 +2106,12 @@ class CardLayout(QLayout):
             width = full_width // self.columns()
             width -= spacing * 2
             height = self.heightForWidth(width)
+
         elif self.h_scroll:
             height = full_height - spacing * 2
             width = self.widthForHeight(height)
             height = self.heightForWidth(width)
+
         else:
             full_height -= (spacing * 2)
             full_width -= (spacing * 2)
