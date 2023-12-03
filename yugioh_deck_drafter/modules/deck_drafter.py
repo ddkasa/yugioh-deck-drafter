@@ -9,17 +9,16 @@ from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING, Final, Literal, NamedTuple, Optional
 
-from PyQt6.QtCore import (QMimeData, QObject, QPoint, QRect, QRectF, QSignalBlocker,
+from PyQt6.QtCore import (QMimeData, QPoint, QRect, QRectF, QSignalBlocker,
                           QSize, Qt, pyqtSignal, pyqtSlot)
 from PyQt6.QtGui import (QBrush, QCursor, QDrag, QDragEnterEvent, QCloseEvent,
                          QDropEvent, QFont, QImage, QKeyEvent, QMouseEvent,
                          QPainter, QPaintEvent, QPen, QPixmap, QAction)
-from PyQt6.QtWidgets import (QApplication, QButtonGroup, QCompleter, QDialog,
-                             QHBoxLayout, QLabel, QLayout, QLayoutItem,
-                             QLineEdit, QMenu, QMessageBox, QProgressBar,
-                             QPushButton, QScrollArea, QSizePolicy, QWidget,
-                             QStackedWidget, QStyle, QStyleOptionButton,
-                             QVBoxLayout)
+from PyQt6.QtWidgets import (QApplication, QCompleter, QDialog, QHBoxLayout,
+                             QLabel, QLayout, QLayoutItem, QLineEdit, QMenu,
+                             QMessageBox, QProgressBar, QPushButton,
+                             QScrollArea, QSizePolicy, QWidget, QStackedWidget,
+                             QStyle, QStyleOptionButton, QVBoxLayout)
 
 from yugioh_deck_drafter import util
 from yugioh_deck_drafter.modules.ygo_data import (CardModel, CardSetModel,
@@ -101,9 +100,9 @@ class DraftingDialog(QDialog):
         self.resize(self.minimumSize())
 
         self.init_ui()
-        
-        dia = CardSearch("Synchro Monster", "type", self)
-        dia.exec()
+
+        # dia = CardSearch("Synchro Monster", "type", self)
+        # dia.exec()
 
     def init_ui(self) -> None:
         """Intializes layouts and widgets for the UI."""
@@ -221,7 +220,7 @@ class DraftingDialog(QDialog):
 
         self.button_layout.addStretch(2)
 
-        self.current_pack = QLabel("Current Pack: ")
+        self.current_pack = QLabel("Current Pack: None")
         self.current_pack.setObjectName("indicator")
         self.button_layout.addWidget(self.current_pack, 20)
 
@@ -921,7 +920,7 @@ class CardButton(QPushButton):
                 somewhere else.
         """
         if event is None or self.image is None:
-            return None
+            return
 
         option = QStyleOptionButton()
         option.initFrom(self)
@@ -974,13 +973,15 @@ class CardButton(QPushButton):
             painter.restore()
 
         if not self.isChecked():
-            return None
+            return
+
         if isinstance(self.viewer, DeckViewer) and self.viewer.discard:
             rect = self.rect()
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             painter.drawLine(rect.topLeft(), rect.bottomRight())
             painter.drawLine(rect.bottomLeft(), rect.topRight())
-        return None
+
+        return
 
     def rect_generator(self, og_rect: QRect, pen_width: float) -> QRectF:
         """Generates a rectangle render adjusted to the pen size for proper
@@ -1295,33 +1296,33 @@ class DeckViewer(QDialog):
         if discard:
             self.removal_counter = QLabel()
             self.removal_counter.setObjectName("indicator")
-            self.button_layout.addWidget(self.removal_counter)
+            self.button_layout.addWidget(self.removal_counter, 5)
 
             self.side_counter = QLabel()
             self.side_counter.setObjectName("indicator")
-            self.button_layout.addWidget(self.side_counter)
+            self.button_layout.addWidget(self.side_counter, 5)
 
-            self.button_layout.addStretch(10)
+            self.button_layout.addStretch(50)
 
         self.main_deck_count = QLabel()
         self.main_deck_count.setObjectName("indicator")
-        self.button_layout.addWidget(self.main_deck_count)
+        self.button_layout.addWidget(self.main_deck_count, 5)
 
         self.extra_deck_count = QLabel()
         self.extra_deck_count.setObjectName("indicator")
-        self.button_layout.addWidget(self.extra_deck_count)
+        self.button_layout.addWidget(self.extra_deck_count, 5)
 
         self.side_deck_count = QLabel()
         self.side_deck_count.setObjectName("indicator")
-        self.button_layout.addWidget(self.side_deck_count)
+        self.button_layout.addWidget(self.side_deck_count, 5)
 
         self.removal_count()
 
-        self.button_layout.addStretch(50)
+        self.button_layout.addStretch(55)
 
         self.accept_button = QPushButton("Accept")
         self.accept_button.pressed.connect(self.accept)
-        self.button_layout.addWidget(self.accept_button)
+        self.button_layout.addWidget(self.accept_button, 5)
 
         self.main_layout.addLayout(self.button_layout)
 

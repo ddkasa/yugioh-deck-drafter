@@ -1,13 +1,12 @@
 /* Widgets */
-QScrollArea, QLineEdit {
-    border: 1px solid #ffa76770;
-    /* border-radius: 5px; */
-    }
-
-QWidget, QMessageBox, QListWidget {
+QWidget {
     background: #1e0f24;
-    color:rgb(240, 89, 65);
-    border-color: #BE3144;
+    color: rgb(240, 89, 65);
+}
+
+QMessageBox, QLineEdit, QListWidget {
+    border: 1px solid #ffa76770;
+    border-radius: 5px;
 }
 
 QProgressBar {
@@ -15,25 +14,28 @@ QProgressBar {
 }
 
 /* QScrollBar */
+QScrollArea  {
+    border: 1px solid #ffa76770;
+}
 
 QScrollBar {
     background-color: transparent;
-    border-radius: 1px;
+    border-radius: 5px;
 }
 
 QScrollBar:vertical {
-    width: 15px;
+    width: 20px;
     margin: 10px 5px 10px 5px;
 }
 
 QScrollBar:horizontal {
-    height: 15px;
+    height: 20px;
     margin: 5px 10px 5px 10px;
 }
 
 QScrollBar::handle {
-    background-color: #35be3144;
-    border-radius: 1px;
+    background-color: #1abe3144;
+    border-radius: 5px;
 }
 
 QScrollBar::handle:vertical {
@@ -57,8 +59,8 @@ QLabel {
     color: #F05941;
 }
 
-QLabel#indicator {
-    border: 1px solid gray;
+QLabel#indicator { 
+    border: 1px solid #BE3144;
     border-radius: 5px;
     }
 
@@ -91,4 +93,3 @@ QToolTip {
     color:rgb(240, 89, 65);
     padding: 5px;
 }
-

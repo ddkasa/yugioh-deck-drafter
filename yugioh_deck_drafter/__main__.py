@@ -815,7 +815,7 @@ def main(argv: list):
     logging.info("Starting %s!", app_name)
 
     app = QApplication(argv)
-    # app.setStyle("windows")
+    app.setStyle("fusion")
 
     QPixmapCache.setCacheLimit(100000)
 
@@ -853,12 +853,13 @@ if __name__ == "__main__":
 
         msg = QMessageBox.critical(None, "Critical", text)
         if msg:
-            pass    
+            pass
 
         sys.exit(1)
 
     sys.excepthook = excepthook
 
-    fmt = "%(levelname)s | .\\yugioh_deck_drafter\\%(module)s.py:%(lineno)d -> %(message)s"
+    fmt = "%(levelname)s | .\\yugioh_deck_drafter"
+    fmt += "\\%(module)s.py:%(lineno)d -> %(message)s"
     logging.basicConfig(stream=sys.stderr, level=logging.DEBUG, format=fmt)
     main(sys.argv)
