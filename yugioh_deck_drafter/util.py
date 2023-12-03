@@ -20,7 +20,7 @@ def get_or_insert(pixmap_path: str | Path, format: str = ".jpg",
     Args:
         pixmap_path (str | Path): Path of the image being loaded or where to
             save to.
-        format (str, optional): Format of the images being loaded.
+        format (str, optional): Format of the images being loaded.\
             Defaults to ".jpg".
         data (Optional[bytes], optional): Data if an image is being loaded
             from a GET requesta. Defaults to None.
@@ -31,6 +31,7 @@ def get_or_insert(pixmap_path: str | Path, format: str = ".jpg",
     """
     if isinstance(pixmap_path, Path):
         pixmap_path = str(pixmap_path)
+
     cached_pixmap = QPixmapCache.find(pixmap_path)
     if cached_pixmap is None:
         if isinstance(data, bytes):
@@ -40,6 +41,7 @@ def get_or_insert(pixmap_path: str | Path, format: str = ".jpg",
             pixmap = QPixmap(pixmap_path)
         QPixmapCache.insert(pixmap_path, pixmap)
         return pixmap
+
     return cached_pixmap
 
 
@@ -121,7 +123,7 @@ def get_operation(number: int) -> tuple[str, int]:
     return operation, number
 
 
-def round_down_int(value: int, multiple: int = 10):
+def round_down_int(value: int, multiple: int = 10) -> int:
     """Rounds down a value[integer] to the closest multiple[int]"""
     return math.floor(value / multiple) * multiple
 

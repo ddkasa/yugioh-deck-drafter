@@ -1,5 +1,5 @@
 /* Widgets */
-QScrollArea {
+QScrollArea, QLineEdit {
     border: 1px solid #ffa76770;
     /* border-radius: 5px; */
     }
@@ -18,22 +18,22 @@ QProgressBar {
 
 QScrollBar {
     background-color: transparent;
-    border-radius: 4px;
+    border-radius: 1px;
 }
 
 QScrollBar:vertical {
-    width: 8px;
-    margin: 10px, 3px, 10px, 3px;
+    width: 15px;
+    margin: 10px 5px 10px 5px;
 }
 
 QScrollBar:horizontal {
-    height: 8px;
-    margin: 3px, 10px, 3px, 10px;
+    height: 15px;
+    margin: 5px 10px 5px 10px;
 }
 
 QScrollBar::handle {
     background-color: #35be3144;
-    border-radius: 3px;
+    border-radius: 1px;
 }
 
 QScrollBar::handle:vertical {
@@ -52,7 +52,6 @@ QScrollBar::sub-line {
     background: none;
 }
 
-
 /* QLabel */
 QLabel {
     color: #F05941;
@@ -62,8 +61,8 @@ QLabel#indicator {
     border: 1px solid gray;
     border-radius: 5px;
     }
+
 QLabel#subtitle {
-    
     font-weight: 400;
     font-size: 16px;
     }

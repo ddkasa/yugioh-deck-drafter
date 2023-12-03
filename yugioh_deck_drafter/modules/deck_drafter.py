@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING, Final, Literal, NamedTuple, Optional
 
-from PyQt6.QtCore import (QMimeData, QPoint, QRect, QRectF, QSignalBlocker,
+from PyQt6.QtCore import (QMimeData, QObject, QPoint, QRect, QRectF, QSignalBlocker,
                           QSize, Qt, pyqtSignal, pyqtSlot)
 from PyQt6.QtGui import (QBrush, QCursor, QDrag, QDragEnterEvent, QCloseEvent,
                          QDropEvent, QFont, QImage, QKeyEvent, QMouseEvent,
@@ -63,8 +63,8 @@ class PackOpeningState:
 
 class DraftingDialog(QDialog):
     """Dialog for opening packs and managing drafting in general, as it has a
-       core function that cycles and keep track of whats been added and
-       removed in the meanwhile.
+    core function that cycles and keep track of whats been added and removed in
+    the meanwhile.
 
     Attributes:
         CARDS_PER_PACK (int): How many cards each pack contains.
@@ -179,7 +179,7 @@ class DraftingDialog(QDialog):
         self.drafting_layout.addStretch(1)
         self.stretch = self.drafting_layout.itemAt(0)
 
-        self.card_layout = CardLayout(2)
+        self.card_layout = CardLayout(parent=self.drafting_layout, rows=2)
         self.drafting_layout.addLayout(self.card_layout)
 
         self.card_buttons: list[CardButton] = []  # Contains the card widgets
@@ -1034,27 +1034,19 @@ class CardButton(QPushButton):
 
         Args:
             menu (QMenu): Menu to add the additonal actions to.
+
+        Returns:
+            list: List of QAction to prevent garbage collection to remove them
+                pre-emptively.
         """
         actions = []
         if self.card_model.card_type == "Fusion Monster":
-            poly = "Polymerization"
-            if self.parent().drafting_model.selections_left > 1:
-                fusion = QAction("Add All Fusion Parts")
-                fusion.triggered.connect(self.add_all_assocc)
-                util.action_to_list_men(fusion, actions, menu)
+            self.fusion_menu(menu, actions)
 
-            poly_add = QAction("Add Polymerization")
-            poly_add.triggered.connect(lambda: self.add_assocc(poly))
-            util.action_to_list_men(poly_add, actions, menu)
-
-            for item in self.assocc:
-                acc = QAction(f"Add {item}")
-                acc.triggered.connect(partial(self.add_assocc, item))
-                util.action_to_list_men(acc, actions, menu)
+        elif self.parent().ygo_data.check_extra_monster(self.card_model):
+            self.search_menu(menu, actions)
 
         elif self.assocc:
-            logging.info("Showing Assocc Menu")
-
             for item in self.assocc:
                 acc = QAction(f"Add {item}")
                 acc.triggered.connect(partial(self.add_assocc, item))
@@ -1067,11 +1059,37 @@ class CardButton(QPushButton):
 
         return actions
 
+    def fusion_menu(self, menu: QMenu, action_container: list) -> None:
+        poly = "Polymerization"
+        if self.parent().drafting_model.selections_left > 1:
+            fusion = QAction("Add All Fusion Parts")
+            fusion.triggered.connect(self.add_all_assocc)
+            util.action_to_list_men(fusion, action_container, menu)
+
+        poly_add = QAction("Add Polymerization")
+        poly_add.triggered.connect(lambda: self.add_assocc(poly))
+        util.action_to_list_men(poly_add, action_container, menu)
+
+        for item in self.assocc:
+            acc = QAction(f"Add {item}")
+            acc.triggered.connect(partial(self.add_assocc, item))
+            util.action_to_list_men(acc, action_container, menu)
+
+    def search_menu(self, menu: QMenu, action_container: list) -> None:
+        text = f"Search for {self.card_model.card_type}"
+        search_item = QAction(text)
+        search_item.triggered.connect(self.search_dialog)
+        util.action_to_list_men(search_item, action_container, menu)
+
     def discard_stage_menu(self, menu: QMenu) -> list[QAction]:
         """Menu that pop ups when in the discard stage of drafting.
 
         Args:
             menu (QMenu): Menu to add the additonal actions to.
+
+        Returns:
+            list: List of QAction to prevent garbage collection to remove them
+                pre-emptively.
         """
         actions = []
 
@@ -1183,6 +1201,12 @@ class CardButton(QPushButton):
     def parent(self) -> DraftingDialog:
         """Override to clear typing issues when calling this function."""
         return self.drafting_dialog  # type: ignore
+
+    def search_dialog(self) -> None:
+        dialog = CardSearch(self.card_model.card_type, "type", self.parent())
+
+        if dialog.exec():
+            pass
 
     def mouseMoveEvent(self, event: QMouseEvent | None) -> None:
         """Movement function for when dragging cards between decks."""
@@ -1380,7 +1404,7 @@ class DeckViewer(QDialog):
             if hscroll is not None:
                 hscroll.valueChanged.connect(card_button.repaint)
 
-    def mv_card(self, card: CardButton, deck: DeckType):
+    def mv_card(self, card: CardButton, deck: DeckType) -> None:
         """Moves a card[CardButton] between the side and main deck.
 
            To be called from the card (CardButton):show_menu method itself
@@ -1440,10 +1464,10 @@ class DeckViewer(QDialog):
             return sub_count
 
         count = 0
-        if target in {None, DeckType.MAIN}:
+        if target in (None, DeckType.MAIN):
             count += cnt(self.main_deck_widget.main_layout)
 
-        if target in {None, DeckType.SIDE}:
+        if target in (None, DeckType.SIDE):
             count += cnt(self.side_deck_widget.main_layout)
 
         return count
@@ -1545,7 +1569,8 @@ class CardSearch(QDialog):
     doesn't have a description itself.
 
     Args:
-        attribute (str): The name of the subtype to search for.
+        attribute (str): The name of the subtype to search for 
+            e.g. Synchro, Pendulum
         subtype (subtype): What subtype to look for in the database.
         parent (DraftingDialog): For searching capability and checking
             duplicates.
@@ -1570,22 +1595,23 @@ class CardSearch(QDialog):
         self.main_layout = QVBoxLayout()
 
         self.search_box = QLineEdit()
+        self.search_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.search_box.setPlaceholderText("Search")
         self.main_layout.addWidget(self.search_box)
 
-        self.scroll_widget = DeckSlider(subtype , self)
-
-        self.card_buttons: list[CardButton] = []
-        self.card_button_group = QButtonGroup()
-        self.card_button_group.setExclusive(True)
+        self.scroll_widget = DeckSlider(None, self)
+        self.main_layout.addWidget(self.scroll_widget)
 
         CMP = Qt.ContextMenuPolicy
 
-        for item in self.data:
+        for i, item in enumerate(self.data):
             card_button = CardButton(item, parent, None)
+            card_button.setSizePolicy(QSizePolicy.Policy.MinimumExpanding,
+                                      QSizePolicy.Policy.Expanding)
             card_button.setContextMenuPolicy(CMP.NoContextMenu)
-            self.card_buttons.append(card_button)
-            self.card_button_group.addButton(card_button)
             self.scroll_widget.main_layout.addWidget(card_button)
+            if i > 19:  # Basic Load Limiter
+                break
 
         self.button_layout = QHBoxLayout()
         self.canceL_button = QPushButton("Cancel")
@@ -1612,23 +1638,23 @@ class CardSearch(QDialog):
         if not isinstance(self.data, list):
             return self.reject()
 
-        names = [card["name"] for card in self.data]
+        names = [card.name for card in self.data]
 
         completer = QCompleter(names)
         completer.setCompletionMode(QCompleter.CompletionMode.InlineCompletion)
 
         self.search_box.setCompleter(completer)
-        self.search_box.editingFinished.connect(lambda: self.highlight_search)
+        (self.search_box.editingFinished
+         .connect(lambda: self.highlight_search(self.search_box.text())))
 
-    def highlight_search(self):
+    def highlight_search(self, text):
         """Hightlights the item searched for inside the search box and toggls
         the button to the checked state.
         """
-        name = self.search_box.text()
-        for item in self.card_buttons:
-            if item.accessibleName() == name:
+        for item in self.scroll_widget.main_layout.widget_list():
+            if item.accessibleName() == text:
                 item.setChecked(True)
-                return
+                break
         self.scroll_widget.horizontalScrollBar()
 
     def accept(self) -> None:
@@ -1660,7 +1686,7 @@ class DeckSlider(QScrollArea):
 
     def __init__(
         self,
-        deck_type: DeckType,
+        deck_type: DeckType | None,
         parent: DeckViewer | CardSearch,
     ) -> None:
         super().__init__(parent)
@@ -1677,10 +1703,10 @@ class DeckSlider(QScrollArea):
 
         if deck_type != DeckType.MAIN:
             self.setHorizontalScrollBarPolicy(SBP.ScrollBarAlwaysOn)
-            self.main_widget.setSizePolicy(QSP.Preferred, QSP.Ignored)
+            self.main_widget.setSizePolicy(QSP.Expanding, QSP.Expanding)
         else:
             self.setVerticalScrollBarPolicy(SBP.ScrollBarAlwaysOn)
-            self.main_widget.setSizePolicy(QSP.Fixed, QSP.Preferred)
+            self.main_widget.setSizePolicy(QSP.Fixed, QSP.Expanding)
 
         self.main_layout = self.main_widget.main_layout
 
@@ -1710,7 +1736,7 @@ class DeckWidget(QWidget):
     """
     order_changed = pyqtSignal()
 
-    def __init__(self, deck_type: DeckType, parent: DeckSlider):
+    def __init__(self, deck_type: DeckType | None, parent: DeckSlider):
         super().__init__(parent)
 
         self.scroll_area = parent
@@ -1724,9 +1750,9 @@ class DeckWidget(QWidget):
             self.setAcceptDrops(True)
 
         if deck_type == DeckType.MAIN:
-            self.main_layout = CardLayout(parent=self, scroll=(True, False))
+            self.main_layout = CardLayout(parent=parent, scroll=(True, False))
         else:
-            self.main_layout = CardLayout(rows=1, parent=self,
+            self.main_layout = CardLayout(rows=1, parent=parent,
                                           scroll=(False, True))
         self.setLayout(self.main_layout)
 
@@ -1777,7 +1803,7 @@ class DeckWidget(QWidget):
 
     def dropEvent(self, event: QDropEvent | None):
         """Checks for a drop event and the position in order to choose where
-           to put the widget.
+        to put the widget.
 
         Args:
             event (QDropEvent): Event produced by the widget getting dragged
@@ -1817,7 +1843,8 @@ class CardLayout(QLayout):
     """Layout for displaying cards in a proper aspect ration and taking up size
     correctly.
 
-    Spacing determines the contents margins of the layocustom layout with drag and drop between layouts pyqt6t.
+    Spacing determines the contents margins of the layocustom layout with drag 
+    and drop between layouts pyqt6t.
 
     Attributes | Args:
         rows (int): Total rows to be displayed when showing added items. If at
@@ -1833,12 +1860,13 @@ class CardLayout(QLayout):
 
     def __init__(
         self,
+        parent: DeckSlider | QVBoxLayout,
         rows: int = -1,
         columns: int = 10,
         scroll: tuple[bool, bool] = (False, False),
-        parent: Optional[QWidget] = None
     ) -> None:
-        super().__init__(parent)
+        super().__init__()
+        self._parent = parent
         self._rows = rows
         self._columns = max(columns, 1)
         self.v_scroll, self.h_scroll = scroll
@@ -1858,17 +1886,29 @@ class CardLayout(QLayout):
             return
         self._card_items.append(cards)
 
+    def parent(self) -> DeckSlider | QVBoxLayout:
+        return self._parent
+
     def sizeHint(self) -> QSize:
         """Overrided abstract SizeHint method for keeping to size of the layout
-        for minimum item sin the cards.
+        for minimum items in the cards.
 
         Returns:
             QSize: Minimum size of the layout.
         """
-        # This might need overhaul in the future in order to be more flexible.
-        card_size = CardButton.BASE_SIZE
-        width = (card_size.width() + self.spacing()) * self.columns()
-        height = (card_size.height() + self.spacing()) * self.rows()
+
+        rect = self.geometry()
+        spacing = self.spacing()
+        ver_spacing, hor_spacing, width, height = self.sizing(rect, spacing)
+
+        width += ver_spacing
+        if not self.v_scroll:
+            width *= self.columns()
+
+        height += hor_spacing
+        if not self.h_scroll:
+            height *= self.rows()
+
         size_hint = QSize(width, height)
         return size_hint
 
@@ -1938,31 +1978,7 @@ class CardLayout(QLayout):
             return super().setGeometry(rect)
 
         spacing = self.spacing()
-
-        full_height = rect.height()
-        full_width = rect.width()
-
-        ver_spacing = spacing
-        hor_spacing = spacing
-
-        if self.v_scroll:
-            width = full_width // self.columns()
-            width -= spacing
-            height = self.heightForWidth(width)
-        elif self.h_scroll:
-            height = full_height
-            height -= spacing
-            width = self.widthForHeight(height)
-        else:
-            full_height -= (spacing * 2)
-            full_width -= (spacing * 2)
-            height = full_height // self.rows()
-            width = self.widthForHeight(height)
-            height = self.heightForWidth(width)
-
-            if self._rows > 0:
-                ver_spacing = (full_height % height) // self.rows()
-                hor_spacing = (full_width % width) // self.columns()
+        ver_spacing, hor_spacing, width, height = self.sizing(rect, spacing)
 
         size = QSize(width, height)
         pt = QPoint(spacing, spacing)
@@ -1975,6 +1991,40 @@ class CardLayout(QLayout):
             pt.setX(pt.x() + width + hor_spacing)
 
         self.update()
+
+    def sizing(self, rect: QRect, spacing: int) -> tuple[int, int, int, int]:
+        card_size = CardButton.BASE_SIZE
+        full_height = rect.height()
+        full_width = rect.width()
+
+        ver_spacing = spacing
+        hor_spacing = spacing
+
+        if self.v_scroll:
+            width = full_width // self.columns()
+            width -= spacing * 2
+            height = self.heightForWidth(width)
+        elif self.h_scroll:
+            height = full_height - spacing * 2
+            width = self.widthForHeight(height)
+            height = self.heightForWidth(width)
+        else:
+            full_height -= (spacing * 2)
+            full_width -= (spacing * 2)
+            height = full_height // self.rows()
+            width = self.widthForHeight(height)
+            height = self.heightForWidth(width)
+
+            try:
+                ver_spacing = (full_height % height) // self.rows()
+                hor_spacing = (full_width % width) // self.columns()
+            except ZeroDivisionError:
+                pass
+
+        width = max(width, card_size.width())
+        height = max(height, card_size.height())
+
+        return ver_spacing, hor_spacing, width, height
 
     def columns(self) -> int:
         """Returns a total amount of columns depening on what the row attribute
@@ -2011,6 +2061,12 @@ class CardLayout(QLayout):
         self._card_items.insert(index, item)
 
     def widget_list(self) -> list[CardButton]:
+        """Returns a list of widgets added to the layout converted from layout
+        items.
+
+        Returns:
+            list[CardButton]: A list of CardButton to iterate over.
+        """
         data = []
         for item in self._card_items:
             widget = item.widget()

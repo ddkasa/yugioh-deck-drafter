@@ -198,7 +198,7 @@ class YugiObj:
             set_model = CardSetModel(set_name=name,
                                      set_code=item["set_code"],
                                      set_date=new_date,
-                                     set_image=item.get("set_image", None),
+                                     set_image=item.get("set_image"),
                                      set_class=set_class,
                                      card_count=item["num_of_cards"])
             new_set.append(set_model)
@@ -263,12 +263,30 @@ class YugiObj:
             sys.exit()
 
         data = data["data"]
-        cards = []
+        cards = self.convert_raw_to_card_model(card_set, data)
 
+        return cards
+
+    def convert_raw_to_card_model(
+        self,
+        card_set: CardSetModel | None,
+        data: list[dict]
+    ) -> list[CardModel]:
+        """Converts raw json response data into usable card models.
+
+        Args:
+            card_set (CardSetModel | None): Card set for defining rarity.
+              *Note might have to use derive the card set from available data 
+              in the future.
+            data (list[dict]): Raw json data for conversion
+
+        Returns:
+            list[CardModel]: A list of card data converted into card models.
+        """
+        cards = []
         for card_data in data:
             card = self.create_card(card_data, card_set)
             cards.append(card)
-
         return cards
 
     def get_card_art(self, card: CardModel) -> QPixmap | None:
@@ -342,8 +360,11 @@ class YugiObj:
 
         return image
 
-    def card_arche_types(self, card_arche: str,
-                         subtype: str = "archetype") -> list | None:
+    def card_arche_types(
+        self,
+        card_arche: str,
+        subtype: str = "archetype"
+    ) -> list[CardModel] | None:
         """Filters out cards with the specfied subtype
 
         Queries YGOPRODECK for specified subtype(str) with archetype included.
@@ -354,8 +375,8 @@ class YugiObj:
                                      Defaults to "archetype".
 
         Returns:
-            list | None: Either returns None if the query is bad or JSON data
-                         retrieved.
+            list | None: Either returns None if the query is bad or converted
+                json data retrieved.
         """
         url = "https://db.ygoprodeck.com/api/v7/cardinfo.php?{0}={1}"
 
@@ -367,7 +388,7 @@ class YugiObj:
             logging.warning("Status Code: %s", request.status_code)
             return
 
-        return request.json()["data"]
+        return self.convert_raw_to_card_model(None, request.json()["data"])
 
     def grab_card(self, name: str) -> dict | None:
         """Collects card info for the given name(str).
