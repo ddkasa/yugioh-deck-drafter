@@ -1641,18 +1641,44 @@ class CardSearch(QDialog):
         self.load_more_cards()
 
     def load_more_cards(self):
+        """Loads the next set of maximum 20 cards.
+        """
         self.data: list
-        CMP = Qt.ContextMenuPolicy
-        for i in range(20):
+        for _ in range(20):
             QApplication.processEvents()
             if not self.data:
                 self.add_more_button.setDisabled(True)
                 break
-            card_button = CardButton(self.data.pop(i), self.parent(), None)
-            card_button.setContextMenuPolicy(CMP.NoContextMenu)
-            self.scroll_widget.main_layout.addWidget(card_button)
+            self.load_cardbutton()
+
+    def load_cardbutton(
+        self,
+        index: int = 0,
+        check: bool = False
+    ) -> CardButton:
+        """Loads the next single card from the saved data.
+
+        Args:
+            index (int, optional): Index of the card to us. Defaults to 0.
+            check (bool, optional): _description_. Defaults to False.
+
+        Returns:
+            CardButton: For scrolling the view to the item.
+        """
+        CMP = Qt.ContextMenuPolicy
+        card_button = CardButton(self.data.pop(index), self.parent(), None)
+        card_button.setContextMenuPolicy(CMP.NoContextMenu)
+        card_button.setChecked(check)
+        self.scroll_widget.main_layout.addWidget(card_button)
+
+        return card_button
 
     def parent(self) -> DraftingDialog:
+        """Overriden parent function to avoid typing issues.
+
+        Returns:
+            DraftingDialog: Returns the parent of the widget.
+        """
         return super().parent()  # type: ignore
 
     def fill_search(self) -> None:
@@ -1672,15 +1698,22 @@ class CardSearch(QDialog):
         (self.search_box.editingFinished
          .connect(lambda: self.highlight_search(self.search_box.text())))
 
-    def highlight_search(self, text):
+    def highlight_search(self, name: str):
         """Hightlights the item searched for inside the search box and toggls
         the button to the checked state.
         """
-        for item in self.scroll_widget.main_layout.widget_list():
-            if item.accessibleName() == text:
+        for i, item in enumerate(self.scroll_widget.main_layout.widget_list()):
+            if item.accessibleName() == name:
                 item.setChecked(True)
+                return
+
+        for i, item in enumerate(self.data):
+            if item.name == name:
+                item = self.load_cardbutton(i, True)
                 break
-        self.scroll_widget.horizontalScrollBar()
+
+        sbar = self.scroll_widget.horizontalScrollBar()
+        sbar.setValue(sbar.maximum())  # type: ignore
 
     def accept(self) -> None:
         """Overriden except method in order to highlight and return the correct
@@ -1892,6 +1925,7 @@ class CardLayout(QLayout):
         scroll: tuple[bool, bool] = (False, False),
     ) -> None:
         super().__init__()
+
         self._parent = parent
         self._rows = rows
         self._columns = max(columns, 1)
