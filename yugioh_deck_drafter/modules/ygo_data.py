@@ -260,7 +260,7 @@ class YugiObj:
         CardType.XYZ_PENDULUM_EFFECT_MONSTER
         }
 
-    CARD_CLASS_NAMES = [s.name.replace("_", " ").lower() for s in CardSetClass]
+    CARD_CLASS_NAMES = util.enum_to_list(CardSetClass)
 
     def __init__(self) -> None:
         self.card_sets = self.get_card_set()
@@ -648,8 +648,11 @@ class YugiObj:
         data = card.description.split("\n")[0]
 
         extra_patt = re.compile(patt_match[card.card_type])
+        
+        for item in re.finditer(extra_patt, data):
+            data = ExtraMaterial()
 
-        return tuple(extra_ms)
+        return 
 
     def check_subtype(self, target: str) -> str:
         """Checks Enums and other type lists and returns a subtype if it 
@@ -666,6 +669,7 @@ class YugiObj:
         """
         if target in self.arche_types:
             return "archetype"
+        # elif target 
         else:
             raise KeyError(f"{target} not found in any subtype.")
 

@@ -187,5 +187,18 @@ def clean_enum_name(en_name: enum.Enum) -> str:
     return conv
 
 
+def enum_to_list(e_class: enum.EnumMeta) -> list[str]:
+    """Convert an enum class into a general list of enum string names.
+
+    Args:
+        e_class (enum.EnumMeta): Enumeration to convert to a list
+
+    Returns:
+        list[str]: Converted list of enum names
+    """
+    data = [s.name.replace("_", " ").lower() for s in e_class]  # type: ignore
+    return data
+
+
 if __name__ == "__main__":
     pass
