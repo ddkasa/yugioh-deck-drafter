@@ -253,7 +253,7 @@ class MainWindow(QMainWindow):
             label = self.select_pack.currentText()
             cnt = self.no_pack_indi.value()
 
-            card_set = self.yugi_pro.card_set[index]
+            card_set = self.yugi_pro.card_sets[index]
 
             cnt = self.no_pack_indi.value()
             card_set.count = cnt
@@ -467,7 +467,7 @@ class MainWindow(QMainWindow):
                 with the current card_set filter and skip opening the dialog.
                 Defaults to False.
         """
-        dialog = RandomPacks(self, self.yugi_pro.card_set.copy(), self.filter)
+        dialog = RandomPacks(self, self.yugi_pro.card_sets.copy(), self.filter)
 
         if quick:
             dialog.randomise_packs()
@@ -484,7 +484,7 @@ class MainWindow(QMainWindow):
         """For filtering out unwanted packs from selection or resetting the
         current selection"""
 
-        card_set = self.yugi_pro.card_set.copy()
+        card_set = self.yugi_pro.card_sets.copy()
 
         if reset:
             self.filter = self.DEFAULT_FILTER
@@ -572,7 +572,7 @@ class MainWindow(QMainWindow):
             CardSetModel: CardSet with the same names as the
                 target label.
         """
-        for item in self.yugi_pro.card_set:
+        for item in self.yugi_pro.card_sets:
             if item.set_name == label:
                 return item
 

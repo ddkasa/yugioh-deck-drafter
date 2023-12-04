@@ -1611,7 +1611,7 @@ class CardSearch(QDialog):
         self.setMinimumSize(960, 540)
 
         self.total_cards = max_sel
-        self.data = parent.ygo_data.card_arche_types(attribute, subtype)
+        self.data = parent.ygo_data.grab_arche_type_cards(attribute, subtype)
 
         if not self.data:
             self.reject()

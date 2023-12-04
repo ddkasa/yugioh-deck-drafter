@@ -2,6 +2,11 @@
 
 Classes & Functions for managing the YGOPRODECK API communication, modelling
 card sets/cards and exporting to the .ydk format.
+
+Usage:
+    Instantiate YugiObj and load in card data as you need or process 
+    randomisation.
+
 """
 
 import enum
@@ -249,7 +254,8 @@ class YugiObj:
     CARD_CLASS_NAMES = [s.name.replace("_", " ").lower() for s in CardSetClass]
 
     def __init__(self) -> None:
-        self.card_set = self.get_card_set()
+        self.card_sets = self.get_card_set()
+        self.arche_types = self.get_arche_type_list()
 
     def get_card_set(self) -> list[CardSetModel]:
         """Collects all card sets for selection.
@@ -287,6 +293,26 @@ class YugiObj:
         new_set.sort(key=lambda x: x.set_name)
 
         return new_set
+
+    def get_arche_type_list(self) -> tuple[str, ...]:
+        """Grabs an archetype list from ygoprodeck and cleans the data 
+        structure.
+
+        Returns:
+            tuple[str]: An array of strings denoting each card archetype.
+        """
+        url = "https://db.ygoprodeck.com/api/v7/archetypes.php"
+        request = self.CACHE.get(url, timeout=2)
+        if request.status_code != 200:
+            logging.critical("Failed to Archetype List. Exiting!")
+            logging.critical("Status Code: %s", request.status_code)
+            QMessageBox.critical(None, "Critical",
+                                 "Failed to fetch remote Arche Types.\
+                                  Retry Later")
+            sys.exit()
+
+        archetype = [i["archetype_name"] for i in request.json()]
+        return tuple(archetype)
 
     def filter_out_card_sets(
         self,
@@ -441,7 +467,7 @@ class YugiObj:
 
         return image
 
-    def card_arche_types(
+    def grab_arche_type_cards(
         self,
         card_arche: str,
         subtype: str = "archetype"
