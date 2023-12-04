@@ -19,6 +19,7 @@ from pathlib import Path
 from random import choice, randint
 from typing import Any, Final, NamedTuple, Optional
 from urllib.parse import quote
+import re
 
 import requests
 import requests_cache
@@ -133,7 +134,7 @@ class CardType(enum.Enum):
     TOKEN = enum.auto()
 
 
-class AttributeEnum(enum.Enum):
+class AttributeType(enum.Enum):
     """Monster element type enumeration."""
     DARK = enum.auto()
     EARTH = enum.auto()
@@ -142,6 +143,14 @@ class AttributeEnum(enum.Enum):
     WATER = enum.auto()
     WIND = enum.auto()
     DIVINE = enum.auto()
+
+
+class ExtraMaterial(NamedTuple):
+    """Extra Material Info for Special Summons Types."""
+    sub_type: str
+    name: str
+    count: int = 1
+
 
 
 @dataclass
@@ -172,9 +181,9 @@ class CardModel(NamedTuple):
     name: str
     description: str
     card_id: int
-    card_type: str
+    card_type: CardType
     raw_data: dict[str, Any]
-    attribute: Optional[str] = None
+    attribute: Optional[AttributeType] = None
     attack: Optional[int] = None
     defense: Optional[int] = None
     level: Optional[int] = None
@@ -240,15 +249,15 @@ class YugiObj:
          "Secret": Qt.GlobalColor.magenta
          })
 
-    SIDE_DECK_TYPES: Final[set[str]] = {
-        "Fusion Monster",
-        "Link Monster",
-        "Pendulum Effect Fusion Monster",
-        "Synchro Monster",
-        "Synchro Pendulum Effect Monster",
-        "Synchro Tuner Monster",
-        "XYZ Monster",
-        "XYZ Pendulum Effect Monster"
+    SIDE_DECK_TYPES: Final[set[CardType]] = {
+        CardType.FUSION_MONSTER,
+        CardType.LINK_MONSTER,
+        CardType.PENDULUM_EFFECT_FUSION_MONSTER,
+        CardType.SYNCHRO_MONSTER,
+        CardType.SYNCHRO_PENDULUM_EFFECT_MONSTER,
+        CardType.SYNCHRO_TUNER_MONSTER,
+        CardType.XYZ_MONSTER,
+        CardType.XYZ_PENDULUM_EFFECT_MONSTER
         }
 
     CARD_CLASS_NAMES = [s.name.replace("_", " ").lower() for s in CardSetClass]
@@ -469,10 +478,10 @@ class YugiObj:
 
     def grab_arche_type_cards(
         self,
-        card_arche: str,
+        card_arche: enum.Enum,
         subtype: str = "archetype"
     ) -> list[CardModel]:
-        """Filters out cards with the specfied subtype
+        """Filters out cards with the specfied subtype.
 
         Queries YGOPRODECK for specified subtype(str) with archetype included.
 
@@ -485,8 +494,9 @@ class YugiObj:
             list | None: Either returns None if the query is bad or converted
                 json data retrieved.
         """
-        url = "https://db.ygoprodeck.com/api/v7/cardinfo.php?{0}={1}"
+        card_arche = util.clean_enum_name(card_arche)  # type: ignore
 
+        url = "https://db.ygoprodeck.com/api/v7/cardinfo.php?{0}={1}"
         request = self.CACHE.get(url.format(subtype, card_arche),
                                  timeout=10)
 
@@ -551,17 +561,23 @@ class YugiObj:
                     rarity = card_set["set_rarity"]
                     break
 
-        card = CardModel(data["name"],
-                         data["desc"],
-                         data["id"],
-                         data["type"],
-                         data,
-                         data.get("attribute"),
-                         data.get("atk"),
-                         data.get("def"),
-                         data.get("level"),
-                         rarity,
-                         set_data)
+        type_enum = CardType[data["type"].upper().replace(" ", "_")]
+        attrib = data.get("attribute")
+        if attrib is not None:
+            attrib = attrib.upper().replace(" ", "_")
+            attrib = AttributeType[attrib]
+
+        card = CardModel(name=data["name"],
+                         description=data["desc"],
+                         card_id=data["id"],
+                         card_type=type_enum,
+                         raw_data=data,
+                         attribute=attrib,
+                         attack=data.get("atk"),
+                         defense=data.get("def"),
+                         level=data.get("level"),
+                         rarity=rarity,
+                         card_set=set_data)
 
         return card
 
@@ -603,6 +619,56 @@ class YugiObj:
                 constant.
         """
         return card.card_type in self.SIDE_DECK_TYPES
+
+    def check_extra_material(
+        self,
+        card: CardModel
+    ) -> tuple[ExtraMaterial, ...]:
+
+        patt_match = {
+            CardType.FUSION_MONSTER:
+                r'(?<!\\)"(.*?[^\\])"',
+            CardType.LINK_MONSTER: 
+                r'(?P<count>\d+)\+\s*WATER\s+monsters',
+            CardType.PENDULUM_EFFECT_FUSION_MONSTER: 
+                r'(?<!\\)"(.*?[^\\])"',
+            CardType.SYNCHRO_MONSTER: 
+                r"(?P<count>\d+)\s+Level\s+(?P<subtype>\d+)\s+monsters",
+            CardType.SYNCHRO_PENDULUM_EFFECT_MONSTER: 
+                r"(?P<count>\d+)\s+Level\s+(?P<subtype>\d+)\s+monsters",
+            CardType.SYNCHRO_TUNER_MONSTER: 
+                r"(?P<count>\d+)\s+Level\s+(?P<subtype>\d+)\s+monsters",
+            CardType.XYZ_MONSTER:
+                r"(?P<count>\d+)\s+Level\s+(?P<subtype>\d+)\s+monsters",
+            CardType.XYZ_PENDULUM_EFFECT_MONSTER:
+                r"(?P<count>\d+)\s+Level\s+(?P<subtype>\d+)\s+monsters",
+        }
+
+        extra_ms = []
+        data = card.description.split("\n")[0]
+
+        extra_patt = re.compile(patt_match[card.card_type])
+
+        return tuple(extra_ms)
+
+    def check_subtype(self, target: str) -> str:
+        """Checks Enums and other type lists and returns a subtype if it 
+        matches.
+
+        Args:
+            target (str): Name of the type to look for inside the subypes.
+
+        Returns:
+            str: The name of the sub type for further use.
+
+        Raises:
+            KeyError: If no sub type is found.
+        """
+        if target in self.arche_types:
+            return "archetype"
+        else:
+            raise KeyError(f"{target} not found in any subtype.")
+
 
     def generate_weights(self, card_set_name: str, data: list[CardModel],
                          extra: bool = False) -> tuple[int, ...]:

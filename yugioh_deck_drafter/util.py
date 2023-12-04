@@ -5,6 +5,7 @@ from json import JSONEncoder
 from datetime import date
 import re
 import unicodedata
+import enum
 
 import math
 
@@ -170,6 +171,20 @@ def action_to_list_men(
         """
     menu.addAction(action)
     container.append(action)
+
+
+def clean_enum_name(en_name: enum.Enum) -> str:
+    """Converts an enum value into a formatted name for querying.
+
+    Args:
+        name (EnumMeta): Enum member to take the name from.
+
+    Returns:
+        str: Sanitized name for fetching card info.
+    """
+    conv = en_name.name.lower().replace("_", " ")
+
+    return conv
 
 
 if __name__ == "__main__":

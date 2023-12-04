@@ -24,7 +24,8 @@ from PyQt6.QtWidgets import (QApplication, QCompleter, QDialog, QHBoxLayout,
 
 from yugioh_deck_drafter import util
 from yugioh_deck_drafter.modules.ygo_data import (CardModel, CardSetModel,
-                                                  DeckModel, DeckType)
+                                                  DeckModel, DeckType,
+                                                  CardType)
 
 if TYPE_CHECKING:
     from yugioh_deck_drafter.__main__ import MainWindow
@@ -698,6 +699,7 @@ class DraftingDialog(QDialog):
     def clear_pack_selection(self):
         """Resets current pack selection fully."""
         selection_count = len(self.drafting_model.selections)
+
         for _ in range(selection_count):
             item = self.drafting_model.selections.pop(-1)
             if isinstance(item, CardButton):
@@ -763,7 +765,7 @@ class DraftingDialog(QDialog):
                 if mdl.isChecked():  # Exculdes discarded cards.
                     continue
                 mdl = mdl.card_model
-            if card_type in mdl.card_type:
+            if card_type in mdl.card_type.name:
                 cnt += 1
 
         return cnt
@@ -1044,7 +1046,7 @@ class CardButton(QPushButton):
                 pre-emptively.
         """
         actions = []
-        if self.card_model.card_type == "Fusion Monster":
+        if self.card_model.card_type == CardType.FUSION_MONSTER:
             self.fusion_menu(menu, actions)
 
         elif self.parent().ygo_data.check_extra_monster(self.card_model):
@@ -1085,8 +1087,8 @@ class CardButton(QPushButton):
         Args:
             menu (QMenu): Menu to add the action to.
             action_container (list): Data structure to store the action in.
-        """        
-        text = f"Search for {self.card_model.card_type}"
+        """
+        text = f"Search for {self.card_model.card_type.name.replace("_", " ")}"
         search_item = QAction(text)
         search_item.triggered.connect(self.search_dialog)
         util.action_to_list_men(search_item, action_container, menu)
@@ -1452,7 +1454,7 @@ class DeckViewer(QDialog):
 
     def keyPressEvent(self, event: QKeyEvent | None) -> None:
         """Overriden to prevent the user from accidently quitting the
-           application if there are a lot of problems."""
+           application if there are a lot of random keystrokes."""
 
         if event is None:
             return super().keyPressEvent(event)
@@ -1596,18 +1598,19 @@ class CardSearch(QDialog):
         subtype (subtype): What subtype to look for in the database.
         parent (DraftingDialog): For searching capability and checking
             duplicates.s
+        max_sel (int): Maximum selection the drafter is allowed to make.
     """
 
     def __init__(
         self,
-        attribute: str,
+        attribute: CardType,
         subtype: str,
         parent: DraftingDialog,
         max_sel: int = 1
     ) -> None:
         super().__init__(parent)
-        ttl = f"Searching for {subtype.title()}: {attribute.title()}"
-        self.setWindowTitle(ttl)
+        ttl = f"Searching for {subtype.title()}: {attribute.name.title()}"
+        self.setWindowTitle(ttl.replace("_", " "))
         self.setMinimumSize(960, 540)
 
         self.total_cards = max_sel
