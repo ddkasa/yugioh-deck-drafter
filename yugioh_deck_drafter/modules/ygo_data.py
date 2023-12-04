@@ -58,6 +58,87 @@ class DeckType(enum.Enum):
     SIDE = enum.auto()
 
 
+class RaceType(enum.Enum):
+    """Enumerations for card race values."""
+    AQUA = enum.auto()
+    BEAST = enum.auto()
+    BEAST_WARRIOR = enum.auto()
+    CREATOR_GOD = enum.auto()
+    CYBERSE = enum.auto()
+    DINOSAUR = enum.auto()
+    DIVINE_BEAST = enum.auto()
+    DRAGON = enum.auto()
+    FAIRY = enum.auto()
+    FIEND = enum.auto()
+    FISH = enum.auto()
+    INSECT = enum.auto()
+    MACHINE = enum.auto()
+    PLANT = enum.auto()
+    PSYCHIC = enum.auto()
+    PYRO = enum.auto()
+    REPTILE = enum.auto()
+    ROCK = enum.auto()
+    SEA_SERPENT = enum.auto()
+    SPELLCASTER = enum.auto()
+    THUNDER = enum.auto()
+    WARRIOR = enum.auto()
+    WINGED_BEAST = enum.auto()
+    WYRM = enum.auto()
+    ZOMBIE = enum.auto()
+    # Spell/Trap Cards
+    NORMAL = enum.auto()
+    FIELD = enum.auto()
+    EQUIP = enum.auto()
+    CONTINUOUS = enum.auto()
+    QUICK_PLAY = enum.auto()
+    RITUAL = enum.auto()
+    COUNTER = enum.auto()
+
+
+class CardType(enum.Enum):
+    """Card Type Enumerations"""
+    EFFECT_MONSTER = enum.auto()
+    FLIP_EFFECT_MONSTER = enum.auto()
+    FLIP_TUNER_EFFECT_MONSTER = enum.auto()
+    GEMINI_MONSTER = enum.auto()
+    NORMAL_MONSTER = enum.auto()
+    NORMAL_TUNER_MONSTER = enum.auto()
+    PENDULUM_EFFECT_MONSTER = enum.auto()
+    PENDULUM_EFFECT_RITUAL_MONSTER = enum.auto()
+    PENDULUM_FLIP_EFFECT_MONSTER = enum.auto()
+    PENDULUM_NORMAL_MONSTER = enum.auto()
+    PENDULUM_TUNER_EFFECT_MONSTER = enum.auto()
+    RITUAL_EFFECT_MONSTER = enum.auto()
+    RITUAL_MONSTER = enum.auto()
+    SPELL_CARD = enum.auto()
+    SPIRIT_MONSTER = enum.auto()
+    TOON_MONSTER = enum.auto()
+    TRAP_CARD = enum.auto()
+    TUNER_MONSTER = enum.auto()
+    UNION_EFFECT_MONSTER = enum.auto()
+    FUSION_MONSTER = enum.auto()
+    LINK_MONSTER = enum.auto()
+    PENDULUM_EFFECT_FUSION_MONSTER = enum.auto()
+    SYNCHRO_MONSTER = enum.auto()
+    SYNCHRO_PENDULUM_EFFECT_MONSTER = enum.auto()
+    SYNCHRO_TUNER_MONSTER = enum.auto()
+    XYZ_MONSTER = enum.auto()
+    XYZ_PENDULUM_EFFECT_MONSTER = enum.auto()
+    SKILL_CARD = enum.auto()
+    TOKEN = enum.auto()
+
+
+class AttributeEnum(enum.Enum):
+    """Monster element type enumeration."""
+    DARK = enum.auto()
+    EARTH = enum.auto()
+    FIRE = enum.auto()
+    LIGHT = enum.auto()
+    WATER = enum.auto()
+    WIND = enum.auto()
+    DIVINE = enum.auto()
+
+
 @dataclass
 class CardSetModel:
     """Datamodel for a YGO Cardset
