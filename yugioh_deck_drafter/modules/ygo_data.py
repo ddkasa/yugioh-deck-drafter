@@ -3,9 +3,18 @@
 Classes & Functions for managing the YGOPRODECK API communication, modelling
 card sets/cards and exporting to the .ydk format.
 
+Classes:
+    Enums: Various enumerations for card properties and filtering.
+    DataModels: Various models for storing and transferring card models and
+        sets.
+    YugiObj: Main class for managing requesting, formatting and fomatting
+        YuGiOh data.
+    ExtraSearch: Class responsible for searching extra summoning materials and
+        assocciations.
+
 Usage:
-    Instantiate YugiObj and load in and process card data as you need
-        randomise selections..
+    Instantiate YugiObj and load in and process card data as you need or
+        randomise selections.
 
 """
 
@@ -139,7 +148,6 @@ class CardType(enum.Enum):
 
 class AttributeType(enum.Enum):
     """Monster element type enumeration."""
-
     DARK = enum.auto()
     EARTH = enum.auto()
     FIRE = enum.auto()
@@ -157,7 +165,6 @@ class CardSetModel:
     carrying the list of weights for random choices.
 
     """
-
     set_name: str = field()
     set_code: str = field()
     set_date: date = field()
@@ -175,7 +182,6 @@ class CardModel(NamedTuple):
     Some data is stored in the raw JSON[dict] format so that could be
     parsed more cleanly in the future
     """
-
     name: str
     description: str
     card_id: int
@@ -214,23 +220,55 @@ class CardSetFilter:
 
 class YugiObj:
     """Object for managing requests from YGOPRODECK, creating Models and
-       generating cardmodels themselves.
+    generating cardmodels themselves.
 
     Will immediatly request card_set data in order to grab the information
     for the main window.
 
     Attributes:
         card_set (list): Data of all the card_sets available.
+        arche_types (tuple): List of archetypes for querying at a later point.
         CACHE (CachedSession): Cache for most of the requests except images
             which get managed more manually.
         SIDE_DECK_TYPES (set): For filtering out extra deck monsters and
             arche types.
         PROB (defaultdict): probablities for each type of card rarity.
         RARITY_COLORS (defaultdict): For picking and displaying rarity borders.
+        CARD_CLASS_NAMES (list): Pre-formatted list of card classes.
+    
+    Methods:
+        get_card_set: Gets a list of all card_sets for selection and filtering.
+            Called on instantiation.
+        get_arche_type_list: Collects a list of arch_types.
+            Called on instantiation.
+        filter_out_card_sets: Filters out card_sets with a user set
+            filter_object.
+        complex_search: Search Ygoprodeck with a more complex query. Mostly
+            meant for extra deck types.
+        infer_set_types: Creates set classes based on a card sets name.
+        get_card_set_info: Requests card_set info from the YGOprodeck.
+        convert_raw_to_model: Converts or generates a json object into a
+            CardModel.
+        get_card_art: Collects card_art from Ygoprodeck or from local cache
+            and slots them into a QPixmap.
+        get_set_art: Collects the set art from Ygoprodeck or local if avaiable.
+        grab_arche_type_cards: Collects cards based on a singular type.
+        grab_card: Collects a single card based on its name.
+        create_card: Generates a card based on provided JSON data.
+        to_ygodk_format: Converts a DeckModel to a exportable file format.
+        check_extra_monster: Checks if a card belongs in the extra deck.
+        find_extra_materials: Calls another object for searching for extra
+            material requirements.
+        generate_weights: Generates weights based on a set of cards and
+            their rarities.
+        select_random_packs: Selects random packs based on a bunch of supplied
+            criteria.
     """
 
     CACHE = requests_cache.CachedSession(
-        str(Path("cache/ygoprodeck.sqlite")), backend="sqlite", allowable_codes=[200]
+        str(Path("cache/ygoprodeck.sqlite")),
+        backend="sqlite",
+        allowable_codes=[200]
     )
 
     PROB: Final[defaultdict[str, float]] = defaultdict(
@@ -334,7 +372,9 @@ class YugiObj:
         return tuple(archetype)
 
     def filter_out_card_sets(
-        self, card_set: CardSetModel, set_filter: CardSetFilter
+        self,
+        card_set: CardSetModel,
+        set_filter: CardSetFilter
     ) -> bool:
         """Filters out card_sets based on the criteria provided.
 
@@ -356,6 +396,15 @@ class YugiObj:
         return count_bool and date_bool and cls_bool
 
     def complex_search(self, material: 'ExtraMaterial') -> list[CardModel]:
+        """Search method for looking niche types of cards.
+
+        Args:
+            material (ExtraMaterial): Data model of information for searching
+                ygoprodeck.
+
+        Returns:
+            list[CardModel]: List of cards fomatted into a datamodel.
+        """
         base_url = "https://db.ygoprodeck.com/api/v7/cardinfo.php?"
 
         if material.level != -1:
@@ -707,7 +756,10 @@ class YugiObj:
         return material
 
     def generate_weights(
-        self, card_set_name: str, data: list[CardModel], extra: bool = False
+        self,
+        card_set_name: str,
+        data: list[CardModel],
+        extra: bool = False
     ) -> tuple[int, ...]:
         """Generate a list of integers depeding on the weight denoting the
         index of an item inside the set cards.
@@ -743,7 +795,10 @@ class YugiObj:
         return tuple(probabilities)
 
     def select_random_packs(
-        self, pack_set: list[CardSetModel], count_range: range, max_packs: int = 40
+        self, 
+        pack_set: list[CardSetModel], 
+        count_range: range, 
+        max_packs: int = 40
     ) -> list[CardSetModel]:
         """Selects random packs based on the supplied criteria.
         Args:
@@ -774,8 +829,7 @@ class YugiObj:
 
         return packs_to_add
 
-    
-    
+
 @dataclass()
 class ExtraMaterial:
     """Extra Material Info for Special Summons Types."""
@@ -823,6 +877,9 @@ class ExtraSearch:
         check_subtype: Searches for a matching subtype of a card property.
         find_comparison: Searches for a comparison element inside the cards
             description.
+            
+    Attributes:
+        parse_types: List of accepted side deck types.
     """
 
     def __init__(self, parent: YugiObj, card_model: CardModel) -> None:
@@ -842,8 +899,7 @@ class ExtraSearch:
             desc = self.card_model.description.split("\n")[0].replace("\r", "")
         else:
             desc = self.card_model.description.split("/")[0]
-        
-        print(desc)
+
         data = []
         for part in self.split_description(desc):
             mat = self.find_extra_material(part)
@@ -1026,7 +1082,7 @@ class ExtraSearch:
         Raises:
             KeyError: If no sub type is found.
         """
-        
+
         if target.title() in self.parent.arche_types:
             return "archetype", target
 
@@ -1074,7 +1130,7 @@ if __name__ == "__main__":
     y = YugiObj()
 
     card = y.grab_card("Superdreadnought Rail Cannon Gustav Max")[0]
-    
+
     print("Tuner" in y.arche_types)
 
     model = y.create_card(card, None)

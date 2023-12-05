@@ -1,3 +1,26 @@
+"""deck_drafter.py
+
+Main GUI modules that manages information display and drafting rules.
+
+
+Classes:
+    AspectRatio: Basic NamedTuple for storing card aspect ratio.
+    PackOpeningState: Main DataModel for storing drafting information and
+        progression.
+    DraftingDialog: Main class that manages the GUI and drafting progression.
+        Everything else parents to this except the main window.
+    CardButton: Button subclass for making cards interactive and visually
+        useful.
+    DeckViewer: Main widget for displaying the drafted deck and managing
+        discard stages.
+    DeckSlider/DeckWidget/CardLayout: For managing and displaying readble card
+        layouts.
+    CardSearch: GUI for searching for extra deck materials.
+
+Usages:
+    Instatiate DraftingDialog with the correct args and proceed from there
+"""
+
 from __future__ import annotations
 from typing import TYPE_CHECKING, Final, NamedTuple, Optional
 
@@ -7,7 +30,6 @@ import random
 import enum
 from pathlib import Path
 from dataclasses import dataclass, field
-from functools import partial
 
 from PyQt6.QtCore import (QMimeData, QPoint, QRect, QRectF, QSignalBlocker,
                           QSize, Qt, pyqtSignal, pyqtSlot)
@@ -1612,13 +1634,16 @@ class CardSearch(QDialog):
     """Dialog for search for different subtypes of a card when the card desc
     doesn't have a description itself.
 
+    Attributes:
+        data (CardModel): Container for data that matched query with the
+            info given.
+
     Args:
-        attribute (str): The name of the subtype to search 
-            e.g. Synchro, Pendulum
-        subtype (subtype): What subtype to look for in the database.
+        card (CardModel): DataModel for the card the assocciations belong to.
+        extra_material (ExtraMaterial): Query setting for finding suitable
+            cards.
         parent (DraftingDialog): For searching capability and checking
             duplicates.s
-        max_sel (int): Maximum selection the drafter is allowed to make.
     """
 
     def __init__(
@@ -1703,7 +1728,8 @@ class CardSearch(QDialog):
 
         Args:
             index (int, optional): Index of the card to us. Defaults to 0.
-            check (bool, optional): _description_. Defaults to False.
+            check (bool, optional): Checks the card if its True.
+                Defaults to False.
 
         Returns:
             CardButton: For scrolling the view to the item.
@@ -1998,6 +2024,11 @@ class CardLayout(QLayout):
         self._card_items.append(cards)
 
     def parent(self) -> DeckWidget | QVBoxLayout:
+        """Returns the parent for extracting extra information.
+
+        Returns:
+            DeckWidget | QVBoxLayout: Parent of the layout
+        """        
         return self._parent
 
     def sizeHint(self) -> QSize:

@@ -1,3 +1,29 @@
+"""util.py
+
+Utility module for fuctions that are used all over the application
+
+Functions:
+    get_or_insert: For collection images from cache or inserting them into
+        cache.
+    new_line_text: Creates a string that fits into a N line length.
+    clean_layout: Removes all widgets from a layout and deletes thems.
+    check_item_validation: For looping through layouts and skipping empty
+        items.
+    get_operation: Most for showing for displaying warning information in the
+        GUI.
+    round_down_int: Rounds down to the closest given (Nth) multiple.
+    sanitize_file_path: For sanitizing save_names if the deck names or off.
+    action_to_list: For adding an action to a menu and storing them in
+        container.
+    clean_enum_name: For filtering and saving enums as useable strings.
+    enum_to_list: Converts a enum object into a list for easier matching.
+
+Classes:
+    DataSerializer: For serializing and saving JSON files for quicker
+        debugging.
+
+"""
+
 import logging
 from typing import Optional
 from pathlib import Path
