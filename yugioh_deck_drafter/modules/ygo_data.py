@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
 from random import choice, randint
-from typing import Any, Final, NamedTuple, Optional
+from typing import Any, Final, NamedTuple, Optional, Generator
 from urllib.parse import quote
 import re
 
@@ -733,10 +733,24 @@ class ExtraSearch:
         """Base Method that runs the entire search.
         """
         desc = self.card_model.description.split("\n")[0]
-
         data = []
+        for part in self.split_description(desc):
+            mat = self.find_extra_material(part)
+            data.append(mat)
 
         return tuple(data)
+
+    def split_description(self, desc: str) -> Generator[str, None, str]:
+        if " + " not in desc:
+            return desc
+
+        start = 0
+        for m in re.finditer(r"( \+ )", desc):
+            chunk = desc[start:m.span()[0]]
+            yield chunk
+            start = m.span()[1]
+
+        return desc[start:len(desc)]
 
     def find_extra_material(self, desc: str) -> ExtraMaterial:
         extra_mat = ExtraMaterial()
