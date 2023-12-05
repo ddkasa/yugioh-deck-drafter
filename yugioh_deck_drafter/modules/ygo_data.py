@@ -730,6 +730,27 @@ class ExtraSubMaterial(NamedTuple):
 
 
 class ExtraSearch:
+    """Extra Search Object for finding extra deck special summon materials.
+
+    Args:
+        parent (YugiObj): For searching and retrieving card information.
+        card_model (CardModel): For search information and context parsing.
+
+    Methods:
+        parse_description: Main method which runs the description parsing
+            process
+        split_description: Splits a returns description parts according to
+            the main seperator(+).
+        find_extra_material: Builds the actual core data structure for the
+            search information
+        find_monster_cap: Finds monster cards and types for searching.
+        create_sub_material: Generate a sub data structure for searching.
+        find_level: Finds a min/max level if there is one present in the
+            description.
+        find_count: Finds the minimum count of monster required for the extra
+            special summon.
+        check_subtype: Searches for a matching subtype of a card property.
+    """
     def __init__(self, parent: YugiObj, card_model: CardModel) -> None:
         self.parent = parent
         self.card_model = card_model
@@ -764,6 +785,15 @@ class ExtraSearch:
         yield desc[start : len(desc)]
 
     def find_extra_material(self, desc: str) -> ExtraMaterial:
+        """Create the final extra material data structure which the search
+        dialog uses.
+
+        Args:
+            desc (str): Part of the description to parse through.
+
+        Returns:
+            ExtraMaterial: Data for finding the extra material.
+        """
         extra_mat = ExtraMaterial()
         extra_mat.count = self.find_count(desc)
         extra_mat.comparison  # Need to create method to check for special symbols
