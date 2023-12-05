@@ -25,7 +25,7 @@ from PyQt6.QtWidgets import (QApplication, QCompleter, QDialog, QHBoxLayout,
 from yugioh_deck_drafter import util
 from yugioh_deck_drafter.modules.ygo_data import (CardModel, CardSetModel,
                                                   DeckModel, DeckType,
-                                                  CardType)
+                                                  CardType, ExtraMaterial)
 
 if TYPE_CHECKING:
     from yugioh_deck_drafter.__main__ import MainWindow
@@ -601,7 +601,14 @@ class DraftingDialog(QDialog):
         self,
         deck: DeckType | list,
     ) -> str:
-        """Generates a breakdown for each type main card of each deck."""
+        """Generates a breakdown for each type main card of each deck.
+
+        Args:
+            deck (DeckType | list): Deck/Deck Type to create a break down off.
+
+        Returns:
+            str: Breakdown seperated with newlines.
+        """
         decks = {
             DeckType.MAIN: self.deck.main,
             DeckType.EXTRA: self.deck.extra,
@@ -658,7 +665,12 @@ class DraftingDialog(QDialog):
         return count
 
     def discard_stage(self):
-        """Calculates the amount to be discarded and starts the dialog."""
+        """Calculates the amount to be discarded and starts the dialog.
+
+        Raises:
+            ValueError: Will raise a value error if the discard stage was
+                unsucessful.
+        """
 
         discard = self.drafting_model.total_packs
         discard += (self.drafting_model.total_packs // 5)
@@ -680,15 +692,20 @@ class DraftingDialog(QDialog):
 
     def preview_deck(self):
         """Spawns the deck viewer for previewing the deck on demand."""
+
         deck = DeckViewer(self)
         deck.exec()
 
     def keyPressEvent(self, event: QKeyEvent | None) -> None:
         """Key override to prevent the drafter from accidently quitting out of
         the window or misclicking.
+
+        Args:
+            event (QKeyEvent | None): Event object to take information from.
         """
         if event is None:
             return super().keyPressEvent(event)
+
         KEY = Qt.Key
         if (event.key() in {KEY.Key_Escape, KEY.Key_Space}):
             return
@@ -862,7 +879,7 @@ class CardButton(QPushButton):
         if data.level:
             ttip += f" | Level: {data.level}"
         if data.attribute:
-            ttip += f" | Attribute: {data.attribute}"
+            ttip += f" | Attribute: {data.attribute.name.title()}"
         ttip += f"\n\n{desc}"
         if data.attack is not None:
             ttip += f"\n\nATK: {data.attack}  |  DEF: {data.defense}"
@@ -907,6 +924,8 @@ class CardButton(QPushButton):
             if data is None:
                 continue
             filt_matches.add(item)
+
+        filt_matches.discard(self.card_model.name)
 
         return filt_matches
 
@@ -1046,7 +1065,10 @@ class CardButton(QPushButton):
                 pre-emptively.
         """
         actions = []
-        if self.card_model.card_type == CardType.FUSION_MONSTER:
+        if self.card_model.card_type in {
+            CardType.FUSION_MONSTER,
+            CardType.PENDULUM_EFFECT_FUSION_MONSTER
+        }:
             self.fusion_menu(menu, actions)
 
         elif self.parent().ygo_data.check_extra_monster(self.card_model):
@@ -1217,7 +1239,8 @@ class CardButton(QPushButton):
     def search_dialog(self) -> None:
         """Starts a search dialog with the instances target subtype.
         """
-        dialog = CardSearch(self.card_model.card_type, "type", self.parent())
+
+        dialog = CardSearch(self.card_model, self.parent())
 
         if dialog.exec():
             pass
@@ -1603,17 +1626,18 @@ class CardSearch(QDialog):
 
     def __init__(
         self,
-        attribute: CardType,
-        subtype: str,
-        parent: DraftingDialog,
-        max_sel: int = 1
+        card: CardModel,
+        extra_material: ExtraMaterial,
+        parent: DraftingDialog
     ) -> None:
         super().__init__(parent)
-        ttl = f"Searching for {subtype.title()}: {attribute.name.title()}"
+        self.card = card
+        self.extra_mats = extra_material
+
+        ttl = f"Searching for {subtype.title()}: {attribute.title()}"
         self.setWindowTitle(ttl.replace("_", " "))
         self.setMinimumSize(960, 540)
 
-        self.total_cards = max_sel
         self.data = parent.ygo_data.grab_arche_type_cards(attribute, subtype)
 
         if not self.data:

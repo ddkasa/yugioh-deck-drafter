@@ -194,7 +194,7 @@ def enum_to_list(e_class: enum.EnumMeta) -> list[str]:
         e_class (enum.EnumMeta): Enumeration to convert to a list
 
     Returns:
-        list[str]: Converted list of enum names
+        list[str]: Converted list of enum names.
     """
     data = [s.name.replace("_", " ").lower() for s in e_class]  # type: ignore
     return data

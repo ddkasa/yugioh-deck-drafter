@@ -4,8 +4,8 @@ Classes & Functions for managing the YGOPRODECK API communication, modelling
 card sets/cards and exporting to the .ydk format.
 
 Usage:
-    Instantiate YugiObj and load in card data as you need or process 
-    randomisation.
+    Instantiate YugiObj and load in and process card data as you need
+        randomise selections..
 
 """
 
@@ -143,14 +143,6 @@ class AttributeType(enum.Enum):
     WATER = enum.auto()
     WIND = enum.auto()
     DIVINE = enum.auto()
-
-
-class ExtraMaterial(NamedTuple):
-    """Extra Material Info for Special Summons Types."""
-    sub_type: str
-    name: str
-    count: int = 1
-
 
 
 @dataclass
@@ -478,7 +470,7 @@ class YugiObj:
 
     def grab_arche_type_cards(
         self,
-        card_arche: enum.Enum,
+        card_arche: enum.Enum | str,
         subtype: str = "archetype"
     ) -> list[CardModel]:
         """Filters out cards with the specfied subtype.
@@ -494,7 +486,8 @@ class YugiObj:
             list | None: Either returns None if the query is bad or converted
                 json data retrieved.
         """
-        card_arche = util.clean_enum_name(card_arche)  # type: ignore
+        if isinstance(card_arche, enum.Enum):
+            card_arche = util.clean_enum_name(card_arche)  # type: ignore
 
         url = "https://db.ygoprodeck.com/api/v7/cardinfo.php?{0}={1}"
         request = self.CACHE.get(url.format(subtype, card_arche),
@@ -612,7 +605,7 @@ class YugiObj:
         """Checks if a card belongs in the side deck.
 
         Args:
-            card (YGOCard): Card to be Checked
+            card (CardModel): Card to be Checked
 
         Returns:
             bool: checks if a card model variable in present in a class
@@ -620,62 +613,29 @@ class YugiObj:
         """
         return card.card_type in self.SIDE_DECK_TYPES
 
-    def check_extra_material(
+    def find_extra_materials(
         self,
         card: CardModel
-    ) -> tuple[ExtraMaterial, ...]:
-
-        patt_match = {
-            CardType.FUSION_MONSTER:
-                r'(?<!\\)"(.*?[^\\])"',
-            CardType.LINK_MONSTER: 
-                r'(?P<count>\d+)\+\s*WATER\s+monsters',
-            CardType.PENDULUM_EFFECT_FUSION_MONSTER: 
-                r'(?<!\\)"(.*?[^\\])"',
-            CardType.SYNCHRO_MONSTER: 
-                r"(?P<count>\d+)\s+Level\s+(?P<subtype>\d+)\s+monsters",
-            CardType.SYNCHRO_PENDULUM_EFFECT_MONSTER: 
-                r"(?P<count>\d+)\s+Level\s+(?P<subtype>\d+)\s+monsters",
-            CardType.SYNCHRO_TUNER_MONSTER: 
-                r"(?P<count>\d+)\s+Level\s+(?P<subtype>\d+)\s+monsters",
-            CardType.XYZ_MONSTER:
-                r"(?P<count>\d+)\s+Level\s+(?P<subtype>\d+)\s+monsters",
-            CardType.XYZ_PENDULUM_EFFECT_MONSTER:
-                r"(?P<count>\d+)\s+Level\s+(?P<subtype>\d+)\s+monsters",
-        }
-
-        extra_ms = []
-        data = card.description.split("\n")[0]
-
-        extra_patt = re.compile(patt_match[card.card_type])
-        
-        for item in re.finditer(extra_patt, data):
-            data = ExtraMaterial()
-
-        return 
-
-    def check_subtype(self, target: str) -> str:
-        """Checks Enums and other type lists and returns a subtype if it 
-        matches.
+    ) -> tuple['ExtraMaterial', ...]:
+        """Parses the given cards description in order to find the extra
+        summoning materials.
 
         Args:
-            target (str): Name of the type to look for inside the subypes.
+            card (CardModel): The information to be parsed.
 
         Returns:
-            str: The name of the sub type for further use.
-
-        Raises:
-            KeyError: If no sub type is found.
+            tuple: An array of extra materials.
         """
-        if target in self.arche_types:
-            return "archetype"
-        # elif target 
-        else:
-            raise KeyError(f"{target} not found in any subtype.")
+        search = ExtraSearch(self, card)
+        material = search.find_extra_material()
+        return material
 
-
-    def generate_weights(self, card_set_name: str, data: list[CardModel],
-                         extra: bool = False) -> tuple[int, ...]:
+    def generate_weights(
+        self,
+        card_set_name: str, 
+        data: list[CardModel],
+        extra: bool = False
+    ) -> tuple[int, ...]:
         """Generate a list of integers depeding on the weight denoting the
         index of an item inside the set cards.
 
@@ -690,7 +650,6 @@ class YugiObj:
         """
 
         probabilities = []
-
         for card_model in data:
             card = card_model.raw_data
             card_sets = card["card_sets"]
@@ -716,7 +675,7 @@ class YugiObj:
         count_range: range,
         max_packs: int = 40
     ) -> list[CardSetModel]:
-        """Selects random packs based integer
+        """Selects random packs based on the supplied criteria.
         Args:
             pack_set (list[CardSetModel]): Collection of card_sets to select
                 from.
@@ -744,3 +703,116 @@ class YugiObj:
             pack_counter += chosen_pack.count
 
         return packs_to_add
+
+
+@dataclass()
+class ExtraMaterial:
+    """Extra Material Info for Special Summons Types."""
+    count: int = field(default=1)
+    comparison: str = field(default="==")
+    count: int = field(default=1)
+    cardtype: Optional[CardType] = field(default=None)
+    archetype: Optional[str] = field(default=None)
+    element: Optional[AttributeType] = field(default=None)
+    race: Optional[RaceType] = field(default=None)
+
+    def __getitem__(self, item):
+        return getattr(self, item)
+
+    def __setitem__(self, item, value):
+        setattr(self, item, value)
+
+
+class ExtraSearch:
+
+    def __init__(self, parent: YugiObj, card_model: CardModel) -> None:
+        self.parent = parent
+        self.card_model = card_model
+
+    def parse_description(self) -> tuple[ExtraMaterial, ...]:
+        """Base Method that runs the entire search.
+        """
+        desc = self.card_model.description.split("\n")[0]
+
+        data = []
+
+        return tuple(data)
+
+    def find_extra_material(self, desc: str) -> ExtraMaterial:
+        extra_mat = ExtraMaterial()
+
+        return extra_mat
+
+    # def find_monster_cap(self, text: str):
+    #     negative_capture = r'(?<=non-)([A-Za-z]{4,})'
+    #     archetype_capture = r'(?<="|\')(.*?[A-Za-z-])(?:"|\')'
+    #     monster_type_capture = r'(?<!non-)([a-zA-Z-]+)(?: monster)'
+    #     return
+
+    def find_level(self, text: str) -> int:
+        """Finds a level in the description if present.
+
+        Args:
+            text (str): Pretrimmed description for the regex search.
+
+        Returns:
+            int: Level in int format. If not found it will be a -1.
+        """
+        level = -1
+
+        level_search = re.match(r'(?<=Level )([1-9])', text)
+        if level_search is None:
+            return -1
+
+        level = int(level_search.group(0))
+
+        return level
+
+    def find_count(self, text: str) -> int:
+        """Finds the minimum count of monsters required to summon the extra
+        monster.
+
+        Args:
+            text (str): Description of the card pre-trimmed/processed.
+
+        Returns:
+            int: Total number of extra monsters. Defaults to 1.
+        """
+        count_search = re.findall(r'(?<!Level )([1-9]){1,}', text)
+        if count_search is None:
+            return 1
+
+        count = sum(map(int, count_search))
+
+        return count
+
+    def check_subtype(self, target: str) -> tuple[str, enum.Enum | str]:
+        """Checks Enums and other type lists and returns a subtype if it
+        matches.
+
+        Args:
+            target (str): Name of the type to look for inside the subypes.
+
+        Returns:
+            str: The name of the sub type for further use.
+
+        Raises:
+            KeyError: If no sub type is found.
+        """
+
+        if target in self.parent.arche_types:
+            return "archetype", target
+
+        ETL = util.enum_to_list
+        target.upper().replace(" ", "_")
+        if target in ETL(AttributeType):
+            return "attribute", AttributeType[target]
+        elif target in ETL(RaceType):
+            return "race", RaceType[target]
+        elif target in ETL(CardType):
+            return "cardtype", CardType[target]
+        else:
+            data = self.parent.grab_card(target)
+            if data is None:
+                raise KeyError(f"{target} not found in any subtype.")
+        return "name", target
