@@ -533,7 +533,11 @@ class YugiObj:
 
         return request.json()["data"]
 
-    def create_card(self, data: dict, set_data: CardSetModel | None) -> CardModel:
+    def create_card(
+        self,
+        data: dict,
+        set_data: CardSetModel | None
+    ) -> CardModel:
         """Create a card datamodel from given JSON Data.
 
         Creates a cardmodel which uses the first rarity data found which
@@ -578,7 +582,7 @@ class YugiObj:
             defense=data.get("def"),
             level=data.get("level"),
             rarity=rarity,
-            card_set=set_data,
+            card_set=set_data
         )
 
         return card
@@ -623,7 +627,10 @@ class YugiObj:
         """
         return card.card_type in self.SIDE_DECK_TYPES
 
-    def find_extra_materials(self, card: CardModel) -> tuple["ExtraMaterial", ...]:
+    def find_extra_materials(
+        self,
+        card: CardModel
+    ) -> tuple["ExtraMaterial", ...]:
         """Parses the given cards description in order to find the extra
         summoning materials.
 
@@ -634,7 +641,7 @@ class YugiObj:
             tuple: An array of extra materials.
         """
         search = ExtraSearch(self, card)
-        material = search.find_extra_material()
+        material = search.parse_description()
         return material
 
     def generate_weights(
@@ -709,7 +716,7 @@ class YugiObj:
 @dataclass()
 class ExtraMaterial:
     """Extra Material Info for Special Summons Types."""
-
+    level: int = field(default=-1)
     count: int = field(default=1)
     comparison: str = field(default="==")
     count: int = field(default=1)
@@ -724,6 +731,7 @@ class ExtraMaterial:
 
 class ExtraSubMaterial(NamedTuple):
     """Type of extra deck summoning material."""
+
     name: str | enum.Enum
     subtype: str
     polarity: bool = True
@@ -750,20 +758,59 @@ class ExtraSearch:
         find_count: Finds the minimum count of monster required for the extra
             special summon.
         check_subtype: Searches for a matching subtype of a card property.
+        find_comparison: Searches for a comparison element inside the cards
+            description.
     """
+
     def __init__(self, parent: YugiObj, card_model: CardModel) -> None:
         self.parent = parent
         self.card_model = card_model
 
+        self.parse_types = parent.SIDE_DECK_TYPES.copy()
+        self.parse_types.remove(CardType.PENDULUM_EFFECT_FUSION_MONSTER)
+        self.parse_types.remove(CardType.FUSION_MONSTER)
+
     def parse_description(self) -> tuple[ExtraMaterial, ...]:
         """Base Method that runs the entire search."""
-        desc = self.card_model.description.split("\n")[0].replace("\r", "")
+        if self.card_model.card_type not in self.parse_types:
+            return tuple([self.filter_assocciated()])
+
+        if "\n" in self.card_model.description:
+            desc = self.card_model.description.split("\n")[0].replace("\r", "")
+        else:
+            desc = self.card_model.description.split("/")[0]
+
         data = []
         for part in self.split_description(desc):
             mat = self.find_extra_material(part)
             data.append(mat)
 
         return tuple(data)
+
+    def filter_assocciated(self) -> ExtraMaterial:
+        """Filters out assocciated cards for quick adding with the submenu.
+
+        Function for basic filtering of items in a description.
+
+        Returns:
+            ExtraMaterial: Data model of the extra material defining what the
+                drafter can add.
+        """
+        pattern = re.compile(r'(?<!\\)"(.*?[^\\])"')
+        matches = re.findall(pattern, self.card_model.description)
+
+        filt_matches = ExtraMaterial()
+        for item in matches:
+            data = self.parent.grab_card(item)
+            # Might want to use the data here instead of the name to avoid some
+            # unnecessary processing the future.
+            if data is None or item == self.card_model.name:
+                continue
+            filt_matches.count += 1
+            model = ExtraSubMaterial(item, "name")
+            filt_matches.material.append(model)
+
+        return filt_matches
 
     def split_description(self, desc: str) -> Generator[str, None, None]:
         """Split description apart according to each seperate chunk and return
@@ -778,11 +825,11 @@ class ExtraSearch:
         """
         start = 0
         for m in re.finditer(r"( \+ )", desc):
-            chunk = desc[start : m.span()[0]]
+            chunk = desc[start:m.span()[0]]
             yield chunk
             start = m.span()[1]
 
-        yield desc[start : len(desc)]
+        yield desc[start:len(desc)]
 
     def find_extra_material(self, desc: str) -> ExtraMaterial:
         """Create the final extra material data structure which the search
@@ -796,9 +843,15 @@ class ExtraSearch:
         """
         extra_mat = ExtraMaterial()
         extra_mat.count = self.find_count(desc)
-        extra_mat.comparison  # Need to create method to check for special symbols
+        extra_mat.level = self.find_level(desc)
+        extra_mat.comparison = self.find_comparison(desc)
 
         extra_mat.material = self.find_monster_cap(desc)
+
+        if not extra_mat.count:
+            for item in extra_mat.material:
+                if item.subtype == "name":
+                    extra_mat.count += 1
 
         return extra_mat
 
@@ -828,9 +881,7 @@ class ExtraSearch:
         return data
 
     def create_sub_material(
-        self,
-        data: Iterable,
-        polarity: bool = True
+        self, data: Iterable, polarity: bool = True
     ) -> list[ExtraSubMaterial]:
         """Creates sub material NamedTuples.
 
@@ -842,13 +893,16 @@ class ExtraSearch:
         Returns:
             list[ExtraSubMaterial]: Parsed items in a list.
         """
-        data = []
+        sub_mats = []
         for item in data:
-            subtype, item = self.check_subtype(item)
+            try:
+                subtype, item = self.check_subtype(item)
+            except KeyError:
+                continue
             material = ExtraSubMaterial(item, subtype, polarity)
-            data.append(material)
+            sub_mats.append(material)
 
-        return data
+        return sub_mats
 
     def find_level(self, text: str) -> int:
         """Finds a level in the description if present.
@@ -859,13 +913,11 @@ class ExtraSearch:
         Returns:
             int: Level in int format. If not found it will be a -1.
         """
-        level = -1
-
-        level_search = re.match(r"(?<=Level )([1-9])", text)
-        if level_search is None:
+        level_search = re.findall(r"(?<=Level )([1-9]){1}", text)
+        if not level_search:
             return -1
 
-        level = int(level_search.group(0))
+        level = int(level_search[0])
 
         return level
 
@@ -900,12 +952,13 @@ class ExtraSearch:
         Raises:
             KeyError: If no sub type is found.
         """
+        target = target.removesuffix("-type")
 
         if target in self.parent.arche_types:
             return "archetype", target
 
         ETL = util.enum_to_list
-        target.upper().replace(" ", "_")
+        target = target.lower()
         if target in ETL(AttributeType):
             return "attribute", AttributeType[target]
         elif target in ETL(RaceType):
@@ -915,5 +968,40 @@ class ExtraSearch:
         else:
             data = self.parent.grab_card(target)
             if data is None:
+                logging.error(self.card_model.name)
+                logging.error(self.card_model.description)
                 raise KeyError(f"{target} not found in any subtype.")
         return "name", target
+
+    def find_comparison(self, desc: str) -> str:
+        """Match a comparison for limiters on card count and levels.
+
+        Args:
+            desc (str): Part of description to be parsed.
+
+        Returns:
+            str: Symbol for matching the correct range over Extra Material.
+        """
+
+        match_dict = {
+            "or more": ">=",
+            "or higher": ">=",
+            "or lower": "<=",
+            "or less": "<="
+        }
+        for k, v in match_dict.items():
+            if k in desc:
+                return v
+
+        return "=="
+
+
+if __name__ == "__main__":
+    y = YugiObj()
+
+    card = y.grab_card("Beatrice, Lady of the Eternal")[0]
+
+    model = y.create_card(card, None)
+    print(model.description)
+    for i in y.find_extra_materials(model):
+        print(i)

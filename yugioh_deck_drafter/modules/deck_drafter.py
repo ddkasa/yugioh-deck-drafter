@@ -864,7 +864,7 @@ class CardButton(QPushButton):
         self.setSizePolicy(QSP.MinimumExpanding, QSP.MinimumExpanding)
         self.setCheckable(True)
 
-        self.assocc = self.filter_assocciated()
+        self.assocc = self.filter_assocciated(data)
 
         self.image = parent.ygo_data.get_card_art(self.card_model)
 
@@ -901,33 +901,21 @@ class CardButton(QPushButton):
         """
         return self.minimumSize()
 
-    def filter_assocciated(self) -> set[str]:
+    def filter_assocciated(
+        self,
+        card_model: CardModel
+    ) -> tuple[ExtraMaterial, ...]:
         """Filters out asscciated cards for quick adding with the submenu.
 
         Also checks if the items in the card are actually accessible in the
         Ygoprodeck database.
 
         Returns:
-            set: Names of the cards assocciated with this instance.
-                 *At the moment it will return anything that matches, but in
-                 reality it should check if cards exists in order to avoid
-                 confusion.
+            list: Assocciated Extra Summon Data.
         """
-        pattern = re.compile(r'(?<!\\)"(.*?[^\\])"')
-        matches = re.findall(pattern, self.accessibleDescription())
+        assocc_data = self.parent().ygo_data.find_extra_materials(card_model)
 
-        filt_matches = set()
-        for item in matches:
-            data = self.parent().ygo_data.grab_card(item)
-            # Might want to use the data here instead of the name to avoid some
-            # unnecessary processing the future.
-            if data is None:
-                continue
-            filt_matches.add(item)
-
-        filt_matches.discard(self.card_model.name)
-
-        return filt_matches
+        return assocc_data
 
     def paintEvent(self, event: QPaintEvent | None) -> None:
         """Overriden PaintEvent for painting the card art and additonal
@@ -1065,45 +1053,40 @@ class CardButton(QPushButton):
                 pre-emptively.
         """
         actions = []
-        if self.card_model.card_type in {
-            CardType.FUSION_MONSTER,
-            CardType.PENDULUM_EFFECT_FUSION_MONSTER
-        }:
+        if self.parent().ygo_data.check_extra_monster(self.card_model):
             self.fusion_menu(menu, actions)
 
-        elif self.parent().ygo_data.check_extra_monster(self.card_model):
-            self.search_menu(menu, actions)
+        # elif self.assocc:
+        #     for item in self.assocc:
+        #         acc = self.create_add_action()
+        #         util.action_to_list_men(acc, actions, menu)
 
-        elif self.assocc:
-            for item in self.assocc:
-                acc = QAction(f"Add {item}")
-                acc.triggered.connect(partial(self.add_assocc, item))
-                util.action_to_list_men(acc, actions, menu)
-
-            if self.parent().drafting_model.selections_left > 1:
-                acc = QAction("Add all Assocciated")
-                acc.triggered.connect(self.add_all_assocc)
-                util.action_to_list_men(acc, actions, menu)
+        #     if self.parent().drafting_model.selections_left > 1:
+        #         acc = QAction("Add all Assocciated")
+        #         acc.triggered.connect(self.add_all_assocc)
+        #         util.action_to_list_men(acc, actions, menu)
 
         return actions
 
     def fusion_menu(self, menu: QMenu, action_container: list) -> None:
-        poly = "Polymerization"
-        if self.parent().drafting_model.selections_left > 1:
-            fusion = QAction("Add All Fusion Parts")
-            fusion.triggered.connect(self.add_all_assocc)
-            util.action_to_list_men(fusion, action_container, menu)
 
-        poly_add = QAction("Add Polymerization")
-        poly_add.triggered.connect(lambda: self.add_assocc(poly))
-        util.action_to_list_men(poly_add, action_container, menu)
+        for assocc in self.assocc:
+            if assocc.material and assocc.material[0].name == "name":
+                action = self.create_add_action(assocc[0].name)
+            else:
+                action = self.search_menu(assocc)
 
-        for item in self.assocc:
-            acc = QAction(f"Add {item}")
-            acc.triggered.connect(partial(self.add_assocc, item))
-            util.action_to_list_men(acc, action_container, menu)
+            util.action_to_list_men(action, action_container, menu)
 
-    def search_menu(self, menu: QMenu, action_container: list) -> None:
+    def create_add_action(self, name: str) -> QAction:
+        action = QAction(name)
+        action.triggered.connect(lambda: self.add_assocc(name))
+        return action
+
+    def search_menu(
+        self,
+        data: ExtraMaterial,
+    ) -> QAction:
         """Create an action for to search for a subtype of a card.
 
         Args:
@@ -1112,8 +1095,9 @@ class CardButton(QPushButton):
         """
         text = f"Search for {self.card_model.card_type.name.replace("_", " ")}"
         search_item = QAction(text)
-        search_item.triggered.connect(self.search_dialog)
-        util.action_to_list_men(search_item, action_container, menu)
+        search_item.triggered.connect(lambda: self.search_dialog(data))
+
+        return search_item
 
     def discard_stage_menu(self, menu: QMenu) -> list[QAction]:
         """Menu that pop ups when in the discard stage of drafting.
@@ -1236,11 +1220,11 @@ class CardButton(QPushButton):
         """Override to clear typing issues when calling this function."""
         return self.drafting_dialog  # type: ignore
 
-    def search_dialog(self) -> None:
+    def search_dialog(self, data: ExtraMaterial) -> None:
         """Starts a search dialog with the instances target subtype.
         """
 
-        dialog = CardSearch(self.card_model, self.parent())
+        dialog = CardSearch(self.card_model, data, self.parent())
 
         if dialog.exec():
             pass
