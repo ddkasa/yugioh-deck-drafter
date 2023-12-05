@@ -732,7 +732,7 @@ class ExtraSearch:
     def parse_description(self) -> tuple[ExtraMaterial, ...]:
         """Base Method that runs the entire search.
         """
-        desc = self.card_model.description.split("\n")[0]
+        desc = self.card_model.description.split("\n")[0].replace("\r", "")
         data = []
         for part in self.split_description(desc):
             mat = self.find_extra_material(part)
@@ -740,28 +740,51 @@ class ExtraSearch:
 
         return tuple(data)
 
-    def split_description(self, desc: str) -> Generator[str, None, str]:
-        if " + " not in desc:
-            return desc
+    def split_description(self, desc: str) -> Generator[str, None, None]:
+        """Split description apart according to each seperate chunk and return
+        part by part.
 
+        Args:
+            desc (str): Whole description preprocessed and cut off from the
+                previous end.
+
+        Yields:
+            str: Each seperated part of the description.
+        """
         start = 0
         for m in re.finditer(r"( \+ )", desc):
             chunk = desc[start:m.span()[0]]
             yield chunk
             start = m.span()[1]
 
-        return desc[start:len(desc)]
+        yield desc[start:len(desc)]
 
     def find_extra_material(self, desc: str) -> ExtraMaterial:
         extra_mat = ExtraMaterial()
 
         return extra_mat
 
-    # def find_monster_cap(self, text: str):
-    #     negative_capture = r'(?<=non-)([A-Za-z]{4,})'
-    #     archetype_capture = r'(?<="|\')(.*?[A-Za-z-])(?:"|\')'
-    #     monster_type_capture = r'(?<!non-)([a-zA-Z-]+)(?: monster)'
-    #     return
+    def find_monster_cap(self, text: str) -> set[str]:
+        """Parses the given text for types and returns a set.
+
+        Args:
+            text (str): Chunk of description to be parsed.
+
+        Returns:
+            set[str]: A set with all the types with the none elements removed.
+        """
+        data = set()
+
+        archetype_capture = r'(?<="|\')(.*?[A-Za-z-])(?:"|\')'
+        data.update(re.findall(archetype_capture, text))
+
+        monster_type_capture = r'(?<!non-)([a-zA-Z-]+)(?: monster)'
+        data.update(re.findall(monster_type_capture, text))
+
+        negative_capture = r'(?<=non-)([A-Za-z]{4,})'
+        data.difference_update(re.findall(negative_capture, text))
+
+        return data
 
     def find_level(self, text: str) -> int:
         """Finds a level in the description if present.
