@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Final, NamedTuple, Optional
 import logging
 import math
 import random
-import re
+import enum
 from pathlib import Path
 from dataclasses import dataclass, field
 from functools import partial
@@ -1056,21 +1056,28 @@ class CardButton(QPushButton):
         if self.parent().ygo_data.check_extra_monster(self.card_model):
             self.fusion_menu(menu, actions)
 
-        # elif self.assocc:
-        #     for item in self.assocc:
-        #         acc = self.create_add_action()
-        #         util.action_to_list_men(acc, actions, menu)
+        elif self.assocc:
+            for item in self.assocc:
+                for card in item.material:
+                    print(card)
+                    if card.subtype != "name":
+                        continue
+                    action = self.create_add_action(str(card.name))
+                    util.action_to_list_men(action, actions, menu)
 
-        #     if self.parent().drafting_model.selections_left > 1:
-        #         acc = QAction("Add all Assocciated")
-        #         acc.triggered.connect(self.add_all_assocc)
-        #         util.action_to_list_men(acc, actions, menu)
+            if (self.parent().drafting_model.selections_left > 1
+               and actions):
+                acc = QAction("Add all Assocciated")
+                acc.triggered.connect(self.add_all_assocc)
+                util.action_to_list_men(acc, actions, menu)
 
         return actions
 
     def fusion_menu(self, menu: QMenu, action_container: list) -> None:
 
         for assocc in self.assocc:
+            if not assocc.material and assocc.level == -1:
+                continue
             if assocc.material and assocc.material[0].name == "name":
                 action = self.create_add_action(assocc[0].name)
             else:
@@ -1078,8 +1085,10 @@ class CardButton(QPushButton):
 
             util.action_to_list_men(action, action_container, menu)
 
-    def create_add_action(self, name: str) -> QAction:
-        action = QAction(name)
+    def create_add_action(self, name: str | enum.Enum) -> QAction:
+        if isinstance(name, enum.Enum):
+            name = name.name.replace("_", " ").title()
+        action = QAction("Add " + name)
         action.triggered.connect(lambda: self.add_assocc(name))
         return action
 
@@ -1146,15 +1155,19 @@ class CardButton(QPushButton):
         self.setChecked(True)
         self.setDisabled(True)
 
-        items = list(self.assocc)
+        items = []
         if self.parent().ygo_data.check_extra_monster(self.card_model):
-            # Need to confirm this as different extra deck monster might need
-            # different material
+            for item in self.assocc:
+                for sub_item in item.material:
+                    if sub_item.subtype != "name":
+                        continue
+                    items.append(sub_item.name)
+
             if self.card_model.card_type == "Fusion Monster":
                 poly = "Polymerization"
                 items.append(poly)
 
-        self.get_card(self.assocc)
+        self.get_card(items)
 
     def add_assocc(self, card_name: str) -> None:
         """Adds a single assocciated card to the selected cards.
@@ -1618,11 +1631,11 @@ class CardSearch(QDialog):
         self.card = card
         self.extra_mats = extra_material
 
-        ttl = f"Searching for {subtype.title()}: {attribute.title()}"
+        ttl = f"Searching for {card.name} assocciations."
         self.setWindowTitle(ttl.replace("_", " "))
         self.setMinimumSize(960, 540)
 
-        self.data = parent.ygo_data.grab_arche_type_cards(attribute, subtype)
+        self.data = parent.ygo_data.complex_search(extra_material)
 
         if not self.data:
             self.reject()
