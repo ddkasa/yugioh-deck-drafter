@@ -32,6 +32,7 @@ from datetime import date
 import re
 import unicodedata
 import enum
+from functools import cache
 
 import math
 
@@ -213,6 +214,7 @@ def clean_enum_name(en_name: enum.Enum) -> str:
     return conv
 
 
+@cache
 def enum_to_list(e_class: enum.EnumMeta) -> list[str]:
     """Convert an enum class into a general list of enum string names.
 

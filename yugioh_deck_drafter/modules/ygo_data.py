@@ -77,6 +77,7 @@ class DeckType(enum.Enum):
 
 class RaceType(enum.Enum):
     """Enumerations for card race values."""
+
     AQUA = enum.auto()
     BEAST = enum.auto()
     BEAST_WARRIOR = enum.auto()
@@ -148,6 +149,7 @@ class CardType(enum.Enum):
 
 class AttributeType(enum.Enum):
     """Monster element type enumeration."""
+
     DARK = enum.auto()
     EARTH = enum.auto()
     FIRE = enum.auto()
@@ -165,6 +167,7 @@ class CardSetModel:
     carrying the list of weights for random choices.
 
     """
+
     set_name: str = field()
     set_code: str = field()
     set_date: date = field()
@@ -182,6 +185,7 @@ class CardModel(NamedTuple):
     Some data is stored in the raw JSON[dict] format so that could be
     parsed more cleanly in the future
     """
+
     name: str
     description: str
     card_id: int
@@ -266,9 +270,7 @@ class YugiObj:
     """
 
     CACHE = requests_cache.CachedSession(
-        str(Path("cache/ygoprodeck.sqlite")),
-        backend="sqlite",
-        allowable_codes=[200]
+        str(Path("cache/ygoprodeck.sqlite")), backend="sqlite", allowable_codes=[200]
     )
 
     PROB: Final[defaultdict[str, float]] = defaultdict(
@@ -372,9 +374,7 @@ class YugiObj:
         return tuple(archetype)
 
     def filter_out_card_sets(
-        self,
-        card_set: CardSetModel,
-        set_filter: CardSetFilter
+        self, card_set: CardSetModel, set_filter: CardSetFilter
     ) -> bool:
         """Filters out card_sets based on the criteria provided.
 
@@ -395,7 +395,7 @@ class YugiObj:
 
         return count_bool and date_bool and cls_bool
 
-    def complex_search(self, material: 'ExtraMaterial') -> list[CardModel]:
+    def complex_search(self, material: "ExtraMaterial") -> list[CardModel]:
         """Search method for looking niche types of cards.
 
         Args:
@@ -409,8 +409,9 @@ class YugiObj:
 
         if material.level != -1:
             base_url += "level={comparison}{level}"
-            base_url = base_url.format(comparison=material.comparison,
-                                       level=material.level)
+            base_url = base_url.format(
+                comparison=material.comparison, level=material.level
+            )
 
         for item in material.material:
             if not item.polarity or item.subtype == "name":
@@ -436,11 +437,7 @@ class YugiObj:
             )
             return []
 
-        return self.convert_raw_to_card_model(
-            None,
-            request.json()["data"],
-            material
-            )
+        return self.convert_raw_to_card_model(None, request.json()["data"], material)
 
     def infer_set_types(self, set_name: str) -> set[CardSetClass]:
         """Parses the name of a card set and generates set classes for
@@ -479,10 +476,10 @@ class YugiObj:
         return cards
 
     def convert_raw_to_card_model(
-        self, 
+        self,
         card_set: CardSetModel | None,
         data: list[dict],
-        search_material: Optional['ExtraMaterial'] = None
+        search_material: Optional["ExtraMaterial"] = None,
     ) -> list[CardModel]:
         """Converts raw json response data into usable card models.
 
@@ -491,7 +488,7 @@ class YugiObj:
               *Note might have to use derive the card set from available data
               in the future.
             data (list[dict]): Raw json data for conversion
-            search_material (ExtraMaterial): For filtering out items that are 
+            search_material (ExtraMaterial): For filtering out items that are
                 not needed.
 
         Returns:
@@ -517,7 +514,6 @@ class YugiObj:
                     print(t)
                     print(card, item)
                     sys.exit()
-
 
         return cards
 
@@ -593,9 +589,7 @@ class YugiObj:
         return image
 
     def grab_arche_type_cards(
-        self,
-        card_arche: enum.Enum | str,
-        subtype: str = "archetype"
+        self, card_arche: enum.Enum | str, subtype: str = "archetype"
     ) -> list[CardModel]:
         """Filters out cards with the specfied subtype.
 
@@ -647,7 +641,7 @@ class YugiObj:
     def create_card(
         self,
         data: dict,
-        set_data: CardSetModel | None
+        set_data: Optional[CardSetModel] = None
     ) -> CardModel:
         """Create a card datamodel from given JSON Data.
 
@@ -684,7 +678,7 @@ class YugiObj:
 
         card = CardModel(
             name=data["name"],
-            description=data["desc"],
+            description=self.filter_card_description(data),
             card_id=data["id"],
             card_type=type_enum,
             raw_data=data,
@@ -693,10 +687,25 @@ class YugiObj:
             defense=data.get("def"),
             level=data.get("level"),
             rarity=rarity,
-            card_set=set_data
+            card_set=set_data,
         )
 
         return card
+
+    def filter_card_description(self, data: dict) -> str:
+        """Filters out the correct card description if multiple are present.
+
+        Args:
+            data (dict): Raw json data with the descriptions strings.
+
+        Returns:
+            str: Correct description text.
+        """
+        desc = data.get("monster_desc", "")
+        if desc is not None:
+            return desc
+
+        return data.get("desc", "")
 
     def to_ygodk_format(self, deck: DeckModel) -> str:
         """Generates and formats a .ydk file format from the provided deck.
@@ -738,10 +747,7 @@ class YugiObj:
         """
         return card.card_type in self.SIDE_DECK_TYPES
 
-    def find_extra_materials(
-        self,
-        card: CardModel
-    ) -> tuple["ExtraMaterial", ...]:
+    def find_extra_materials(self, card: CardModel) -> tuple["ExtraMaterial", ...]:
         """Parses the given cards description in order to find the extra
         summoning materials.
 
@@ -756,10 +762,7 @@ class YugiObj:
         return material
 
     def generate_weights(
-        self,
-        card_set_name: str,
-        data: list[CardModel],
-        extra: bool = False
+        self, card_set_name: str, data: list[CardModel], extra: bool = False
     ) -> tuple[int, ...]:
         """Generate a list of integers depeding on the weight denoting the
         index of an item inside the set cards.
@@ -795,10 +798,7 @@ class YugiObj:
         return tuple(probabilities)
 
     def select_random_packs(
-        self, 
-        pack_set: list[CardSetModel], 
-        count_range: range, 
-        max_packs: int = 40
+        self, pack_set: list[CardSetModel], count_range: range, max_packs: int = 40
     ) -> list[CardSetModel]:
         """Selects random packs based on the supplied criteria.
         Args:
@@ -833,6 +833,7 @@ class YugiObj:
 @dataclass()
 class ExtraMaterial:
     """Extra Material Info for Special Summons Types."""
+
     level: int = field(default=-1)
     count: int = field(default=1)
     comparison: str = field(default="")
@@ -944,12 +945,12 @@ class ExtraSearch:
             str: Each seperated part of the description.
         """
         start = 0
-        for m in re.finditer(r"( \+ )", desc):
-            chunk = desc[start:m.span()[0]]
+        for m in re.finditer(r"( \+|, )", desc):
+            chunk = desc[start : m.span()[0]]
             yield chunk
             start = m.span()[1]
 
-        yield desc[start:len(desc)]
+        yield desc[start : len(desc)]
 
     def find_extra_material(self, desc: str) -> ExtraMaterial:
         """Create the final extra material data structure which the search
@@ -989,41 +990,59 @@ class ExtraSearch:
         Returns:
             set[str]: A set with all the types with the none elements removed.
         """
-        data = []
+        data = set()
+        checked_words = set()
+
         text = text.lower()
         text = re.sub(r"\+", "", text)
 
-        archetype_patt = r'(?<="|\')(.*?[a-z-])(?:"|\')'
+        archetype_patt = r'(?<=")(.*?[a-z-])(?:")'
         archetype_match = re.findall(archetype_patt, text, re.I)
+        checked_words.update(archetype_match)
         print("arche", archetype_match)
-        data.extend(self.create_sub_material(archetype_match))
+        data.update(self.create_sub_material(archetype_match))
 
         monster_type_capture = r"(?<!non-)([a-z-]+)(?:(monster)(s))"
         monster_match = re.findall(monster_type_capture, text, re.I)
+        checked_words.update(monster_match)
         print("monster-match", monster_match)
-        data.extend(self.create_sub_material(monster_match))
+        data.update(self.create_sub_material(monster_match))
+
+        sub_type_capture = r"([a-z]+)(?:-type){1}"
+        sub_type_match = re.findall(sub_type_capture, text, re.I)
+        checked_words.update(sub_type_match)
+        print("sub-type-match", sub_type_match)
+        data.update(self.create_sub_material(sub_type_match))
 
         counted_type_capture = r"(?<=^\d\s).*?(?=\s\d|$)"
         counted_match = re.findall(counted_type_capture, text, re.I)
+        checked_words.update(counted_match)
         print("counted", counted_match)
-        data.extend(self.create_sub_material(counted_match))
+        data.update(self.create_sub_material(counted_match))
 
         negative_capture = r"(?<=non-)([a-z]{4,})"
         negative_match = re.findall(negative_capture, text, re.I)
+        checked_words.update(negative_match)
         print("neg", negative_match)
-        data.extend(self.create_sub_material(negative_match, False))
+        data.update(self.create_sub_material(negative_match, False))
 
-        negative_capture = r"(?<=non-|except )([a-z]{4,})"
-        negative_match = re.findall(negative_capture, text, re.I)
-        print("neg", negative_match)
-        data.extend(self.create_sub_material(negative_match, False))
+        polarity = True
+        for word in text.split():
+            if word in checked_words or word.startswith('"'):
+                continue
+            if word in {"except"}:
+                polarity = False
+            print(word, "word")
+            sub_mat = self.create_sub_material([word], polarity, False)
+            data.update(sub_mat)
 
-        return data
+        return list(data)
 
     def create_sub_material(
         self,
         data: Iterable,
-        polarity: bool = True
+        polarity: bool = True,
+        last_check: bool = True,
     ) -> list[ExtraSubMaterial]:
         """Creates sub material NamedTuples.
 
@@ -1038,11 +1057,13 @@ class ExtraSearch:
         sub_mats = []
         for item in data:
             try:
-                subtype, item = self.check_subtype(item)
+                subtype, item = self.check_subtype(item, last_check)
             except KeyError as k:
                 logging.info("%s | %s: item", k, item)
                 if " " in item:
-                    mat = self.create_sub_material(item.split(), polarity)
+                    mat = self.create_sub_material(item.split(),
+                                                   polarity,
+                                                   last_check)
                     sub_mats.extend(mat)
                 continue
             material = ExtraSubMaterial(item, subtype, polarity)
@@ -1085,7 +1106,11 @@ class ExtraSearch:
 
         return count
 
-    def check_subtype(self, target: str) -> tuple[str, enum.Enum | str]:
+    def check_subtype(
+        self,
+        target: str,
+        last_check: bool = True
+    ) -> tuple[str, enum.Enum | str]:
         """Checks Enums and other type lists and returns a subtype if it
         matches.
 
@@ -1098,25 +1123,28 @@ class ExtraSearch:
         Raises:
             KeyError: If no sub type is found.
         """
-
         if target.title() in self.parent.arche_types:
             return "archetype", target
 
         ETL = util.enum_to_list
+        target = target.lower().removesuffix("-type").replace("-", " ")
+
+        print(target, last_check)
 
         if target in ETL(AttributeType):
             return "attribute", AttributeType[target.upper()]
         elif target in ETL(RaceType):
-            return "race", RaceType[target.upper()]
+            return "race", RaceType[target.upper().replace(" ", "_")]
         elif target + " monster" in ETL(CardType):
             mster = target + "_monster"
             return "cardtype", CardType[mster.upper()]
-        else:
+        elif last_check:
             data = self.parent.grab_card(target)
-            if data is None:
-                logging.error("Card: %s", self.card_model.name)
-                raise KeyError(f"{target} not found in any subtype.")
-        return "name", target
+            if data is not None:
+                return "name", target
+
+        logging.error("Card: %s", self.card_model.name)
+        raise KeyError(f"{target} not found in any subtype.")
 
     def find_comparison(self, desc: str) -> str:
         """Match a comparison for limiters on card count and levels.
@@ -1132,7 +1160,7 @@ class ExtraSearch:
             "or more": "gte",
             "or higher": "gte",
             "or lower": "lte",
-            "or less": "lte"
+            "or less": "lte",
         }
         for k, v in match_dict.items():
             if k in desc:
@@ -1143,6 +1171,7 @@ class ExtraSearch:
 
 if __name__ == "__main__":
     import json
+
     y = YugiObj()
 
     card = y.grab_card("Superdreadnought Rail Cannon Gustav Max")[0]
@@ -1160,7 +1189,7 @@ if __name__ == "__main__":
     checked_desc = set()
 
     cnt = 0
-    for card in d:
+    for index, card in enumerate(d):
         model = y.create_card(card, None)
         if model is None or not y.check_extra_monster(model):
             continue
@@ -1183,3 +1212,5 @@ if __name__ == "__main__":
 
         with checked_extra.open("w") as file:
             file.write(json.dumps(check_cards))
+
+        print(len(d) - index, "left")
