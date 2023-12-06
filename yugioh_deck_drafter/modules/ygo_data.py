@@ -235,7 +235,7 @@ class YugiObj:
         PROB (defaultdict): probablities for each type of card rarity.
         RARITY_COLORS (defaultdict): For picking and displaying rarity borders.
         CARD_CLASS_NAMES (list): Pre-formatted list of card classes.
-    
+
     Methods:
         get_card_set: Gets a list of all card_sets for selection and filtering.
             Called on instantiation.
@@ -877,7 +877,7 @@ class ExtraSearch:
         check_subtype: Searches for a matching subtype of a card property.
         find_comparison: Searches for a comparison element inside the cards
             description.
-            
+
     Attributes:
         parse_types: List of accepted side deck types.
     """
@@ -991,26 +991,39 @@ class ExtraSearch:
         """
         data = []
         text = text.lower()
+        text = re.sub(r"\+", "", text)
+
         archetype_patt = r'(?<="|\')(.*?[a-z-])(?:"|\')'
         archetype_match = re.findall(archetype_patt, text, re.I)
+        print("arche", archetype_match)
         data.extend(self.create_sub_material(archetype_match))
 
-        monster_type_capture = r"(?<!non-)([a-z-]+)(?: monster)"
+        monster_type_capture = r"(?<!non-)([a-z-]+)(?:(monster)(s))"
         monster_match = re.findall(monster_type_capture, text, re.I)
+        print("monster-match", monster_match)
         data.extend(self.create_sub_material(monster_match))
 
-        counted_type_capture = r"(?<!level )(?:level)(?<=[1-9]{1}) ([a-z-]+)"
+        counted_type_capture = r"(?<=^\d\s).*?(?=\s\d|$)"
         counted_match = re.findall(counted_type_capture, text, re.I)
+        print("counted", counted_match)
         data.extend(self.create_sub_material(counted_match))
 
         negative_capture = r"(?<=non-)([a-z]{4,})"
         negative_match = re.findall(negative_capture, text, re.I)
+        print("neg", negative_match)
+        data.extend(self.create_sub_material(negative_match, False))
+
+        negative_capture = r"(?<=non-|except )([a-z]{4,})"
+        negative_match = re.findall(negative_capture, text, re.I)
+        print("neg", negative_match)
         data.extend(self.create_sub_material(negative_match, False))
 
         return data
 
     def create_sub_material(
-        self, data: Iterable, polarity: bool = True
+        self,
+        data: Iterable,
+        polarity: bool = True
     ) -> list[ExtraSubMaterial]:
         """Creates sub material NamedTuples.
 
@@ -1026,8 +1039,11 @@ class ExtraSearch:
         for item in data:
             try:
                 subtype, item = self.check_subtype(item)
-            except KeyError:
-                logging.info("%s: item", item)
+            except KeyError as k:
+                logging.info("%s | %s: item", k, item)
+                if " " in item:
+                    mat = self.create_sub_material(item.split(), polarity)
+                    sub_mats.extend(mat)
                 continue
             material = ExtraSubMaterial(item, subtype, polarity)
             sub_mats.append(material)
@@ -1087,10 +1103,9 @@ class ExtraSearch:
             return "archetype", target
 
         ETL = util.enum_to_list
-        target = target.lower().removesuffix("-type")
 
         if target in ETL(AttributeType):
-            return "attribute", AttributeType[target]
+            return "attribute", AttributeType[target.upper()]
         elif target in ETL(RaceType):
             return "race", RaceType[target.upper()]
         elif target + " monster" in ETL(CardType):
@@ -1127,13 +1142,44 @@ class ExtraSearch:
 
 
 if __name__ == "__main__":
+    import json
     y = YugiObj()
 
     card = y.grab_card("Superdreadnought Rail Cannon Gustav Max")[0]
 
     print("Tuner" in y.arche_types)
 
-    model = y.create_card(card, None)
-    print(model.description)
-    for i in y.find_extra_materials(model):
-        print(i)
+    data = Path("cache/all_cards.json")
+    with data.open("r", encoding="utf-8") as file:
+        d = json.loads(file.read())
+
+    checked_extra = Path("cache/checked_cards.json")
+    with checked_extra.open("r") as file:
+        check_cards = json.loads(file.read())
+
+    checked_desc = set()
+
+    cnt = 0
+    for card in d:
+        model = y.create_card(card, None)
+        if model is None or not y.check_extra_monster(model):
+            continue
+        cnt += 1
+        print(model.name.center(60, "-"))
+        desc = model.description.split("\n")[0]
+        for i in y.find_extra_materials(model):
+            print(i)
+        if check_cards.get(model.name) or desc in checked_desc:
+            checked_desc.add(desc)
+            continue
+        print("Does the extra breakdown make sense?")
+        print(desc)
+        correct = input("> 1-Yes | 2-No > ")
+        if correct == "1":
+            check_cards[model.name] = True
+        else:
+            check_cards[model.name] = False
+        checked_desc.add(desc)
+
+        with checked_extra.open("w") as file:
+            file.write(json.dumps(check_cards))
