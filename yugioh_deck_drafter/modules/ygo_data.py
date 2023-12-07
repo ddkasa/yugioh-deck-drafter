@@ -103,6 +103,7 @@ class RaceType(enum.Enum):
     WINGED_BEAST = enum.auto()
     WYRM = enum.auto()
     ZOMBIE = enum.auto()
+    ILLUSION = enum.auto()  # not present on the api page
     # Spell/Trap Cards
     NORMAL = enum.auto()
     FIELD = enum.auto()
@@ -115,7 +116,6 @@ class RaceType(enum.Enum):
 
 class CardType(enum.Enum):
     """Card Type Enumerations"""
-
     EFFECT_MONSTER = enum.auto()
     FLIP_EFFECT_MONSTER = enum.auto()
     FLIP_TUNER_EFFECT_MONSTER = enum.auto()
@@ -145,11 +145,11 @@ class CardType(enum.Enum):
     XYZ_PENDULUM_EFFECT_MONSTER = enum.auto()
     SKILL_CARD = enum.auto()
     TOKEN = enum.auto()
+    EXTRA_MONSTER = enum.auto()  # Custom
 
 
 class AttributeType(enum.Enum):
     """Monster element type enumeration."""
-
     DARK = enum.auto()
     EARTH = enum.auto()
     FIRE = enum.auto()
@@ -270,7 +270,9 @@ class YugiObj:
     """
 
     CACHE = requests_cache.CachedSession(
-        str(Path("cache/ygoprodeck.sqlite")), backend="sqlite", allowable_codes=[200]
+        str(Path("cache/ygoprodeck.sqlite")),
+        backend="sqlite",
+        allowable_codes=[200]
     )
 
     PROB: Final[defaultdict[str, float]] = defaultdict(
@@ -370,7 +372,7 @@ class YugiObj:
             )
             sys.exit()
 
-        archetype = [i["archetype_name"] for i in request.json()]
+        archetype = [i["archetype_name"].upper() for i in request.json()]
         return tuple(archetype)
 
     def filter_out_card_sets(
@@ -617,24 +619,29 @@ class YugiObj:
 
         return self.convert_raw_to_card_model(None, request.json()["data"])
 
-    def grab_card(self, name: str) -> dict | None:
+    def grab_card(self, name: str, fuzzy: bool = False) -> dict | None:
         """Collects card info for the given name(str).
 
         Args:
             name (str): Name of the card as provided from previous queries.
+            fuzzy (bool): Toggle for enabling fuzzy search with this method.
+                Defaults to False.
 
         Returns:
             dict | None: JSON data or nothing if the query fails.
         """
+        n = "name"
+        if fuzzy:
+            n = "fname"
 
         name = quote(name.lower(), safe="/:?&")
-        url = f"https://db.ygoprodeck.com/api/v7/cardinfo.php?name={name}"
+        url = f"https://db.ygoprodeck.com/api/v7/cardinfo.php?{n}={name}"
         request = self.CACHE.get(url, timeout=10)
 
         if request.status_code != 200:
             logging.warning("Failed to grab %s. Skipping!", name)
             logging.warning("Status Code: %s", request.status_code)
-            return None
+            return
 
         return request.json()["data"]
 
@@ -701,11 +708,11 @@ class YugiObj:
         Returns:
             str: Correct description text.
         """
-        desc = data.get("monster_desc", "")
+        desc = data.get("monster_desc")
         if desc is not None:
-            return desc
+            return desc.replace("Rank", "Level")
 
-        return data.get("desc", "")
+        return data.get("desc", "").replace("Rank", "Level")
 
     def to_ygodk_format(self, deck: DeckModel) -> str:
         """Generates and formats a .ydk file format from the provided deck.
@@ -888,7 +895,7 @@ class ExtraSearch:
         self.card_model = card_model
 
         self.parse_types = parent.SIDE_DECK_TYPES.copy()
-        self.parse_types.remove(CardType.PENDULUM_EFFECT_FUSION_MONSTER)
+        # self.parse_types.remove(CardType.PENDULUM_EFFECT_FUSION_MONSTER)
         # self.parse_types.remove(CardType.FUSION_MONSTER)
 
     def parse_description(self) -> tuple[ExtraMaterial, ...]:
@@ -901,10 +908,16 @@ class ExtraSearch:
         else:
             desc = self.card_model.description.split("/")[0]
 
-        data = []
+        data: list[ExtraMaterial] = []
         for part in self.split_description(desc):
             mat = self.find_extra_material(part)
             data.append(mat)
+
+        # Change for description with a ´comma' or 'including'
+        if data[-1].count == 0 and data[0].count:
+            data[0].count -= 1
+            data[-1].count += 1
+            data[-1].material.extend(data[0].material)
 
         return tuple(data)
 
@@ -945,12 +958,12 @@ class ExtraSearch:
             str: Each seperated part of the description.
         """
         start = 0
-        for m in re.finditer(r"( \+|, )", desc):
-            chunk = desc[start : m.span()[0]]
+        for m in re.finditer(r"(, including )|( \+ )|(?<=\")( , )(?:\")", desc):
+            chunk = desc[start:m.span()[0]]
             yield chunk
             start = m.span()[1]
 
-        yield desc[start : len(desc)]
+        yield desc[start:len(desc)]
 
     def find_extra_material(self, desc: str) -> ExtraMaterial:
         """Create the final extra material data structure which the search
@@ -977,30 +990,35 @@ class ExtraSearch:
         return extra_mat
 
     def find_monster_cap(self, text: str) -> list[ExtraSubMaterial]:
-        """Parses the given text for types and returns a set.
+        """Parses the given card description for card types.
 
         1. Checks for archetypes/names within quotations.
         2. Checks monster types with monster followups.
-        3. Checks monsters with count former count prefixes.
-        4. Lastly checks negative items to remove other items.
+        3. Checks for monster types with a '-type' suffix.
+        4. Checks monsters with count former count prefixes.
+        5. Lastly checks negative items to remove other items.
 
         Args:
             text (str): Chunk of description to be parsed.
 
         Returns:
-            set[str]: A set with all the types with the none elements removed.
+            list[str]: A set with all the types with the none elements removed.
         """
-        data = set()
+        data: set[ExtraSubMaterial] = set()
         checked_words = set()
 
         text = text.lower()
         text = re.sub(r"\+", "", text)
 
-        archetype_patt = r'(?<=")(.*?[a-z-])(?:")'
+        archetype_patt = r'(?<="[a-z])(.*?)(?:[a-z]")'
         archetype_match = re.findall(archetype_patt, text, re.I)
         checked_words.update(archetype_match)
         print("arche", archetype_match)
-        data.update(self.create_sub_material(archetype_match))
+        data.update(
+            self.create_sub_material(
+                archetype_match, last_check=True, fuzzy=True
+                )
+            )
 
         monster_type_capture = r"(?<!non-)([a-z-]+)(?:(monster)(s))"
         monster_match = re.findall(monster_type_capture, text, re.I)
@@ -1026,15 +1044,34 @@ class ExtraSearch:
         print("neg", negative_match)
         data.update(self.create_sub_material(negative_match, False))
 
+        for item in data:
+            if item.subtype == "name":
+                return list(data)
+
+        # Need a cleaner solution here in the future, as edge cases are making
+        # it super overcomplicated
         polarity = True
         for word in text.split():
-            if word in checked_words or word.startswith('"'):
+            if word in checked_words or '"' in word:
                 continue
+
             if word in {"except"}:
                 polarity = False
-            print(word, "word")
+
+            word = re.sub(r"[\(\)\,\"]", "", word)
+            if word + " beast" in text:
+                word = "winged beast"
+
+                for item in data:
+                    if item.name == RaceType.BEAST:
+                        data.remove(item)
+                        break
+
             sub_mat = self.create_sub_material([word], polarity, False)
             data.update(sub_mat)
+
+            if word == "winged beast":
+                break
 
         return list(data)
 
@@ -1043,6 +1080,7 @@ class ExtraSearch:
         data: Iterable,
         polarity: bool = True,
         last_check: bool = True,
+        fuzzy: bool = False
     ) -> list[ExtraSubMaterial]:
         """Creates sub material NamedTuples.
 
@@ -1050,6 +1088,10 @@ class ExtraSearch:
             data (Iterable): Data to parse through
             polarity (bool, optional): If its a removing or adding item.
                 Defaults to True.
+            last_check (bool): For toggling on and off name searches.
+                Defaults to True.
+            fuzzy (bool): For toggling on and off fuzzy searches.
+                Defaults to False
 
         Returns:
             list[ExtraSubMaterial]: Parsed items in a list.
@@ -1057,13 +1099,12 @@ class ExtraSearch:
         sub_mats = []
         for item in data:
             try:
-                subtype, item = self.check_subtype(item, last_check)
+                subtype, item = self.check_subtype(item, last_check, fuzzy)
             except KeyError as k:
                 logging.info("%s | %s: item", k, item)
                 if " " in item:
-                    mat = self.create_sub_material(item.split(),
-                                                   polarity,
-                                                   last_check)
+                    mat = self.create_sub_material(
+                        item.split(), polarity, last_check, fuzzy)
                     sub_mats.extend(mat)
                 continue
             material = ExtraSubMaterial(item, subtype, polarity)
@@ -1080,7 +1121,7 @@ class ExtraSearch:
         Returns:
             int: Level in int format. If not found it will be a -1.
         """
-        level_search = re.findall(r"(?<=Level )(1[0-2]|[0-9])", text)
+        level_search = re.findall(r"(?<=Level )(1[0-2] |[0-9] )", text)
         if not level_search:
             return -1
 
@@ -1098,6 +1139,7 @@ class ExtraSearch:
         Returns:
             int: Total number of extra monsters. Defaults to 1.
         """
+        text = text.replace("+", "")
         count_search = re.findall(r"(?<!Level )([1-9]){1}", text)
         if count_search is None:
             return 1
@@ -1109,13 +1151,18 @@ class ExtraSearch:
     def check_subtype(
         self,
         target: str,
-        last_check: bool = True
+        last_check: bool = True,
+        fuzzy: bool = True
     ) -> tuple[str, enum.Enum | str]:
         """Checks Enums and other type lists and returns a subtype if it
         matches.
 
         Args:
             target (str): Name of the type to look for inside the subypes.
+            last_check (bool): For toggling on and off name searches.
+                Defaults to True.
+            fuzzy (bool): For toggling on and off fuzzy searches.
+                Defaults to True
 
         Returns:
             str: The name of the sub type for further use.
@@ -1123,25 +1170,36 @@ class ExtraSearch:
         Raises:
             KeyError: If no sub type is found.
         """
-        if target.title() in self.parent.arche_types:
+        target = re.sub(r"\"", "", target)
+        if target.upper() in self.parent.arche_types:
             return "archetype", target
 
+        if target == "d/d/d":
+            return "archetype",  "d/d"
+
         ETL = util.enum_to_list
-        target = target.lower().removesuffix("-type").replace("-", " ")
+        clean_target = target.lower().removesuffix("-type").replace("-", " ")
 
         print(target, last_check)
 
-        if target in ETL(AttributeType):
-            return "attribute", AttributeType[target.upper()]
-        elif target in ETL(RaceType):
-            return "race", RaceType[target.upper().replace(" ", "_")]
-        elif target + " monster" in ETL(CardType):
-            mster = target + "_monster"
-            return "cardtype", CardType[mster.upper()]
+        if clean_target in ETL(AttributeType):
+            return "attribute", AttributeType[clean_target.upper()]
+        elif clean_target in ETL(RaceType):
+            return "race", RaceType[clean_target.upper().replace(" ", "_")]
+        elif clean_target + " monster" in ETL(CardType):
+            clean_target = clean_target + "_monster"
+            return "cardtype", CardType[clean_target.upper()]
         elif last_check:
-            data = self.parent.grab_card(target)
+            # Should change this to query local items in the future as it calls
+            # the API to much.
+            data = self.parent.grab_card(target.lower())
             if data is not None:
                 return "name", target
+
+        if fuzzy:
+            data = self.parent.grab_card(target.lower(), True)
+            if data is not None:
+                return "fname", target
 
         logging.error("Card: %s", self.card_model.name)
         raise KeyError(f"{target} not found in any subtype.")
@@ -1155,29 +1213,34 @@ class ExtraSearch:
         Returns:
             str: Symbol for matching the correct range over Extra Material.
         """
+        if "Level" not in desc:
+            return ""
 
-        match_dict = {
+        MATCH_DICT = {
             "or more": "gte",
             "or higher": "gte",
             "or lower": "lte",
             "or less": "lte",
         }
-        for k, v in match_dict.items():
-            if k in desc:
+        for k, v in MATCH_DICT.items():
+            if k in desc and k + " Level" not in desc:
                 return v
 
         return ""
 
 
 if __name__ == "__main__":
+
+    fmt = "%(levelname)s | .\\yugioh_deck_drafter"
+    fmt += "\\%(module)s.py:%(lineno)d -> %(message)s"
+    logging.basicConfig(stream=sys.stderr, level=logging.INFO, format=fmt)
     import json
 
     y = YugiObj()
 
-    card = y.grab_card("Superdreadnought Rail Cannon Gustav Max")[0]
+    print("Vaylantz" in y.arche_types)
 
-    print("Tuner" in y.arche_types)
-
+    # sys.exit()
     data = Path("cache/all_cards.json")
     with data.open("r", encoding="utf-8") as file:
         d = json.loads(file.read())
@@ -1196,15 +1259,16 @@ if __name__ == "__main__":
         cnt += 1
         print(model.name.center(60, "-"))
         desc = model.description.split("\n")[0]
-        for i in y.find_extra_materials(model):
-            print(i)
         if check_cards.get(model.name) or desc in checked_desc:
             checked_desc.add(desc)
             continue
+        for i in y.find_extra_materials(model):
+            print(i)
+        print(len(d) - index, "left")
         print("Does the extra breakdown make sense?")
         print(desc)
-        correct = input("> 1-Yes | 2-No > ")
-        if correct == "1":
+        correct = input("(Enter)-Yes | (Anything)-No > ")
+        if correct == "":
             check_cards[model.name] = True
         else:
             check_cards[model.name] = False
@@ -1212,5 +1276,3 @@ if __name__ == "__main__":
 
         with checked_extra.open("w") as file:
             file.write(json.dumps(check_cards))
-
-        print(len(d) - index, "left")
