@@ -1,4 +1,20 @@
-"""Main Deck Builder Python Script"""
+"""__main__.py
+Main Deck Builder Python Script
+Handles launching the application, card-set selection and miscelanous tasks.
+
+Classes:
+    MainWindow: Main classes that launches when launching the program from
+        main.
+    PackFilterDialog: GUI Dialog for filtering packs.
+    RandomPacks: Pack randomisation of Dialog, SubClass of PackFilterDialog.
+    CheckableListWidget: Widget for selecting and filtering out unwanted set
+        categories.
+
+Functions:
+    main: Main window handler and manager.
+    excepthook: Application excepthook for managing and displaying exceptions
+        and errors.
+"""
 
 import enum
 import logging
@@ -237,9 +253,12 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot()
     def add_item(self, card_set: Optional[CardSetModel] = None) -> None:
-        """
-        This function retrieves the selected pack from the UI and adds it to
+        """This function retrieves the selected pack from the UI and adds it to
         the selection list while managing the associated indicators.
+
+        Args:
+            card_set (CardSetModel | None): If the user already know what the
+                pack is going to be.
         """
 
         if isinstance(card_set, CardSetModel):
@@ -277,8 +296,8 @@ class MainWindow(QMainWindow):
         updates the associated data, and refreshes the pack count.
 
         Args:
-            pos (QPoint): The position from which the item removal action is
-            triggered.
+            item (QListWidgetItem) Pre-selected item to be removed from the
+                QListWidget.
         """
         if item is None:
             return
@@ -348,10 +367,9 @@ class MainWindow(QMainWindow):
     def start_drafting(self) -> None:
         """Starts the drafting process.
 
-           Checks if there are 40 packs selected first and asks for a Deck
-           Name.
-           Begins the drafting dialog if conditions are met which will stay in
-           this func until the process is finished.
+        Checks if there are 40 packs selected first and asks for a Deck Name.
+        Begins the drafting dialog if conditions are met which will stay in
+            this func until the process is finished.
         """
 
         if self.p_count != self.PACK_MAX:
@@ -754,8 +772,11 @@ class CheckableListWidget(QListWidget):
         checked_items_to_list: Quick function for return checked items.
     """
 
-    def add_items(self, items: set[str | None] | enum.EnumMeta,
-                  set_classes: set[CardSetClass]) -> None:
+    def add_items(
+        self,
+        items: set[str] | enum.EnumMeta,
+        set_classes: set[CardSetClass]
+    ) -> None:
         """Extra addItems method for quick adding Enums as a list ontop of 
         strings
 
@@ -832,31 +853,32 @@ def main(argv: list):
     sys.exit(app.exec())
 
 
+def excepthook(type_, value, traceback_):
+    """Exception hook and display.
+
+    Excepthook with GUI error messages for the end user.
+
+    Args:
+        type_ (type): Type of the error.
+        value (exception): Exception object of the error.
+        traceback_ (traceback): Traceback object pointing the position at
+            fault.
+    """
+    traceback_text = traceback.format_exception(type_, value, traceback_)
+    traceback.print_exception(type_, value, traceback_)
+    text = ""
+
+    for t in traceback_text:
+        text += "\n" + t
+
+    msg = QMessageBox.critical(None, "Critical", text)
+    if msg:
+        pass
+
+    sys.exit(1)
+
+
 if __name__ == "__main__":
-    def excepthook(type_, value, traceback_):
-        """Exception hook and display.
-
-        Excepthook with GUI error messages for the end user.
-
-        Args:
-            type_ (type): Type of the error.
-            value (exception): Exception object of the error.
-            traceback_ (traceback): Traceback object pointing the position at
-                fault.
-        """
-        traceback_text = traceback.format_exception(type_, value, traceback_)
-        traceback.print_exception(type_, value, traceback_)
-        text = ""
-
-        for t in traceback_text:
-            text += "\n" + t
-
-        msg = QMessageBox.critical(None, "Critical", text)
-        if msg:
-            pass
-
-        sys.exit(1)
-
     sys.excepthook = excepthook
 
     fmt = "%(levelname)s | .\\yugioh_deck_drafter"
