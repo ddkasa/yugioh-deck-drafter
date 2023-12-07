@@ -159,6 +159,11 @@ class AttributeType(enum.Enum):
     DIVINE = enum.auto()
 
 
+class CollectionType(enum.Enum):
+    """Enumerations for the type of collection."""
+    OCG = enum.auto()
+    TCG = enum.auto()
+
 @dataclass
 class CardSetModel:
     """Datamodel for a YGO Cardset
@@ -239,6 +244,8 @@ class YugiObj:
         PROB (defaultdict): probablities for each type of card rarity.
         RARITY_COLORS (defaultdict): For picking and displaying rarity borders.
         CARD_CLASS_NAMES (list): Pre-formatted list of card classes.
+        collection_type (CollectionType): Type of collection the cards belong.
+            to. Defaults to None
 
     Methods:
         get_card_set: Gets a list of all card_sets for selection and filtering.
@@ -309,7 +316,11 @@ class YugiObj:
 
     CARD_CLASS_NAMES = util.enum_to_list(CardSetClass)
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        collection_type: Optional[CollectionType] = None
+    ) -> None:
+        self._collection_type = collection_type
         self.card_sets = self.get_card_set()
         self.arche_types = self.get_arche_type_list()
 
@@ -805,7 +816,10 @@ class YugiObj:
         return tuple(probabilities)
 
     def select_random_packs(
-        self, pack_set: list[CardSetModel], count_range: range, max_packs: int = 40
+        self,
+        pack_set: list[CardSetModel],
+        count_range: range,
+        max_packs: int = 40
     ) -> list[CardSetModel]:
         """Selects random packs based on the supplied criteria.
         Args:
@@ -836,6 +850,13 @@ class YugiObj:
 
         return packs_to_add
 
+    @property
+    def collection_type(self) -> None | CollectionType:
+        return self._collection_type
+
+    @collection_type.setter
+    def collection_type(self, ctype: Optional[CollectionType] = None) -> None:
+        self._collection_type = ctype
 
 @dataclass()
 class ExtraMaterial:
@@ -913,8 +934,9 @@ class ExtraSearch:
             mat = self.find_extra_material(part)
             data.append(mat)
 
+        data[0].count = max(1, data[0].count)
         # Change for description with a ´comma' or 'including'
-        if data[-1].count == 0 and data[0].count:
+        if data[-1].count == 0 and data[0].count > 1:
             data[0].count -= 1
             data[-1].count += 1
             data[-1].material.extend(data[0].material)
@@ -958,7 +980,8 @@ class ExtraSearch:
             str: Each seperated part of the description.
         """
         start = 0
-        for m in re.finditer(r"(, including )|( \+ )|(?<=\")( , )(?:\")", desc):
+        patt = re.compile(r"((,)?(including ))|( \+ )|(?<=\")( , )(?:\")")
+        for m in re.finditer(patt, desc):
             chunk = desc[start:m.span()[0]]
             yield chunk
             start = m.span()[1]
@@ -977,10 +1000,16 @@ class ExtraSearch:
         """
         extra_mat = ExtraMaterial()
         extra_mat.count = self.find_count(desc)
-        extra_mat.level = self.find_level(desc)
+        self.req_level = self.find_level(desc)
+        extra_mat.level = self.req_level
         extra_mat.comparison = self.find_comparison(desc)
 
-        extra_mat.material = self.find_monster_cap(desc)
+        if '\"Mask Change\"' in desc:
+            monster_cap = [ExtraSubMaterial("mask change", "name")]
+        else:
+            monster_cap = self.find_monster_cap(desc)
+
+        extra_mat.material = monster_cap
 
         if not extra_mat.count:
             for item in extra_mat.material:
@@ -1010,17 +1039,18 @@ class ExtraSearch:
         text = text.lower()
         text = re.sub(r"\+", "", text)
 
-        archetype_patt = r'(?<="[a-z])(.*?)(?:[a-z]")'
-        archetype_match = re.findall(archetype_patt, text, re.I)
+        arche_patt = r'(?<=")([a-z0-9]{1}[a-z0-9- #\,\'\.]+[a-z0-9α]{1})(?:")'
+        archetype_match = re.findall(arche_patt, text, re.I)
         checked_words.update(archetype_match)
         print("arche", archetype_match)
         data.update(
             self.create_sub_material(
-                archetype_match, last_check=True, fuzzy=True
-                )
-            )
+                archetype_match,
+                last_check=True,
+                fuzzy=True
+                ))
 
-        monster_type_capture = r"(?<!non-)([a-z-]+)(?:(monster)(s))"
+        monster_type_capture = r"(?<!non-)([a-z-]+)(?:(monster)(s?))"
         monster_match = re.findall(monster_type_capture, text, re.I)
         checked_words.update(monster_match)
         print("monster-match", monster_match)
@@ -1059,19 +1089,13 @@ class ExtraSearch:
                 polarity = False
 
             word = re.sub(r"[\(\)\,\"]", "", word)
-            if word + " beast" in text:
+            if word == "winged" and word + " beast" in text:
                 word = "winged beast"
-
-                for item in data:
-                    if item.name == RaceType.BEAST:
-                        data.remove(item)
-                        break
+            elif word == "sea" and word + " serpent" in text:
+                word = "sea serpent"
 
             sub_mat = self.create_sub_material([word], polarity, False)
             data.update(sub_mat)
-
-            if word == "winged beast":
-                break
 
         return list(data)
 
@@ -1098,6 +1122,8 @@ class ExtraSearch:
         """
         sub_mats = []
         for item in data:
+            if item == self.card_model.name.lower():
+                continue
             try:
                 subtype, item = self.check_subtype(item, last_check, fuzzy)
             except KeyError as k:
@@ -1121,7 +1147,7 @@ class ExtraSearch:
         Returns:
             int: Level in int format. If not found it will be a -1.
         """
-        level_search = re.findall(r"(?<=Level )(1[0-2] |[0-9] )", text)
+        level_search = re.findall(r"(?<=Level )(1[0-3] |[0-9] )", text)
         if not level_search:
             return -1
 
@@ -1140,7 +1166,8 @@ class ExtraSearch:
             int: Total number of extra monsters. Defaults to 1.
         """
         text = text.replace("+", "")
-        count_search = re.findall(r"(?<!Level )([1-9]){1}", text)
+        patt = re.compile(r"(?<!\()(?<!Level )(?<![1-9])([1-9] ){1}(?![#\)])")
+        count_search = re.findall(patt, text)
         if count_search is None:
             return 1
 
@@ -1223,19 +1250,16 @@ class ExtraSearch:
             "or less": "lte",
         }
         for k, v in MATCH_DICT.items():
-            if k in desc and k + " Level" not in desc:
+            if f"Level {self.req_level} " + k in desc:
                 return v
 
         return ""
 
 
-if __name__ == "__main__":
-
-    fmt = "%(levelname)s | .\\yugioh_deck_drafter"
-    fmt += "\\%(module)s.py:%(lineno)d -> %(message)s"
-    logging.basicConfig(stream=sys.stderr, level=logging.INFO, format=fmt)
-    import json
-
+def test_assocciated_cards() -> None:
+    """Testing function for assccoiated card parsing. Requires a json import to
+    function
+    """
     y = YugiObj()
 
     print("Vaylantz" in y.arche_types)
@@ -1276,3 +1300,13 @@ if __name__ == "__main__":
 
         with checked_extra.open("w") as file:
             file.write(json.dumps(check_cards))
+
+
+if __name__ == "__main__":
+
+    fmt = "%(levelname)s | .\\yugioh_deck_drafter"
+    fmt += "\\%(module)s.py:%(lineno)d -> %(message)s"
+    logging.basicConfig(stream=sys.stderr, level=logging.INFO, format=fmt)
+    import json
+
+    test_assocciated_cards()

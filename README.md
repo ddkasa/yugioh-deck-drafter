@@ -2,7 +2,7 @@
 Python app built ontop of PyQt for drafting custom decks with a custom rulset.
 
 # Usage
-1. Download the latest launcher from 'Releases`
+1. Download the latest/relevant launcher from [Releases](https://github.com/ddkasa/yugioh-deck-drafter/releases)
 2. Load the application. It will generate some folders on the first start for caching and autosave purposes.
 3. Select 40 packs for the drafting stage. 
     1. Generally recommend that the card sets have more than 10 different cards within them. Otherwise the drafting process will occassionaly stop working as it will cause issues with the drafting ruleset.
@@ -12,9 +12,9 @@ Python app built ontop of PyQt for drafting custom decks with a custom rulset.
 5. Press start to begin the drafting process. This will load and open the first booster pack beginning the drafting process. The drafting process goes as follows:
     1. You draft ~20 cards out of 10 boost packs. Usually 2 per pack unless overdrafted. *Some will allow you to pick more depending if the have relevant associated cards or summoning material, but will always go down to the curent drafting stage multiplied by 10 in the main deck*
     2. You discard down to 12 cards so that you have 10 * discard stage in the main deck and 2 * discard stage in the side deck. *Extra Deck Cards are not counted.*
-    3. **Rinse and repeat until you have opened 40 packs and have 40 cards in your main deck, plus 8 more in the side deck.
+    3. *Rinse and repeat until you have opened 40 packs and have 40 cards in your main deck, plus 8 more in the side deck.*
 
-6. At the end of the drafting process the application saves the deck in the default folder and a folder of your choice or the default "YGO Omega" imports folder in the **.ydk** format
+6. At the end of the drafting process the application saves the deck in the default folder and/or a folder of your choice or the default "YGO Omega" imports folder in the **.ydk** format
 
 ## Notes
 - Some cards will have dropdown menus available for adding assocciated cards to the selection, which will overdraw you depending on the selection.
@@ -22,7 +22,7 @@ Python app built ontop of PyQt for drafting custom decks with a custom rulset.
 - A card is picked if its highlighted in a red outline or if in the discard stage its also crossed out.
 
 # API
-This is the api that get used for retrieving set/card information/art:
+This is the API that get used for retrieving set/card information/art:
 [YGOPRODECK](https://ygoprodeck.com/api-guide/)
 
 # License
