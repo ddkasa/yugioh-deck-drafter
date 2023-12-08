@@ -882,6 +882,12 @@ class ExtraSubMaterial(NamedTuple):
     subtype: str
     polarity: bool = True
 
+    def __hash__(self) -> int:
+        return hash(str(self.name) + self.subtype)
+
+    def __eq__(self, other: 'ExtraSubMaterial'):
+        return hash(self) == hash(other)
+
 
 class ExtraSearch:
     """Extra Search Object for finding extra deck special summon materials.
@@ -1004,8 +1010,12 @@ class ExtraSearch:
         extra_mat.level = self.req_level
         extra_mat.comparison = self.find_comparison(desc)
 
-        if '\"Mask Change\"' in desc:
-            monster_cap = [ExtraSubMaterial("mask change", "name")]
+        if "special summon" in desc.lower():
+            if '\"Mask Change\"' in desc:
+                monster_cap = [ExtraSubMaterial("mask change", "name")]
+            if '\"NEX\"' in desc:
+                monster_cap = [ExtraSubMaterial("nex", "name")]
+            extra_mat.count = 1
         else:
             monster_cap = self.find_monster_cap(desc)
 
@@ -1062,7 +1072,7 @@ class ExtraSearch:
         print("sub-type-match", sub_type_match)
         data.update(self.create_sub_material(sub_type_match))
 
-        counted_type_capture = r"(?<=^\d\s).*?(?=\s\d|$)"
+        counted_type_capture = r"(?<=[1-9]).*?(?=\s\d|$)"
         counted_match = re.findall(counted_type_capture, text, re.I)
         checked_words.update(counted_match)
         print("counted", counted_match)
@@ -1080,13 +1090,9 @@ class ExtraSearch:
 
         # Need a cleaner solution here in the future, as edge cases are making
         # it super overcomplicated
-        polarity = True
         for word in text.split():
             if word in checked_words or '"' in word:
                 continue
-
-            if word in {"except"}:
-                polarity = False
 
             word = re.sub(r"[\(\)\,\"]", "", word)
             if word == "winged" and word + " beast" in text:
@@ -1094,7 +1100,7 @@ class ExtraSearch:
             elif word == "sea" and word + " serpent" in text:
                 word = "sea serpent"
 
-            sub_mat = self.create_sub_material([word], polarity, False)
+            sub_mat = self.create_sub_material([word], last_check=False)
             data.update(sub_mat)
 
         return list(data)
@@ -1121,11 +1127,12 @@ class ExtraSearch:
             list[ExtraSubMaterial]: Parsed items in a list.
         """
         sub_mats = []
+
         for item in data:
             if item == self.card_model.name.lower():
                 continue
             try:
-                subtype, item = self.check_subtype(item, last_check, fuzzy)
+                subtype, pitem = self.check_subtype(item, last_check, fuzzy)
             except KeyError as k:
                 logging.info("%s | %s: item", k, item)
                 if " " in item:
@@ -1133,10 +1140,29 @@ class ExtraSearch:
                         item.split(), polarity, last_check, fuzzy)
                     sub_mats.extend(mat)
                 continue
-            material = ExtraSubMaterial(item, subtype, polarity)
+
+            checked_polarity = self.polarity_test(item, polarity)
+            material = ExtraSubMaterial(pitem, subtype, checked_polarity)
             sub_mats.append(material)
 
         return sub_mats
+
+    def polarity_test(self, text: str, previous: bool) -> bool:
+        """Tests if the item is a negative search or positive search.
+
+        Args:
+            text (str): Description of the card that is being queried.
+            previous (bool): Current assumed polarity of the item.
+
+        Returns:
+            bool: If its a negative item it will be detected as False.
+        """
+        whole_desc = re.sub('\"', '', self.card_model.description).lower()
+
+        if "except " + text in whole_desc or "non-" + text in whole_desc:
+            return False
+
+        return previous
 
     def find_level(self, text: str) -> int:
         """Finds a level in the description if present.
@@ -1260,9 +1286,7 @@ def test_assocciated_cards() -> None:
     """Testing function for assccoiated card parsing. Requires a json import to
     function
     """
-    y = YugiObj()
-
-    print("Vaylantz" in y.arche_types)
+    ygo_data = YugiObj()
 
     # sys.exit()
     data = Path("cache/all_cards.json")
@@ -1277,8 +1301,8 @@ def test_assocciated_cards() -> None:
 
     cnt = 0
     for index, card in enumerate(d):
-        model = y.create_card(card, None)
-        if model is None or not y.check_extra_monster(model):
+        model = ygo_data.create_card(card, None)
+        if model is None or not ygo_data.check_extra_monster(model):
             continue
         cnt += 1
         print(model.name.center(60, "-"))
@@ -1286,7 +1310,7 @@ def test_assocciated_cards() -> None:
         if check_cards.get(model.name) or desc in checked_desc:
             checked_desc.add(desc)
             continue
-        for i in y.find_extra_materials(model):
+        for i in ygo_data.find_extra_materials(model):
             print(i)
         print(len(d) - index, "left")
         print("Does the extra breakdown make sense?")
