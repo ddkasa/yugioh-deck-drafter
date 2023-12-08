@@ -424,13 +424,13 @@ class YugiObj:
         """
         base_url = "https://db.ygoprodeck.com/api/v7/cardinfo.php?"
 
-        if material.level != -1:
+        if material.amount != -1:
             base_url += "level={comparison}{level}"
             base_url = base_url.format(
-                comparison=material.comparison, level=material.level
+                comparison=material.comparison, level=material.amount
             )
 
-        for item in material.material:
+        for item in material.materials:
             if not item.polarity or item.subtype == "name":
                 continue
             if base_url[-1] != "?":
@@ -519,7 +519,7 @@ class YugiObj:
         if search_material is None:
             return cards
 
-        for item in search_material.material:
+        for item in search_material.materials:
             if item.polarity:
                 continue
             for card in list(cards):
@@ -862,26 +862,9 @@ class YugiObj:
     def collection_type(self, ctype: Optional[CollectionType] = None) -> None:
         self._collection_type = ctype
 
-@dataclass()
-class ExtraMaterial:
-    """Extra Material Info for Special Summons Types."""
-
-    level: int = field(default=-1)
-    count: int = field(default=1)
-    comparison: str = field(default="")
-    count: int = field(default=1)
-    material: list["ExtraSubMaterial"] = field(default_factory=list)
-
-    def __getitem__(self, item):
-        return getattr(self, item)
-
-    def __setitem__(self, item, value):
-        setattr(self, item, value)
-
 
 class ExtraSubMaterial(NamedTuple):
     """Type of extra deck summoning material."""
-
     name: str | enum.Enum
     subtype: str
     polarity: bool = True
@@ -891,6 +874,30 @@ class ExtraSubMaterial(NamedTuple):
 
     def __eq__(self, other: 'ExtraSubMaterial'):
         return hash(self) == hash(other)
+
+
+class DamageValues(NamedTuple):
+    """Data structure for holding required def & attack values."""
+    subtype: str = "Damage"
+    comparison: str = ""
+    attack: int = -1
+    defense: int = -1
+
+
+@dataclass()
+class ExtraMaterial:
+    """Extra Material Info for Special Summons Types."""
+    level: int = field(default=-1)
+    comparison: str = field(default="")
+    count: int = field(default=1)
+    materials: list[ExtraSubMaterial | DamageValues]\
+        = field(default_factory=list)
+
+    def __getitem__(self, item):
+        return getattr(self, item)
+
+    def __setitem__(self, item, value):
+        setattr(self, item, value)
 
 
 class ExtraSearch:
@@ -922,6 +929,13 @@ class ExtraSearch:
         ENGINE: For simplifying plurals when checking for card type.
     """
 
+    COMPARISONS: dict[str, str] = {
+        "or more": "gte",
+        "or higher": "gte",
+        "or lower": "lte",
+        "or less": "lte",
+    }
+
     ENGINE = inflect.engine()
 
     def __init__(self, parent: YugiObj, card_model: CardModel) -> None:
@@ -952,7 +966,7 @@ class ExtraSearch:
         if data[-1].count == 0 and data[0].count > 1:
             data[0].count -= 1
             data[-1].count += 1
-            data[-1].material.extend(data[0].material)
+            data[-1].materials.extend(data[0].materials)
 
         return tuple(data)
 
@@ -977,7 +991,7 @@ class ExtraSearch:
                 continue
             filt_matches.count += 1
             model = ExtraSubMaterial(item, "name")
-            filt_matches.material.append(model)
+            filt_matches.materials.append(model)
 
         return filt_matches
 
@@ -1020,19 +1034,23 @@ class ExtraSearch:
         if "special summon" in desc.lower():
             if '\"Mask Change\"' in desc:
                 monster_cap = [ExtraSubMaterial("mask change", "name")]
-            if '\"NEX\"' in desc:
+            elif '\"NEX\"' in desc:
                 monster_cap = [ExtraSubMaterial("nex", "name")]
-            if '\"The Claw of Hermos\"' in desc:
+            elif '\"The Claw of Hermos\"' in desc:
                 monster_cap = [ExtraSubMaterial("the claw of hermos", "name")]
+
             extra_mat.count = 1
         else:
             monster_cap = self.find_monster_cap(desc)
 
         if "monster_cap" in locals():
-            extra_mat.material = monster_cap  # type: ignore
+            extra_mat.materials = monster_cap  # type: ignore
+
+        attrib = self.find_stat_cap(desc)
+        extra_mat.materials.append(attrib)
 
         if not extra_mat.count:
-            for item in extra_mat.material:
+            for item in extra_mat.materials:
                 if item.subtype == "name":
                     extra_mat.count += 1
 
@@ -1166,7 +1184,7 @@ class ExtraSearch:
 
         Returns:
             bool: If its a negative item it will be detected as False.
-        """        
+        """
         whole_desc = re.sub('\"', '', self.card_model.description).lower()
 
         if "except " + text in whole_desc or "non-" + text in whole_desc:
@@ -1190,6 +1208,43 @@ class ExtraSearch:
         level = int(level_search[0])
 
         return level
+
+    def find_stat_cap(self, text: str) -> DamageValues:
+        """Parses the description and finds the values for attack and defense
+        properties.
+
+        Args:
+            text (str): Part of description to be parsed for stats ATK/DEF.
+
+        Returns:
+            DamageValues: Filled in values with the required statistics.
+                Most values will default to -1 if none existant.
+        """
+        logging.debug("Checking \"%s\" for attribute values.", text)
+        label_pattern = re.compile(r"ATK|DEF")
+        labels = re.findall(label_pattern, text)
+        print(labels)
+
+        if not labels:
+            print("return defaults")
+            return DamageValues()
+
+        amount_pattern = re.compile(r"(?=(?<=with.)*(\d{4,}).*)")
+        values = re.findall(amount_pattern, text)
+
+        data = defaultdict(lambda: -1,
+                           map(lambda key, val: (key, val), labels, values))
+
+        print(data)
+        comp = self.find_comparison(text, "Stat")
+
+        dvalues = DamageValues(
+            comparison=comp,
+            attack=data["ATK"],
+            defense=data["DEF"]
+        )
+
+        return dvalues
 
     def find_count(self, text: str) -> int:
         """Finds the minimum count of monsters required to summon the extra
@@ -1281,26 +1336,22 @@ class ExtraSearch:
         logging.error("Card: %s", self.card_model.name)
         raise KeyError(f"{target} not found in any subtype.")
 
-    def find_comparison(self, desc: str) -> str:
+    def find_comparison(self, desc: str, element: str = "Level") -> str:
         """Match a comparison for limiters on card count and levels.
 
         Args:
             desc (str): Part of description to be parsed.
+            elment (element): Which property does the comparison belong to.
+                Defaults to Level.
 
         Returns:
             str: Symbol for matching the correct range over Extra Material.
         """
-        if "Level" not in desc:
-            return ""
 
-        MATCH_DICT = {
-            "or more": "gte",
-            "or higher": "gte",
-            "or lower": "lte",
-            "or less": "lte",
-        }
-        for k, v in MATCH_DICT.items():
+        for k, v in self.COMPARISONS.items():
             if f"Level {self.req_level} " + k in desc:
+                return v
+            elif element != "Level" and k in desc:
                 return v
 
         return ""
@@ -1354,7 +1405,7 @@ if __name__ == "__main__":
 
     fmt = "%(levelname)s | .\\yugioh_deck_drafter"
     fmt += "\\%(module)s.py:%(lineno)d -> %(message)s"
-    logging.basicConfig(stream=sys.stderr, level=logging.INFO, format=fmt)
+    logging.basicConfig(stream=sys.stderr, level=logging.DEBUG, format=fmt)
     import json
 
     test_assocciated_cards()
