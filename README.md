@@ -14,7 +14,7 @@ Python app built ontop of PyQt for drafting custom decks with a custom rulset.
     2. You discard down to 12 cards so that you have 10 * discard stage in the main deck and 2 * discard stage in the side deck. *Extra Deck Cards are not counted.*
     3. *Rinse and repeat until you have opened 40 packs and have 40 cards in your main deck, plus 8 more in the side deck.*
 
-6. At the end of the drafting process the application saves the deck in the default folder and/or a folder of your choice or the default "YGO Omega" imports folder in the **.ydk** format
+6. At the end of the drafting process the application saves the deck in the default folder and/or a folder of your choice or the default **YGO Omega** imports folder in the **.ydk** format
 
 ## Notes
 - Some cards will have dropdown menus available for adding assocciated cards to the selection, which will overdraw you depending on the selection.

@@ -941,10 +941,10 @@ class CardButton(QPushButton):
 
     def paintEvent(self, event: QPaintEvent | None) -> None:
         """Overriden PaintEvent for painting the card art and additonal
-           effects.
+        effects.
 
-           Override the drawing/painting process completely unless the image
-           is missing.
+        Override the drawing/painting process completely unless the image
+        is missing.
 
         Args:
             event (QPaintEvent | None): PaintEvent called from the gui loop or
@@ -1080,7 +1080,7 @@ class CardButton(QPushButton):
 
         elif self.assocc:
             for item in self.assocc:
-                for card in item.material:
+                for card in item.materials:
                     print(card)
                     if card.subtype != "name":
                         continue
@@ -1096,12 +1096,19 @@ class CardButton(QPushButton):
         return actions
 
     def fusion_menu(self, menu: QMenu, action_container: list) -> None:
+        """Creates fusion/extra deck monster menu actions.
+
+        Args:
+            menu (QMenu): Menu to add the actions to.
+            action_container (list): Data structure for actions to keep the
+                away from garbage collection.
+        """
 
         for assocc in self.assocc:
-            if not assocc.material and assocc.level == -1:
+            if not assocc.materials and assocc.count == -1:
                 continue
-            if assocc.material and assocc.material[0].name == "name":
-                action = self.create_add_action(assocc[0].name)
+            if assocc.materials and assocc.materials[0].subtype == "name":
+                action = self.create_add_action(assocc.materials[0].name)
             else:
                 action = self.search_menu(assocc)
 
@@ -1110,7 +1117,7 @@ class CardButton(QPushButton):
     def create_add_action(self, name: str | enum.Enum) -> QAction:
         if isinstance(name, enum.Enum):
             name = name.name.replace("_", " ").title()
-        action = QAction("Add " + name)
+        action = QAction("Add " + name.title())
         action.triggered.connect(lambda: self.add_assocc(name))
         return action
 
@@ -1121,8 +1128,8 @@ class CardButton(QPushButton):
         """Create an action for to search for a subtype of a card.
 
         Args:
-            menu (QMenu): Menu to add the action to.
-            action_container (list): Data structure to store the action in.
+           data (ExtraMaterial): The query information to use when searching
+                for cards.
         """
         text = f"Search for {self.card_model.card_type.name.replace("_", " ")}"
         search_item = QAction(text)
@@ -1180,7 +1187,7 @@ class CardButton(QPushButton):
         items = []
         if self.parent().ygo_data.check_extra_monster(self.card_model):
             for item in self.assocc:
-                for sub_item in item.material:
+                for sub_item in item.materials:
                     if sub_item.subtype != "name":
                         continue
                     items.append(sub_item.name)
@@ -1262,7 +1269,10 @@ class CardButton(QPushButton):
         dialog = CardSearch(self.card_model, data, self.parent())
 
         if dialog.exec():
-            pass
+            for item in dialog.chosen_items:
+                self.add_card(item)
+            self.setChecked(True)
+            self.setDisabled(True)
 
     def mouseMoveEvent(self, event: QMouseEvent | None) -> None:
         """Movement function for when dragging cards between decks."""
@@ -1694,7 +1704,15 @@ class CardSearch(QDialog):
         self.button_layout.addWidget(self.add_more_button)
         self.add_more_button.pressed.connect(self.load_more_cards)
 
-        self.button_layout.addStretch(20)
+        self.button_layout.addStretch(10)
+
+        self.pick_text = "{count} pick(s) left"
+        self.picks = QLabel(self.pick_text.format(count=self.extra_mats.count))
+        self.picks.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.picks.setObjectName("indicator")
+        self.button_layout.addWidget(self.picks)
+
+        self.button_layout.addStretch(10)
 
         self.accept_button = QPushButton("Accept")
         self.accept_button.pressed.connect(self.accept)
@@ -1738,9 +1756,20 @@ class CardSearch(QDialog):
         card_button = CardButton(self.data.pop(index), self.parent(), None)
         card_button.setContextMenuPolicy(CMP.NoContextMenu)
         card_button.setChecked(check)
+        card_button.toggled.connect(self.check_picks)
         self.scroll_widget.main_layout.addWidget(card_button)
 
         return card_button
+
+    @pyqtSlot(int)
+    def card_pick_setter(self, picked: int = 0) -> None:
+        """Slot for setting thbe
+
+        Args:
+            picked (int, optional): Total cards picked so far. Defaults to 0.
+        """
+        txt = self.pick_text.format(count=self.extra_mats.count - picked)
+        self.picks.setText(txt)
 
     def parent(self) -> DraftingDialog:
         """Overriden parent function to avoid typing issues.
@@ -1783,18 +1812,33 @@ class CardSearch(QDialog):
                 sbar.setValue(sbar.maximum() + item.width())  # type: ignore
                 break
 
+    def check_picks(self) -> list[CardModel]:
+        """Checks which cards are picked and adds them to a list while updating
+        the pick indicator.
+
+        Returns:
+            list[CardModel]: A list of picked cards.
+        """
+        picked_cards: list[CardModel] = []
+        for item in self.scroll_widget.main_layout.widget_list():
+            if item.isChecked():
+                if len(picked_cards) > self.extra_mats.count:
+                    with QSignalBlocker(item):
+                        item.setChecked(False)
+                        continue
+                picked_cards.append(item.card_model)
+
+        self.card_pick_setter(len(picked_cards))
+
+        return picked_cards
+
     def accept(self) -> None:
         """Overriden except method in order to highlight and return the correct
         card model.
         """
 
-        chosen_items = []
-        for item in self.scroll_widget.main_layout.widget_list():
-            if item.isChecked():
-                self.selected_item = item.card_model
-                chosen_items.append(self.selected_item)
-
-        if not chosen_items:
+        self.chosen_items = self.check_picks()
+        if not self.chosen_items:
             QMessageBox.warning(
                 self,
                 "Select more cards.",

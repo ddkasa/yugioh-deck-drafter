@@ -17,7 +17,7 @@ Usage:
         randomise selections.
 
 """
-
+import traceback
 import enum
 import logging
 import sys
@@ -206,6 +206,12 @@ class CardModel(NamedTuple):
     level: Optional[int] = None
     rarity: str = "Common"
     card_set: Optional[CardSetModel] = None
+
+    def __getitem__(self, item):
+        return getattr(self, item)
+
+    def __setitem__(self, item, value):
+        setattr(self, item, value)
 
 
 @dataclass
@@ -424,22 +430,24 @@ class YugiObj:
         """
         base_url = "https://db.ygoprodeck.com/api/v7/cardinfo.php?"
 
-        if material.amount != -1:
+        if material.level != -1:
             base_url += "level={comparison}{level}"
             base_url = base_url.format(
-                comparison=material.comparison, level=material.amount
+                comparison=material.comparison, level=material.level
             )
 
         for item in material.materials:
+            if isinstance(item, DamageValues):
+                continue
             if not item.polarity or item.subtype == "name":
                 continue
             if base_url[-1] != "?":
                 base_url += "&"
             name = item.name
             if isinstance(name, enum.Enum):
-                name = name.name.lower()
+                name = re.sub(r'([\-\_])', "", name.name.lower())
 
-            base_url += f"{item.subtype}={item.name}"
+            base_url += f"{item.subtype}={name}"
 
         request = self.CACHE.get(base_url, timeout=20)
 
@@ -454,7 +462,12 @@ class YugiObj:
             )
             return []
 
-        return self.convert_raw_to_card_model(None, request.json()["data"], material)
+        data = self.convert_raw_to_card_model(
+            None,
+            request.json()["data"],
+            material)
+
+        return data
 
     def infer_set_types(self, set_name: str) -> set[CardSetClass]:
         """Parses the name of a card set and generates set classes for
@@ -496,14 +509,14 @@ class YugiObj:
         self,
         card_set: CardSetModel | None,
         data: list[dict],
-        search_material: Optional["ExtraMaterial"] = None,
+        search_material: Optional["ExtraMaterial"] = None
     ) -> list[CardModel]:
         """Converts raw json response data into usable card models.
 
         Args:
             card_set (CardSetModel | None): Card set for defining rarity.
-              *Note might have to use derive the card set from available data
-              in the future.
+                *Note might have to use derive the card set from available data
+                in the future.
             data (list[dict]): Raw json data for conversion
             search_material (ExtraMaterial): For filtering out items that are
                 not needed.
@@ -520,7 +533,7 @@ class YugiObj:
             return cards
 
         for item in search_material.materials:
-            if item.polarity:
+            if isinstance(item, DamageValues) or item.polarity:
                 continue
             for card in list(cards):
                 try:
@@ -528,8 +541,12 @@ class YugiObj:
                         idx = cards.index(card)
                         cards.pop(idx)
                 except TypeError as t:
+                    traceback.print_exc()
                     print(t)
-                    print(card, item)
+                    print(type(item))
+                    print(item)
+                    print(card)
+                    print(type(card))
                     sys.exit()
 
         return cards
@@ -769,7 +786,10 @@ class YugiObj:
         """
         return card.card_type in self.SIDE_DECK_TYPES
 
-    def find_extra_materials(self, card: CardModel) -> tuple["ExtraMaterial", ...]:
+    def find_extra_materials(
+        self,
+        card: CardModel
+    ) -> tuple["ExtraMaterial", ...]:
         """Parses the given cards description in order to find the extra
         summoning materials.
 
@@ -784,7 +804,10 @@ class YugiObj:
         return material
 
     def generate_weights(
-        self, card_set_name: str, data: list[CardModel], extra: bool = False
+        self, 
+        card_set_name: str,
+        data: list[CardModel],
+        extra: bool = False
     ) -> tuple[int, ...]:
         """Generate a list of integers depeding on the weight denoting the
         index of an item inside the set cards.
@@ -878,7 +901,7 @@ class ExtraSubMaterial(NamedTuple):
 
 class DamageValues(NamedTuple):
     """Data structure for holding required def & attack values."""
-    subtype: str = "Damage"
+    subtype: str = "damage"
     comparison: str = ""
     attack: int = -1
     defense: int = -1
@@ -943,8 +966,6 @@ class ExtraSearch:
         self.card_model = card_model
 
         self.parse_types = parent.SIDE_DECK_TYPES.copy()
-        # self.parse_types.remove(CardType.PENDULUM_EFFECT_FUSION_MONSTER)
-        # self.parse_types.remove(CardType.FUSION_MONSTER)
 
     def parse_description(self) -> tuple[ExtraMaterial, ...]:
         """Base Method that runs the entire search."""
@@ -961,12 +982,14 @@ class ExtraSearch:
             mat = self.find_extra_material(part)
             data.append(mat)
 
-        data[0].count = max(1, data[0].count)
         # Change for description with a ´comma' or 'including'
         if data[-1].count == 0 and data[0].count > 1:
             data[0].count -= 1
             data[-1].count += 1
             data[-1].materials.extend(data[0].materials)
+
+        for item in data:
+            item.count = max(item.count, 1)
 
         return tuple(data)
 
@@ -1040,6 +1063,10 @@ class ExtraSearch:
                 monster_cap = [ExtraSubMaterial("the claw of hermos", "name")]
 
             extra_mat.count = 1
+        elif self.card_model.name == "Phantasmal Lord Ultimitl Bishbaalkin":
+            extra_mat.level = 8
+            extra_mat.count = 2
+            extra_mat.comparison = "gte"
         else:
             monster_cap = self.find_monster_cap(desc)
 
@@ -1047,7 +1074,8 @@ class ExtraSearch:
             extra_mat.materials = monster_cap  # type: ignore
 
         attrib = self.find_stat_cap(desc)
-        extra_mat.materials.append(attrib)
+        if attrib.attack != -1 or attrib.defense != -1:
+            extra_mat.materials.append(attrib)  # type: ignore
 
         if not extra_mat.count:
             for item in extra_mat.materials:
@@ -1073,6 +1101,10 @@ class ExtraSearch:
         """
         data: set[ExtraSubMaterial] = set()
         checked_words = set()
+
+        if "monster" in text:
+            monster = ExtraSubMaterial(CardType.NORMAL_MONSTER, "card_type")
+            data.add(monster)
 
         text = text.lower().replace("on the field", "")
         text = re.sub(r"\+", "", text)
@@ -1241,8 +1273,7 @@ class ExtraSearch:
         dvalues = DamageValues(
             comparison=comp,
             attack=data["ATK"],
-            defense=data["DEF"]
-        )
+            defense=data["DEF"])
 
         return dvalues
 
@@ -1320,8 +1351,9 @@ class ExtraSearch:
             return "race", RaceType[clean_target.upper().replace(" ", "_")]
         elif clean_target + " monster" in ETL(CardType):
             clean_target = clean_target + " monster"
-            return "cardtype", CardType[clean_target.upper().replace(" ", "_")]
-        elif last_check:
+            return "card_type", CardType[clean_target.upper().replace(" ", "_")]
+
+        if last_check:
             # Should change this to query local items in the future as it calls
             # the API to much.
             data = self.parent.grab_card(target.lower())
