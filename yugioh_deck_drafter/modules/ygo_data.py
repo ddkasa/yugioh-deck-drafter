@@ -33,9 +33,13 @@ import re
 import requests
 import requests_cache
 
+import pydantic_core._pydantic_core
+import inflect
+
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import QMessageBox
+
 
 from yugioh_deck_drafter import util
 
@@ -915,7 +919,10 @@ class ExtraSearch:
 
     Attributes:
         parse_types: List of accepted side deck types.
+        ENGINE: For simplifying plurals when checking for card type.
     """
+
+    ENGINE = inflect.engine()
 
     def __init__(self, parent: YugiObj, card_model: CardModel) -> None:
         self.parent = parent
@@ -1015,11 +1022,14 @@ class ExtraSearch:
                 monster_cap = [ExtraSubMaterial("mask change", "name")]
             if '\"NEX\"' in desc:
                 monster_cap = [ExtraSubMaterial("nex", "name")]
+            if '\"The Claw of Hermos\"' in desc:
+                monster_cap = [ExtraSubMaterial("the claw of hermos", "name")]
             extra_mat.count = 1
         else:
             monster_cap = self.find_monster_cap(desc)
 
-        extra_mat.material = monster_cap
+        if "monster_cap" in locals():
+            extra_mat.material = monster_cap  # type: ignore
 
         if not extra_mat.count:
             for item in extra_mat.material:
@@ -1046,7 +1056,7 @@ class ExtraSearch:
         data: set[ExtraSubMaterial] = set()
         checked_words = set()
 
-        text = text.lower()
+        text = text.lower().replace("on the field", "")
         text = re.sub(r"\+", "", text)
 
         arche_patt = r'(?<=")([a-z0-9]{1}[a-z0-9- #\,\'\.]+[a-z0-9α]{1})(?:")'
@@ -1156,7 +1166,7 @@ class ExtraSearch:
 
         Returns:
             bool: If its a negative item it will be detected as False.
-        """
+        """        
         whole_desc = re.sub('\"', '', self.card_model.description).lower()
 
         if "except " + text in whole_desc or "non-" + text in whole_desc:
@@ -1192,6 +1202,9 @@ class ExtraSearch:
             int: Total number of extra monsters. Defaults to 1.
         """
         text = text.replace("+", "")
+
+        if text[0].isdigit():
+            return int(text[0])
         patt = re.compile(r"(?<!\()(?<!Level )(?<![1-9])([1-9] ){1}(?![#\)])")
         count_search = re.findall(patt, text)
         if count_search is None:
@@ -1224,11 +1237,22 @@ class ExtraSearch:
             KeyError: If no sub type is found.
         """
         target = re.sub(r"\"", "", target)
+
+        try:
+            singular = self.ENGINE.singular_noun(target)
+        except pydantic_core._pydantic_core.ValidationError:
+            raise KeyError(f"{target} not found in any subtype.")
+
+        if isinstance(singular, str):
+            target = singular
+
         if target.upper() in self.parent.arche_types:
             return "archetype", target
 
         if target == "d/d/d":
             return "archetype",  "d/d"
+        if target == "flip":
+            target += " effect"
 
         ETL = util.enum_to_list
         clean_target = target.lower().removesuffix("-type").replace("-", " ")
@@ -1240,8 +1264,8 @@ class ExtraSearch:
         elif clean_target in ETL(RaceType):
             return "race", RaceType[clean_target.upper().replace(" ", "_")]
         elif clean_target + " monster" in ETL(CardType):
-            clean_target = clean_target + "_monster"
-            return "cardtype", CardType[clean_target.upper()]
+            clean_target = clean_target + " monster"
+            return "cardtype", CardType[clean_target.upper().replace(" ", "_")]
         elif last_check:
             # Should change this to query local items in the future as it calls
             # the API to much.
