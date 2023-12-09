@@ -884,12 +884,12 @@ if __name__ == "__main__":
     FMT = '%(relativepath)s:%(lineno)s | %(levelname)s: %(message)s'
 
     logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG)
 
     handler = logging.StreamHandler()
     formatter = logging.Formatter(FMT)
 
-    handler.setLevel(logging.INFO)
+    handler.setLevel(logging.DEBUG)
     handler.setFormatter(formatter)
 
     handler.addFilter(util.PackagePathFilter())

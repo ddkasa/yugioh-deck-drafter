@@ -17,7 +17,6 @@ Usage:
         randomise selections.
 
 """
-import traceback
 import enum
 import logging
 import sys
@@ -462,8 +461,8 @@ class YugiObj:
             QMessageBox.critical(
                 None,
                 "Critical",
-                "Failed to fetch remote Complex Query.\
-                                  Retry Later",
+                f"Failed to fetch remote Complex Query.\
+                Retry Later. URL: {base_url}",
             )
             return []
 
@@ -1251,10 +1250,8 @@ class ExtraSearch:
         logging.debug("Checking \"%s\" for attribute values.", text)
         label_pattern = re.compile(r"ATK|DEF")
         labels = re.findall(label_pattern, text)
-        print(labels)
 
         if not labels:
-            print("return defaults")
             return DamageValues()
 
         amount_pattern = re.compile(r"(?=(?<=with.)*(\d{4,}).*)")
@@ -1263,7 +1260,6 @@ class ExtraSearch:
         data = defaultdict(lambda: -1,
                            map(lambda key, val: (key, val), labels, values))
 
-        print(data)
         comp = self.find_comparison(text, "Stat")
 
         dvalues = DamageValues(
@@ -1338,8 +1334,6 @@ class ExtraSearch:
 
         ETL = util.enum_to_list
         clean_target = target.lower().removesuffix("-type").replace("-", " ")
-
-        print(target, last_check)
 
         if clean_target in ETL(AttributeType):
             return "attribute", AttributeType[clean_target.upper()]

@@ -1047,6 +1047,7 @@ class CardButton(QPushButton):
             deletion buttons.
 
         """
+        logging.debug("Assocc %s", self.assocc)
         pos = QCursor().pos()
         menu = QMenu(self)
 
@@ -1179,15 +1180,18 @@ class CardButton(QPushButton):
         if data.level != -1:
             text += f"level {data.level} "
 
+        if not data.materials:
+            return text + " Monster"
+
         for item in data.materials:
             if isinstance(item, DamageValues) or not item.polarity:
                 continue
             name = item.name
             if isinstance(name, enum.Enum):
-                name = name.name.title().replace("_", "-")
+                name = name.name.replace("_", "-")
 
             subtype = item.subtype.title().replace("_", "-")
-            text += f"with a {subtype} of {name} "
+            text += f"with a {subtype} of {name.title()} "
 
         return text
 
@@ -1237,13 +1241,13 @@ class CardButton(QPushButton):
         """
 
         items = []
-        if self.parent().ygo_data.check_extra_monster(self.card_model):
-            for item in self.assocc:
-                for sub_item in item.materials:
-                    if sub_item.subtype != "name":
-                        continue
-                    items.append(sub_item.name)
+        for item in self.assocc:
+            for sub_item in item.materials:
+                if sub_item.subtype != "name":
+                    continue
+                items.append(sub_item.name)
 
+        if self.parent().ygo_data.check_extra_monster(self.card_model):
             if self.card_model.card_type in {
                 CardType.FUSION_MONSTER,
                 CardType.PENDULUM_EFFECT_FUSION_MONSTER
@@ -1328,7 +1332,7 @@ class CardButton(QPushButton):
         """Starts a search dialog with the instances target subtype.
         """
 
-        dialog = CardSearch(self.card_model, data, self.parent())
+        dialog = CardSearch(self.card_model, data, self.parent(), label)
 
         if dialog.exec():
             for item in dialog.chosen_items:
@@ -1428,6 +1432,7 @@ class DeckViewer(QDialog):
         self.button_layout = QHBoxLayout()
 
         if discard:
+
             self.removal_counter = QLabel()
             self.removal_counter.setObjectName("indicator")
             self.button_layout.addWidget(self.removal_counter, 5)
@@ -1722,14 +1727,14 @@ class CardSearch(QDialog):
         self,
         card: CardModel,
         extra_material: ExtraMaterial,
-        parent: DraftingDialog
+        parent: DraftingDialog,
+        label: str
     ) -> None:
         super().__init__(parent)
         self.card = card
         self.extra_mats = extra_material
 
-        ttl = f"Searching for {card.name} assocciations."
-        self.setWindowTitle(ttl.replace("_", " "))
+        self.setWindowTitle(label.replace("_", " "))
         self.setMinimumSize(960, 540)
 
         self.data = parent.ygo_data.complex_search(extra_material)
