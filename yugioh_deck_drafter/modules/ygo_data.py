@@ -1104,7 +1104,6 @@ class ExtraSearch:
         arche_patt = r'(?<=")([a-z0-9]{1}[a-z0-9- #\,\'\.]+[a-z0-9α]{1})(?:")'
         archetype_match = re.findall(arche_patt, text, re.I)
         checked_words.update(archetype_match)
-        print("arche", archetype_match)
         data.update(
             self.create_sub_material(
                 archetype_match,
@@ -1115,27 +1114,25 @@ class ExtraSearch:
         monster_type_capture = r"(?<!non-)([a-z-]+)(?:(monster)(s?))"
         monster_match = re.findall(monster_type_capture, text, re.I)
         checked_words.update(monster_match)
-        print("monster-match", monster_match)
         data.update(self.create_sub_material(monster_match))
 
         sub_type_capture = r"([a-z]+)(?:-type){1}"
         sub_type_match = re.findall(sub_type_capture, text, re.I)
         checked_words.update(sub_type_match)
-        print("sub-type-match", sub_type_match)
         data.update(self.create_sub_material(sub_type_match))
 
         counted_type_capture = r"(?<=[1-9]).*?(?=\s\d|$)"
         counted_match = re.findall(counted_type_capture, text, re.I)
         checked_words.update(counted_match)
-        print("counted", counted_match)
         data.update(self.create_sub_material(counted_match))
 
         negative_capture = r"(?<=non-)([a-z]{4,})"
         negative_match = re.findall(negative_capture, text, re.I)
         checked_words.update(negative_match)
-        print("neg", negative_match)
         data.update(self.create_sub_material(negative_match, False))
 
+        re_data = data.copy()
+        logging.debug("Regex found %s", re_data)
         for item in data:
             if item.subtype == "name":
                 return list(data)
@@ -1159,6 +1156,8 @@ class ExtraSearch:
         if "monster" in text and not c:
             monster = ExtraSubMaterial(CardType.NORMAL_MONSTER, "card_type")
             data.add(monster)
+
+        logging.debug("Brute Force Found %s", data.difference(re_data))
 
         return list(data)
 

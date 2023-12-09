@@ -1083,18 +1083,29 @@ class CardButton(QPushButton):
             for item in self.assocc:
                 for card in item.materials:
                     print(card)
-                    if card.subtype != "name":
+                    if (card.subtype != "name"
+                       or isinstance(card, DamageValues)):
                         continue
                     action = self.create_add_action(str(card.name))
                     util.action_to_list_men(action, actions, menu)
 
-            if (self.parent().drafting_model.selections_left > 1
-               and actions):
-                acc = QAction("Add all Assocciated")
-                acc.triggered.connect(self.add_all_assocc)
-                util.action_to_list_men(acc, actions, menu)
+            self.add_all_assocc_action(actions, menu)
 
         return actions
+
+    def add_all_assocc_action(self, actions: list[QAction], menu: QMenu) -> None:
+        """Action for adding all named cards to the selection.
+
+        Args:
+            actions (list): Container to add the action to.
+            menu (QMenu): Menu to add the action to.
+        """
+
+        non_search = actions and any("Search" not in a.text() for a in actions)
+        if (self.parent().drafting_model.selections_left > 1 and non_search):
+            acc = QAction("Add all Assocciated")
+            acc.triggered.connect(self.add_all_assocc)
+            util.action_to_list_men(acc, actions, menu)
 
     def fusion_menu(self, menu: QMenu, action_container: list) -> None:
         """Creates fusion/extra deck monster menu actions.
@@ -1114,6 +1125,8 @@ class CardButton(QPushButton):
                 action = self.search_menu(assocc)
 
             util.action_to_list_men(action, action_container, menu)
+
+        self.add_all_assocc_action(action_container, menu)
 
     def create_add_action(self, name: str | enum.Enum) -> QAction:
         """Generates and connects a action for adding a card to the selection.
@@ -1231,7 +1244,10 @@ class CardButton(QPushButton):
                         continue
                     items.append(sub_item.name)
 
-            if self.card_model.card_type == CardType.FUSION_MONSTER:
+            if self.card_model.card_type in {
+                CardType.FUSION_MONSTER,
+                CardType.PENDULUM_EFFECT_FUSION_MONSTER
+            }:
                 poly = "Polymerization"
                 items.append(poly)
 
