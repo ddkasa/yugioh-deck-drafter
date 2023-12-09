@@ -47,7 +47,6 @@ from yugioh_deck_drafter import util
 class CardSetClass(enum.Enum):
     """Enumeration for filtering and selecting specfic types of card
     sets. Matched against the names of sets to allow for categorising."""
-
     BOOSTER_PACK = enum.auto()
     PROMOTIONAL = enum.auto()
     STARTER_DECK = enum.auto()
@@ -77,6 +76,7 @@ class DeckType(enum.Enum):
     MAIN = enum.auto()
     EXTRA = enum.auto()
     SIDE = enum.auto()
+    SEARCH = enum.auto()
 
 
 class RaceType(enum.Enum):
@@ -428,6 +428,10 @@ class YugiObj:
         Returns:
             list[CardModel]: List of cards fomatted into a datamodel.
         """
+        PROP_MATCH = {
+            "card_type": "type"
+        }
+
         base_url = "https://db.ygoprodeck.com/api/v7/cardinfo.php?"
 
         if material.level != -1:
@@ -445,9 +449,10 @@ class YugiObj:
                 base_url += "&"
             name = item.name
             if isinstance(name, enum.Enum):
-                name = re.sub(r'([\-\_])', "", name.name.lower())
+                name = re.sub(r'([\-\_])', " ", name.name.lower())
 
-            base_url += f"{item.subtype}={name}"
+            sub_type = PROP_MATCH.get(item.subtype, item.subtype)
+            base_url += f"{sub_type}={name}"
 
         request = self.CACHE.get(base_url, timeout=20)
 
@@ -536,18 +541,9 @@ class YugiObj:
             if isinstance(item, DamageValues) or item.polarity:
                 continue
             for card in list(cards):
-                try:
-                    if card[item.subtype] == item.name:
-                        idx = cards.index(card)
-                        cards.pop(idx)
-                except TypeError as t:
-                    traceback.print_exc()
-                    print(t)
-                    print(type(item))
-                    print(item)
-                    print(card)
-                    print(type(card))
-                    sys.exit()
+                if card[item.subtype] == item.name:
+                    idx = cards.index(card)
+                    cards.pop(idx)
 
         return cards
 
@@ -804,7 +800,7 @@ class YugiObj:
         return material
 
     def generate_weights(
-        self, 
+        self,
         card_set_name: str,
         data: list[CardModel],
         extra: bool = False
@@ -1061,7 +1057,6 @@ class ExtraSearch:
                 monster_cap = [ExtraSubMaterial("nex", "name")]
             elif '\"The Claw of Hermos\"' in desc:
                 monster_cap = [ExtraSubMaterial("the claw of hermos", "name")]
-
             extra_mat.count = 1
         elif self.card_model.name == "Phantasmal Lord Ultimitl Bishbaalkin":
             extra_mat.level = 8
@@ -1099,12 +1094,9 @@ class ExtraSearch:
         Returns:
             list[str]: A set with all the types with the none elements removed.
         """
+        logging.debug("Look for monsters in \"%s\"", text)
         data: set[ExtraSubMaterial] = set()
         checked_words = set()
-
-        if "monster" in text:
-            monster = ExtraSubMaterial(CardType.NORMAL_MONSTER, "card_type")
-            data.add(monster)
 
         text = text.lower().replace("on the field", "")
         text = re.sub(r"\+", "", text)
@@ -1162,6 +1154,11 @@ class ExtraSearch:
 
             sub_mat = self.create_sub_material([word], last_check=False)
             data.update(sub_mat)
+
+        c = any(item.subtype == "card_type" and item.polarity for item in data)
+        if "monster" in text and not c:
+            monster = ExtraSubMaterial(CardType.NORMAL_MONSTER, "card_type")
+            data.add(monster)
 
         return list(data)
 
@@ -1322,8 +1319,8 @@ class ExtraSearch:
         Raises:
             KeyError: If no sub type is found.
         """
-        target = re.sub(r"\"", "", target)
-
+        og_target = re.sub(r"\"", "", target)
+        target = og_target
         try:
             singular = self.ENGINE.singular_noun(target)
         except pydantic_core._pydantic_core.ValidationError:
@@ -1356,14 +1353,14 @@ class ExtraSearch:
         if last_check:
             # Should change this to query local items in the future as it calls
             # the API to much.
-            data = self.parent.grab_card(target.lower())
+            data = self.parent.grab_card(og_target.lower())
             if data is not None:
-                return "name", target
+                return "name", og_target
 
         if fuzzy:
-            data = self.parent.grab_card(target.lower(), True)
+            data = self.parent.grab_card(og_target.lower(), True)
             if data is not None:
-                return "fname", target
+                return "fname", og_target
 
         logging.error("Card: %s", self.card_model.name)
         raise KeyError(f"{target} not found in any subtype.")

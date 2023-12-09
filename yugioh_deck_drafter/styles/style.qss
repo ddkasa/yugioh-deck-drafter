@@ -59,16 +59,16 @@ QLabel {
     color: #F05941;
 }
 
-QLabel#indicator { 
+QLabel#indicator {
     border: 1px solid #BE3144;
     border-radius: 5px;
-    margin: 10px;
+    padding: 2px;
     }
 
 QLabel#subtitle {
     font-weight: 400;
     font-size: 16px;
-    margin: 10px;
+    padding: 20px;
 
     }
 

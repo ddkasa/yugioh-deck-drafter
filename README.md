@@ -4,7 +4,7 @@ Python app built ontop of PyQt for drafting custom decks with a custom rulset.
 # Usage
 1. Download the latest/relevant launcher from [Releases](https://github.com/ddkasa/yugioh-deck-drafter/releases)
 2. Load the application. It will generate some folders on the first start for caching and autosave purposes.
-3. Select 40 packs for the drafting stage. 
+3. Select 40 packs for the drafting stage.
     1. Generally recommend that the card sets have more than 10 different cards within them. Otherwise the drafting process will occassionaly stop working as it will cause issues with the drafting ruleset.
     2. There are several options for this. Either filter the sets by right clicking the dropdown menu and pressing filter or randomising them by right clicking and selecting one of the randomisation options.
     3. If you have other people drafting at the same time you can also copy the selected packs and copy paste the set-list to them so they can paste it into their own drafter.

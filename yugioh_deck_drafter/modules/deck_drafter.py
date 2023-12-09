@@ -47,7 +47,8 @@ from PyQt6.QtWidgets import (QApplication, QCompleter, QDialog, QHBoxLayout,
 from yugioh_deck_drafter import util
 from yugioh_deck_drafter.modules.ygo_data import (CardModel, CardSetModel,
                                                   DeckModel, DeckType,
-                                                  CardType, ExtraMaterial)
+                                                  CardType, ExtraMaterial,
+                                                  DamageValues)
 
 if TYPE_CHECKING:
     from yugioh_deck_drafter.__main__ import MainWindow
@@ -399,7 +400,7 @@ class DraftingDialog(QDialog):
 
     def check_discard_stage(self) -> bool:
         """Checks if its time for a dicard stage or not. Return true if the
-        condiions are met."""        
+        condiions are met."""
         ten_div = self.drafting_model.total_packs % 10 == 0
         tot_pack = bool(self.drafting_model.total_packs)
         return ten_div and tot_pack
@@ -495,11 +496,11 @@ class DraftingDialog(QDialog):
         """Selects a random card based on the weights previously generated.
 
         Will select a rare or higher if its the 8 + 1 column, unless there are
-            not enough rares in a set. 
+            not enough rares in a set.
 
         Args:
             set_data (CardSetModel): The set to select the card from.
-            pack_index (int): Current card being opened for checking when it 
+            pack_index (int): Current card being opened for checking when it
                 100% should be a rare or above.
 
         Returns:
@@ -773,9 +774,8 @@ class DraftingDialog(QDialog):
             self,
             "Quit",
             "Are you sure want to quit the drafting process?",
-            (QMessageBox.StandardButton.No
-                | QMessageBox.StandardButton.Yes)
-            )
+            (QMessageBox.StandardButton.No | QMessageBox.StandardButton.Yes))
+
         if close == QMessageBox.StandardButton.Yes:
             event.accept()
         else:
@@ -791,7 +791,7 @@ class DraftingDialog(QDialog):
         Args:
             card_type (str): Target card type to check for. Is fuzzy as the
                 method checks if the card_type is inside the models card_type.
-            group (list[CardButton  |  CardModel]): Where the cards to check
+            group (list[CardButton | CardModel]): Where the cards to check
                 are located.
 
         Returns:
@@ -886,7 +886,8 @@ class CardButton(QPushButton):
         self.setSizePolicy(QSP.MinimumExpanding, QSP.MinimumExpanding)
         self.setCheckable(True)
 
-        self.assocc = self.filter_assocciated(data)
+        if sub_deck is None:
+            self.assocc = self.filter_assocciated(data)
 
         self.image = parent.ygo_data.get_card_art(self.card_model)
 
@@ -1023,7 +1024,7 @@ class CardButton(QPushButton):
             pen_width (float): Pen size to adjust the rectangle with.
 
         Returns:
-            QRectF: Adjusted rectangle which will fit the line centers 
+            QRectF: Adjusted rectangle which will fit the line centers
                 properly.
         """
         pen_half = pen_width / 2
@@ -1115,6 +1116,14 @@ class CardButton(QPushButton):
             util.action_to_list_men(action, action_container, menu)
 
     def create_add_action(self, name: str | enum.Enum) -> QAction:
+        """Generates and connects a action for adding a card to the selection.
+
+        Args:
+            name (str | enum.Enum): Name of the card that will be added.
+
+        Returns:
+            QAction: Action to add to a menu.
+        """
         if isinstance(name, enum.Enum):
             name = name.name.replace("_", " ").title()
         action = QAction("Add " + name.title())
@@ -1131,11 +1140,43 @@ class CardButton(QPushButton):
            data (ExtraMaterial): The query information to use when searching
                 for cards.
         """
-        text = f"Search for {self.card_model.card_type.name.replace("_", " ")}"
-        search_item = QAction(text)
-        search_item.triggered.connect(lambda: self.search_dialog(data))
+        label = self.generate_action_labels(data)
+        search_item = QAction(label)
+        search_item.triggered.connect(lambda: self.search_dialog(data, label))
 
         return search_item
+
+    def generate_action_labels(
+        self,
+        data: ExtraMaterial,
+        action_type: str = "Search"
+    ) -> str:
+        """Generates a text label for menu actions.
+
+        Args:
+            data (ExtraMaterial): Data to parse to create the label
+            action_type (str, optional): Type of label. For a search action or
+                add action. Defaults to "Search".
+
+        Returns:
+            str: A formatted string for display purposes.
+        """
+
+        text = f"Search for {data.count} "
+        if data.level != -1:
+            text += f"level {data.level} "
+
+        for item in data.materials:
+            if isinstance(item, DamageValues) or not item.polarity:
+                continue
+            name = item.name
+            if isinstance(name, enum.Enum):
+                name = name.name.title().replace("_", "-")
+
+            subtype = item.subtype.title().replace("_", "-")
+            text += f"with a {subtype} of {name} "
+
+        return text
 
     def discard_stage_menu(self, menu: QMenu) -> list[QAction]:
         """Menu that pop ups when in the discard stage of drafting.
@@ -1181,8 +1222,6 @@ class CardButton(QPushButton):
         If the monster belongs in the extra deck a Polymerization gets added to
         the deck.
         """
-        self.setChecked(True)
-        self.setDisabled(True)
 
         items = []
         if self.parent().ygo_data.check_extra_monster(self.card_model):
@@ -1192,11 +1231,14 @@ class CardButton(QPushButton):
                         continue
                     items.append(sub_item.name)
 
-            if self.card_model.card_type == "Fusion Monster":
+            if self.card_model.card_type == CardType.FUSION_MONSTER:
                 poly = "Polymerization"
                 items.append(poly)
 
         self.get_card(items)
+
+        self.setChecked(True)
+        self.setDisabled(True)
 
     def add_assocc(self, card_name: str) -> None:
         """Adds a single assocciated card to the selected cards.
@@ -1262,7 +1304,11 @@ class CardButton(QPushButton):
         """Override to clear typing issues when calling this function."""
         return self.drafting_dialog  # type: ignore
 
-    def search_dialog(self, data: ExtraMaterial) -> None:
+    def search_dialog(
+        self,
+        data: ExtraMaterial,
+        label: Optional[str] = None
+    ) -> None:
         """Starts a search dialog with the instances target subtype.
         """
 
@@ -1279,7 +1325,7 @@ class CardButton(QPushButton):
         if event is None:
             return
 
-        if self.sub_deck in (None, DeckType.EXTRA):
+        if self.sub_deck in (None, DeckType.EXTRA, DeckType.SEARCH):
             return
 
         if event.buttons() == Qt.MouseButton.LeftButton:
@@ -1308,7 +1354,7 @@ class CardButton(QPushButton):
 
         Args:
             sub_deck (DeckType | None): The decktype of the card model itself.
-        """        
+        """
         self._sub_deck = sub_deck
 
 
@@ -1753,7 +1799,9 @@ class CardSearch(QDialog):
             CardButton: For scrolling the view to the item.
         """
         CMP = Qt.ContextMenuPolicy
-        card_button = CardButton(self.data.pop(index), self.parent(), None)
+        card_button = CardButton(self.data.pop(index),
+                                 self.parent(),
+                                 sub_deck=DeckType.SEARCH)
         card_button.setContextMenuPolicy(CMP.NoContextMenu)
         card_button.setChecked(check)
         card_button.toggled.connect(self.check_picks)
@@ -2022,7 +2070,7 @@ class CardLayout(QLayout):
     """Layout for displaying cards in a proper aspect ration and taking up size
     correctly.
 
-    Spacing determines the contents margins of the layocustom layout with drag 
+    Spacing determines the contents margins of the layocustom layout with drag
     and drop between layouts pyqt6t.
 
     Attributes | Args:
@@ -2072,7 +2120,7 @@ class CardLayout(QLayout):
 
         Returns:
             DeckWidget | QVBoxLayout: Parent of the layout
-        """        
+        """
         return self._parent
 
     def sizeHint(self) -> QSize:
@@ -2124,7 +2172,7 @@ class CardLayout(QLayout):
         return len(self._card_items)
 
     def minimumSize(self) -> QSize:
-        """Minimum Size of the layout based on the SizeHint which should be 
+        """Minimum Size of the layout based on the SizeHint which should be
         reimplemented in the future."""
         return self.sizeHint()
 
