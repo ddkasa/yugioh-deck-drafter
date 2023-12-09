@@ -42,7 +42,8 @@ from PyQt6.QtWidgets import (QApplication, QCompleter, QDialog, QHBoxLayout,
                              QLabel, QLayout, QLayoutItem, QLineEdit, QMenu,
                              QMessageBox, QProgressBar, QPushButton,
                              QScrollArea, QSizePolicy, QWidget, QStackedWidget,
-                             QStyle, QStyleOptionButton, QVBoxLayout)
+                             QStyle, QStyleOptionButton, QVBoxLayout,
+                             QProgressDialog)
 
 from yugioh_deck_drafter import util
 from yugioh_deck_drafter.modules.ygo_data import (CardModel, CardSetModel,
@@ -327,6 +328,7 @@ class DraftingDialog(QDialog):
         self.load_set_art()
 
         self.drafting_model.total_packs += 1
+
         (self.packs_opened
          .setText(f"Pack No.: {self.drafting_model.total_packs}"))
         self.current_pack.setText(f"Current Pack: {set_data.set_name}")
@@ -365,10 +367,10 @@ class DraftingDialog(QDialog):
             mdl = card.card_model
             if self.ygo_data.check_extra_monster(mdl):
                 extra_card_types += 1
-            elif card.isChecked():
-                continue
             elif self.check_card_count(mdl) == 3:
                 duplicates += 1
+            elif card.isChecked():
+                continue
 
         actual_selection = self.CARDS_PER_PACK
         actual_selection -= (extra_card_types + duplicates)
@@ -480,6 +482,9 @@ class DraftingDialog(QDialog):
 
             card = CardButton(card_data, self)
 
+            if self.check_card_count(card_data) == 3:
+                card.setDisabled(True)
+
             self.card_buttons.append(card)
             card.toggled.connect(self.update_selection)
             self.card_layout.addWidget(card)
@@ -538,30 +543,31 @@ class DraftingDialog(QDialog):
         logging.debug("Updating Selection")
 
         for item in list(self.card_buttons):
-            item.blockSignals(True)
+            with QSignalBlocker(item):
+                item_in = item in self.drafting_model.selections
+                three = self.check_card_count(item.card_model) == 3
+                fus_mon = self.ygo_data.check_extra_monster(item.card_model)
 
-            item_in = item in self.drafting_model.selections
-            three = self.check_card_count(item.card_model) == 3
-            fus_monster = self.ygo_data.check_extra_monster(item.card_model)
+                if (item.isChecked() and not three
+                   and (self.drafting_model.selections_left > 0 or fus_mon)):
+                    if not item_in:
+                        logging.debug("Adding card %s", item.accessibleName())
+                        self.add_card_to_selection(item)
 
-            if (item.isChecked()
-               and not three
-               and (self.drafting_model.selections_left > 0 or fus_monster)):
-                if not item_in:
-                    logging.debug("Adding card %s", item.accessibleName())
-                    self.add_card_to_selection(item)
+                elif not item.isChecked() and item_in:
+                    logging.debug("Removing card %s", item.accessibleName())
+                    self.remove_card_from_selection(item)
 
-            elif not item.isChecked() and item_in:
-                logging.debug("Removing card %s", item.accessibleName())
-                self.remove_card_from_selection(item)
+                elif not item_in and not fus_mon:
+                    item.setChecked(False)
+                    if three:
+                        item.setDisabled(True)
+                else:
+                    item.setDisabled(False)
 
-            elif not item_in and not fus_monster:
-                item.setChecked(False)
+                self.update_counter_label()
 
-            self.update_counter_label()
-            item.blockSignals(False)
-
-        QApplication.processEvents()
+            QApplication.processEvents()
 
     def add_card_to_selection(
         self,
@@ -1047,7 +1053,6 @@ class CardButton(QPushButton):
             deletion buttons.
 
         """
-        logging.debug("Assocc %s", self.assocc)
         pos = QCursor().pos()
         menu = QMenu(self)
 
@@ -1077,6 +1082,7 @@ class CardButton(QPushButton):
                 pre-emptively.
         """
         actions = []
+        logging.debug("Assocc %s", self.assocc)
         if self.parent().ygo_data.check_extra_monster(self.card_model):
             self.fusion_menu(menu, actions)
 
@@ -1206,7 +1212,6 @@ class CardButton(QPushButton):
                 pre-emptively.
         """
         actions = []
-
         self.viewer: DeckViewer
         if self.isChecked():
             card_state = "Keep Card"
@@ -1327,7 +1332,7 @@ class CardButton(QPushButton):
     def search_dialog(
         self,
         data: ExtraMaterial,
-        label: Optional[str] = None
+        label: str,
     ) -> None:
         """Starts a search dialog with the instances target subtype.
         """
@@ -1432,7 +1437,6 @@ class DeckViewer(QDialog):
         self.button_layout = QHBoxLayout()
 
         if discard:
-
             self.removal_counter = QLabel()
             self.removal_counter.setObjectName("indicator")
             self.button_layout.addWidget(self.removal_counter, 5)
@@ -1720,7 +1724,7 @@ class CardSearch(QDialog):
         extra_material (ExtraMaterial): Query setting for finding suitable
             cards.
         parent (DraftingDialog): For searching capability and checking
-            duplicates.s
+            duplicates.
     """
 
     def __init__(
@@ -1797,12 +1801,26 @@ class CardSearch(QDialog):
         """Loads the next set of maximum 20 cards.
         """
         self.data: list
-        for _ in range(20):
+        max_files = min(20, len(self.data))
+        progress_dialog = QProgressDialog("Loading Cards", None, 0, max_files,
+                                          self.parent())
+        progress_dialog.show()
+        label = "Loading Cards {card_name}"
+        for i in range(20):
+            progress_dialog.setValue(i)
             QApplication.processEvents()
+
             if not self.data:
                 self.add_more_button.setDisabled(True)
+                progress_dialog.setValue(max_files)
                 break
-            self.load_cardbutton()
+
+            bttn = self.load_cardbutton()
+            lab = label.format(card_name=bttn.accessibleName())
+            progress_dialog.setLabelText(lab)
+
+        progress_dialog.close()
+        progress_dialog.deleteLater()
 
     def load_cardbutton(
         self,
