@@ -1,8 +1,8 @@
-{  
+{
     "python.autoComplete.extraPaths": [
         "./**",
     ],
-    "python.languageServer": "Default", 
+    "python.languageServer": "Default",
     "python.analysis.typeCheckingMode": "basic",
     "editor.rulers": [79],
     "workbench.colorCustomizations": {
@@ -17,5 +17,4 @@
         "./**"
     ],
     "editor.stickyScroll.scrollWithEditor": false,
-    "pylint.cwd": "${workspaceFolder}/yugioh_deck_drafter",
 }

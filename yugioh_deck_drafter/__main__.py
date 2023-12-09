@@ -450,7 +450,7 @@ class MainWindow(QMainWindow):
             file_dia.selectFile(deck.name + ".ygo")
             file_path = Path(str(file_dia.directory().path())) / file_name
 
-        elif (self.DEFAULT_IMPORT.exists() 
+        elif (self.DEFAULT_IMPORT.exists()
               and message_box.clickedButton() == import_button):
             file_path = self.DEFAULT_IMPORT / file_name
 
@@ -613,7 +613,7 @@ class PackFilterDialog(QDialog):
             information.
 
     """
-    def __init__(self, 
+    def __init__(self,
                  parent: MainWindow,
                  card_set: list[CardSetModel],
                  previous_filter: CardSetFilter) -> None:
@@ -777,7 +777,7 @@ class CheckableListWidget(QListWidget):
         items: set[str] | enum.EnumMeta,
         set_classes: set[CardSetClass]
     ) -> None:
-        """Extra addItems method for quick adding Enums as a list ontop of 
+        """Extra addItems method for quick adding Enums as a list ontop of
         strings
 
         Args:
@@ -881,7 +881,18 @@ def excepthook(type_, value, traceback_):
 if __name__ == "__main__":
     sys.excepthook = excepthook
 
-    fmt = "%(levelname)s | .\\yugioh_deck_drafter"
-    fmt += "\\%(module)s.py:%(lineno)d -> %(message)s"
-    logging.basicConfig(stream=sys.stderr, level=logging.DEBUG, format=fmt)
+    FMT = '%(relativepath)s:%(lineno)s | %(levelname)s: %(message)s'
+
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter(FMT)
+
+    handler.setLevel(logging.INFO)
+    handler.setFormatter(formatter)
+
+    handler.addFilter(util.PackagePathFilter())
+    logger.addHandler(handler)
+
     main(sys.argv)

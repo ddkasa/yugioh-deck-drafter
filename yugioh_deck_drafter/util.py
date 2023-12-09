@@ -21,6 +21,7 @@ Functions:
 Classes:
     DataSerializer: For serializing and saving JSON files for quicker
         debugging.
+    PackagePathFilter: Custom fitler for debugging and logging purposes.
 
 """
 
@@ -29,11 +30,12 @@ from typing import Optional
 from pathlib import Path
 from json import JSONEncoder
 from datetime import date
+import sys
 import re
 import unicodedata
 import enum
 from functools import cache
-
+import os
 import math
 
 from PyQt6.QtGui import QPixmap, QPixmapCache, QAction
@@ -134,7 +136,7 @@ def check_item_validation(item: QLayoutItem | None) -> QWidget | None:
 
 
 def get_operation(number: int) -> tuple[str, int]:
-    """Gets an operation in readable format for GUI usage and turns the value 
+    """Gets an operation in readable format for GUI usage and turns the value
     supplied into an absolute
 
     Args:
@@ -226,6 +228,20 @@ def enum_to_list(e_class: enum.EnumMeta) -> list[str]:
     """
     data = [s.name.replace("_", " ").lower() for s in e_class]  # type: ignore
     return data
+
+
+class PackagePathFilter(logging.Filter):
+    def filter(self, record):
+        pathname = record.pathname
+        record.relativepath = None
+        abs_sys_paths = map(os.path.abspath, sys.path)
+        for path in sorted(abs_sys_paths, key=len, reverse=True):  # longer paths first
+            if not path.endswith(os.sep):
+                path += os.sep
+            if pathname.startswith(path):
+                record.relativepath = os.path.relpath(pathname, path)
+                break
+        return True
 
 
 if __name__ == "__main__":
