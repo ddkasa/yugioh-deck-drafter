@@ -39,7 +39,6 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import QMessageBox
 
-
 from yugioh_deck_drafter import util
 
 
@@ -167,6 +166,7 @@ class CollectionType(enum.Enum):
     OCG = enum.auto()
     TCG = enum.auto()
 
+
 @dataclass
 class CardSetModel:
     """Datamodel for a YGO Cardset
@@ -175,7 +175,6 @@ class CardSetModel:
     carrying the list of weights for random choices.
 
     """
-
     set_name: str = field()
     set_code: str = field()
     set_date: date = field()
@@ -405,7 +404,7 @@ class YugiObj:
         Args:
             card_set (CardSetModel): The card_set to check
             set_filter (CardSetFilter): Datamodel containing the info on what
-                to check agaisnt.
+                to check against.
 
         Returns:
             bool: If card set matches the count, date and set type it returns.
@@ -453,6 +452,7 @@ class YugiObj:
             sub_type = PROP_MATCH.get(item.subtype, item.subtype)
             base_url += f"{sub_type}={name}"
 
+        logging.debug("Requesting complex query with url %s", base_url)
         request = self.CACHE.get(base_url, timeout=20)
 
         if request.status_code != 200:
@@ -461,8 +461,8 @@ class YugiObj:
             QMessageBox.critical(
                 None,
                 "Critical",
-                f"Failed to fetch remote Complex Query.\
-                Retry Later. URL: {base_url}",
+                "Failed to fetch remote Complex Query. "\
+                f"Retry Later. \nURL: {base_url}",
             )
             return []
 
@@ -618,7 +618,9 @@ class YugiObj:
         return image
 
     def grab_arche_type_cards(
-        self, card_arche: enum.Enum | str, subtype: str = "archetype"
+        self,
+        card_arche: enum.Enum | str,
+        subtype: str = "archetype"
     ) -> list[CardModel]:
         """Filters out cards with the specfied subtype.
 
@@ -796,6 +798,7 @@ class YugiObj:
         """
         search = ExtraSearch(self, card)
         material = search.parse_description()
+
         return material
 
     def generate_weights(
@@ -1151,8 +1154,7 @@ class ExtraSearch:
             sub_mat = self.create_sub_material([word], last_check=False)
             data.update(sub_mat)
 
-        c = any(item.subtype == "card_type" and item.polarity for item in data)
-        if "monster" in text and not c:
+        if "monster" in text and not data:
             monster = ExtraSubMaterial(CardType.NORMAL_MONSTER, "card_type")
             data.add(monster)
 
@@ -1214,7 +1216,7 @@ class ExtraSearch:
         """
         whole_desc = re.sub('\"', '', self.card_model.description).lower()
 
-        if "except " + text in whole_desc or "non-" + text in whole_desc:
+        if "except " + text in whole_desc:
             return False
 
         return previous

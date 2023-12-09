@@ -79,6 +79,10 @@ QPushButton::hover, QToolButton::hover  {
     border-radius: 5px;
 }
 
+QPushButton:disabled, QToolButton:disabled  {
+    color:  rgb(100, 69, 65);
+}
+
 
 /* QMenu */
 QMenu::item:disabled {

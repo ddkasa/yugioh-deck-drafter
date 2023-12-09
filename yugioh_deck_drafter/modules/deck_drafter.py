@@ -30,6 +30,7 @@ import random
 import enum
 from pathlib import Path
 from dataclasses import dataclass, field
+from functools import partial
 
 from PyQt6.QtCore import (QMimeData, QPoint, QRect, QRectF, QSignalBlocker,
                           QSize, Qt, pyqtSignal, pyqtSlot)
@@ -486,7 +487,7 @@ class DraftingDialog(QDialog):
                 card.setDisabled(True)
 
             self.card_buttons.append(card)
-            card.toggled.connect(self.update_selection)
+            card.toggled.connect(partial(self.update_selection, card))
             self.card_layout.addWidget(card)
 
         self.repaint()
@@ -533,41 +534,54 @@ class DraftingDialog(QDialog):
         """Overriden function to remove the type alert."""
         return super().parent()  # type: ignore
 
-    def update_selection(self):
+    def update_selection(self, card: CardButton) -> None:
         """Check if there are any slections left and checks and for duplicate
         cards.
 
-        Removes the selections if there are three of more of the card present
-        in the deck.
+        Args:
+            card (CardButton): Card that was changed and needs to be.
+                Will be the first card that is checked.
         """
         logging.debug("Updating Selection")
 
-        for item in list(self.card_buttons):
-            with QSignalBlocker(item):
-                item_in = item in self.drafting_model.selections
-                three = self.check_card_count(item.card_model) == 3
-                fus_mon = self.ygo_data.check_extra_monster(item.card_model)
+        self.update_item_selection(card)
 
-                if (item.isChecked() and not three
-                   and (self.drafting_model.selections_left > 0 or fus_mon)):
-                    if not item_in:
-                        logging.debug("Adding card %s", item.accessibleName())
-                        self.add_card_to_selection(item)
+        for item in self.card_layout.widget_list():
+            if item == card:
+                continue
+            self.update_item_selection(item)
 
-                elif not item.isChecked() and item_in:
-                    logging.debug("Removing card %s", item.accessibleName())
-                    self.remove_card_from_selection(item)
+    def update_item_selection(self, item: CardButton) -> None:
+        """Updates the given item selection status.
 
-                elif not item_in and not fus_mon:
-                    item.setChecked(False)
-                    if three:
-                        item.setDisabled(True)
-                else:
-                    item.setDisabled(False)
+        Args:
+            item (CardButton): Item to be updated from the selection
+        """
+        with QSignalBlocker(item):
+            item_in = item in self.drafting_model.selections
+            fus_mon = self.ygo_data.check_extra_monster(item.card_model)
 
-                self.update_counter_label()
+            if (item.isChecked()
+               and not self.check_card_count(item.card_model) == 3
+               and (self.drafting_model.selections_left > 0 or fus_mon)):
 
-            QApplication.processEvents()
+                if not item_in:
+                    logging.debug("Adding card %s", item.accessibleName())
+                    self.add_card_to_selection(item)
+
+            elif not item.isChecked() and item_in:
+                logging.debug("Removing card %s", item.accessibleName())
+                self.remove_card_from_selection(item)
+
+            elif not item_in and not fus_mon:
+                item.setChecked(False)
+
+            item.setDisabled(self.check_card_count(item.card_model) == 3
+                             and not item.isChecked())
+
+            self.update_counter_label()
+
+        QApplication.processEvents()
 
     def add_card_to_selection(
         self,
@@ -693,7 +707,7 @@ class DraftingDialog(QDialog):
 
         return count
 
-    def discard_stage(self):
+    def discard_stage(self) -> None:
         """Calculates the amount to be discarded and starts the dialog.
 
         Raises:
@@ -1169,7 +1183,6 @@ class CardButton(QPushButton):
     def generate_action_labels(
         self,
         data: ExtraMaterial,
-        action_type: str = "Search"
     ) -> str:
         """Generates a text label for menu actions.
 
@@ -1182,22 +1195,29 @@ class CardButton(QPushButton):
             str: A formatted string for display purposes.
         """
 
-        text = f"Search for {data.count} "
+        text = f"Search for {data.count} Monster(s) "
         if data.level != -1:
             text += f"level {data.level} "
 
         if not data.materials:
             return text + " Monster"
 
+        start = "with"
         for item in data.materials:
-            if isinstance(item, DamageValues) or not item.polarity:
+            if isinstance(item, DamageValues):
                 continue
             name = item.name
             if isinstance(name, enum.Enum):
-                name = name.name.replace("_", "-")
+                name = name.name.replace("_", " ")
 
-            subtype = item.subtype.title().replace("_", "-")
-            text += f"with a {subtype} of {name.title()} "
+            subtype = item.subtype.title().replace("_", " ")
+            if item.polarity:
+                t = f"{start} {subtype}: {name.title()} "
+                start = "and"
+            else:
+                t = f"that are not a {subtype}: {name.title()} "
+
+            text += t
 
         return text
 
@@ -1886,6 +1906,9 @@ class CardSearch(QDialog):
     def highlight_search(self, name: str) -> None:
         """Hightlights the item searched for inside the search box and toggls
         the button to the checked state.
+
+        Args:
+            name (str): Name of the card to highlight.
         """
         for i, item in enumerate(self.scroll_widget.main_layout.widget_list()):
             if item.accessibleName() == name:
