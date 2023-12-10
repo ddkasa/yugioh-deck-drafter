@@ -56,6 +56,29 @@ class MainWindow(QMainWindow):
 
     Args:
         debug (bool): For debugging purposes in the window.
+
+    Methods:
+        list_context_menu: Context menu method for the modifying the GUI card
+            list.
+        check_for_filter_dia: Checks for an existing filter dialog thats open.
+        pack_list_context_menu: For manipulating the card_set dropdown menu.
+        add_item: Adds an item thats supplied or selected on the dropdown menu.
+        remove_item: Removes a card_set from the selection thats supplied if
+            None just returns.
+        retrieve_set_list_info: Collects a card_set based on its name.
+        update_indi/update_pack_count: Update gui indicator values.
+        start_drafting: Contains the drafting method that will run the dialog
+            for drafting the deck.
+        save_deck_dialog: Saves the supplied deck depending on the drafters
+            input.
+        reset_selection: Method for resetting GUI to the default state.
+        randomise_packs: Runs the randomisation dialog/functions for create a
+            random set list.
+        filter_packs: Filters out packs based on the supplied filter criteria.
+        add_packs_to_selection: Adds provided pack set to selection.
+        copy_pack_selection/paste_pack_selection: Copies or pastes from/to the
+            drafter.
+        find_card_set: Looks for a set pack with the same selection.
     """
 
     DEFAULT_PACK_COUNT: Final[int] = 10
@@ -474,7 +497,8 @@ class MainWindow(QMainWindow):
 
         self.selected_packs = []
         self.sel_card_set_list.clear()
-        self.update_pack_count()
+        self.filter = self.DEFAULT_FILTER
+        self.select_pack.setCurrentIndex(-1)
 
     @pyqtSlot()
     def randomize_packs(self, quick: bool = False) -> None:
@@ -576,8 +600,7 @@ class MainWindow(QMainWindow):
             self.add_item(card_set)
 
     def find_card_set(self, label: str) -> CardSetModel:
-        """Find a cardset from all the available cardsets and
-        add return it.
+        """Find a cardset from all the available cardsets and add return it.
 
         Args:
             label (str): Name of the target cardset.
@@ -611,6 +634,11 @@ class PackFilterDialog(QDialog):
     Args:
         parent (parent): Widget to parent the dialog to and access additonal
             information.
+
+    Methods:
+        create_filter: Generates a filter based on the GUI values set by the
+            drafter
+        filter_cards: Filters out card sets based on the supplied filter.
 
     """
     def __init__(self,
@@ -716,6 +744,10 @@ class RandomPacks(PackFilterDialog):
     Args:
         parent (parent): Widget to parent the dialog to and access additonal
             information.
+
+    Methods:
+        randomise_packs: Randomises pack selection depending on the filter
+            settings that are set.
     """
     def __init__(self, parent: MainWindow, card_set: list[CardSetModel],
                  previous_filter: CardSetFilter) -> None:
