@@ -860,7 +860,7 @@ class CheckableListWidget(QListWidget):
         return check_items
 
 
-def main(argv: list):
+def main():
     """Main Function for starting the card set picking and deck drafting
     process.
 
@@ -872,7 +872,7 @@ def main(argv: list):
 
     logging.info("Starting %s!", app_name)
 
-    app = QApplication(argv)
+    app = QApplication(sys.argv)
     app.setStyle("fusion")
 
     QPixmapCache.setCacheLimit(100000)
@@ -932,4 +932,4 @@ if __name__ == "__main__":
     handler.addFilter(util.PackagePathFilter())
     logger.addHandler(handler)
 
-    main(sys.argv)
+    main()

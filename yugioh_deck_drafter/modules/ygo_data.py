@@ -248,8 +248,8 @@ class YugiObj:
         arche_types (tuple): List of archetypes for querying at a later point.
         CACHE (CachedSession): Cache for most of the requests except images
             which get managed more manually.
-        SIDE_DECK_TYPES (set): For filtering out extra deck monsters and
-            arche types.
+        TYPE_MATCH (dict[enum, set]): For filtering out different subsets of
+            cards.
         PROB (defaultdict): probablities for each type of card rarity.
         RARITY_COLORS (defaultdict): For picking and displaying rarity borders.
         CARD_CLASS_NAMES (list): Pre-formatted list of card classes.
@@ -312,17 +312,45 @@ class YugiObj:
         },
     )
 
-    SIDE_DECK_TYPES: Final[set[CardType]] = {
-        CardType.FUSION_MONSTER,
-        CardType.LINK_MONSTER,
-        CardType.PENDULUM_EFFECT_FUSION_MONSTER,
-        CardType.SYNCHRO_MONSTER,
-        CardType.SYNCHRO_PENDULUM_EFFECT_MONSTER,
-        CardType.SYNCHRO_TUNER_MONSTER,
-        CardType.XYZ_MONSTER,
-        CardType.XYZ_PENDULUM_EFFECT_MONSTER,
+    TYPE_MATCH = {
+        CardType.MONSTER_CARD: {
+            CardType.MONSTER_CARD,
+            CardType.EFFECT_MONSTER,
+            CardType.FLIP_EFFECT_MONSTER,
+            CardType.FLIP_TUNER_EFFECT_MONSTER,
+            CardType.GEMINI_MONSTER,
+            CardType.NORMAL_MONSTER,
+            CardType.NORMAL_TUNER_MONSTER,
+            CardType.PENDULUM_EFFECT_FUSION_MONSTER,
+            CardType.PENDULUM_EFFECT_RITUAL_MONSTER,
+            CardType.PENDULUM_FLIP_EFFECT_MONSTER,
+            CardType.PENDULUM_EFFECT_FUSION_MONSTER,
+            CardType.RITUAL_EFFECT_MONSTER,
+            CardType.RITUAL_MONSTER,
+            CardType.SPIRIT_MONSTER,
+            CardType.TOON_MONSTER,
+            CardType.TUNER_MONSTER,
+            CardType.UNION_EFFECT_MONSTER,
+            CardType.FUSION_MONSTER,
+            CardType.LINK_MONSTER,
+            CardType.SYNCHRO_MONSTER,
+            CardType.SYNCHRO_PENDULUM_EFFECT_MONSTER,
+            CardType.SYNCHRO_TUNER_MONSTER,
+            CardType.XYZ_MONSTER,
+            CardType.XYZ_PENDULUM_EFFECT_MONSTER,
+            CardType.EXTRA_MONSTER
+        },
+        DeckType.EXTRA: {
+            CardType.FUSION_MONSTER,
+            CardType.LINK_MONSTER,
+            CardType.PENDULUM_EFFECT_FUSION_MONSTER,
+            CardType.SYNCHRO_MONSTER,
+            CardType.SYNCHRO_PENDULUM_EFFECT_MONSTER,
+            CardType.SYNCHRO_TUNER_MONSTER,
+            CardType.XYZ_MONSTER,
+            CardType.XYZ_PENDULUM_EFFECT_MONSTER,
+        }
     }
-
     CARD_CLASS_NAMES = util.enum_to_list(CardSetClass)
 
     def __init__(
@@ -417,12 +445,18 @@ class YugiObj:
 
         return count_bool and date_bool and cls_bool
 
-    def complex_search(self, material: "ExtraMaterial") -> list[CardModel]:
+    def complex_search(
+        self,
+        material: "ExtraMaterial",
+        card_type: CardType | DeckType = CardType.MONSTER_CARD
+    ) -> list[CardModel]:
         """Search method for looking niche types of cards.
 
         Args:
             material (ExtraMaterial): Data model of information for searching
                 ygoprodeck.
+            card_type (CardType): Overall type of card to filter in.
+                Defaults to CardType.MONSTER_CARD
 
         Returns:
             list[CardModel]: List of cards fomatted into a datamodel.
@@ -438,7 +472,6 @@ class YugiObj:
             base_url = base_url.format(
                 comparison=material.comparison, level=material.level
             )
-
         for item in material.materials:
             if isinstance(item, DamageValues):
                 continue
@@ -467,10 +500,9 @@ class YugiObj:
             )
             return []
 
-        data = self.convert_raw_to_card_model(
-            None,
-            request.json()["data"],
-            material)
+        data = self.convert_raw_to_card_model(None, request.json()["data"])
+
+        self.filter_cards(material, data, card_type)
 
         return data
 
@@ -514,7 +546,6 @@ class YugiObj:
         self,
         card_set: CardSetModel | None,
         data: list[dict],
-        search_material: Optional["ExtraMaterial"] = None
     ) -> list[CardModel]:
         """Converts raw json response data into usable card models.
 
@@ -523,8 +554,6 @@ class YugiObj:
                 *Note might have to use derive the card set from available data
                 in the future.
             data (list[dict]): Raw json data for conversion
-            search_material (ExtraMaterial): For filtering out items that are
-                not needed.
 
         Returns:
             list[CardModel]: A list of card data converted into card models.
@@ -534,18 +563,35 @@ class YugiObj:
             card = self.create_card(card_data, card_set)
             cards.append(card)
 
-        if search_material is None:
-            return cards
+        return cards
+
+    def filter_cards(
+        self,
+        search_material: 'ExtraMaterial',
+        cards: list[CardModel],
+        subtype: CardType | DeckType
+    ) -> None:
+        """Filters out cards based on the supplied arguments.
+
+        Args:
+            search_material (ExtraMaterial): Material data structure for
+                specific targeted search material.
+            cards (list[CardModel]): The list of cards to filter out.
+            subtype (CardType): A general list of subtypes to keep.
+        """
+        stype_list = self.TYPE_MATCH.get(
+            subtype,
+            self.TYPE_MATCH[CardType.MONSTER_CARD])
 
         for item in search_material.materials:
             if isinstance(item, DamageValues) or item.polarity:
                 continue
             for card in list(cards):
-                if card[item.subtype] == item.name:
+
+                if (card[item.subtype] == item.name
+                   or card.card_type not in stype_list):
                     idx = cards.index(card)
                     cards.pop(idx)
-
-        return cards
 
     def get_card_art(self, card: CardModel) -> QPixmap | None:
         """Collects and stores card art for the given piece.
@@ -782,7 +828,7 @@ class YugiObj:
             bool: Checks if a card model variable in present in a class
                 constant.
         """
-        return card.card_type in self.SIDE_DECK_TYPES
+        return card.card_type in self.TYPE_MATCH[DeckType.EXTRA]
 
     def find_extra_materials(
         self,
@@ -963,7 +1009,7 @@ class ExtraSearch:
         self.parent = parent
         self.card_model = card_model
 
-        self.parse_types = parent.SIDE_DECK_TYPES.copy()
+        self.parse_types = parent.TYPE_MATCH[DeckType.EXTRA].copy()
 
     def parse_description(self) -> tuple[ExtraMaterial, ...]:
         """Base Method that runs the entire search."""
@@ -1151,10 +1197,6 @@ class ExtraSearch:
 
             sub_mat = self.create_sub_material([word], last_check=False)
             data.update(sub_mat)
-
-        if "monster" in text and not data:
-            monster = ExtraSubMaterial(CardType.NORMAL_MONSTER, "card_type")
-            data.add(monster)
 
         logging.debug("Brute Force Found %s", data.difference(re_data))
 
