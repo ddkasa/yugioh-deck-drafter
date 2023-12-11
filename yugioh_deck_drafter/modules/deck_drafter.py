@@ -1956,6 +1956,12 @@ class CardSearch(QDialog):
                 "Select more cards.",
                 "Select at least one card.")
             return
+        elif len(self.chosen_items) > self.extra_mats.count:
+            QMessageBox.warning(
+                self,
+                "Too Many Cards",
+                f"Maximum {len(self.chosen_items)} Allowed")
+            return
 
         return super().accept()
 
