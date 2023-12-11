@@ -641,10 +641,12 @@ class PackFilterDialog(QDialog):
         filter_cards: Filters out card sets based on the supplied filter.
 
     """
-    def __init__(self,
-                 parent: MainWindow,
-                 card_set: list[CardSetModel],
-                 previous_filter: CardSetFilter) -> None:
+    def __init__(
+        self,
+        parent: MainWindow,
+        card_set: list[CardSetModel],
+        previous_filter: CardSetFilter
+    ) -> None:
         super().__init__(parent=parent)
         self.setWindowTitle("Filter Sets")
         self.setModal(False)
@@ -749,8 +751,12 @@ class RandomPacks(PackFilterDialog):
         randomise_packs: Randomises pack selection depending on the filter
             settings that are set.
     """
-    def __init__(self, parent: MainWindow, card_set: list[CardSetModel],
-                 previous_filter: CardSetFilter) -> None:
+    def __init__(
+        self,
+        parent: MainWindow,
+        card_set: list[CardSetModel],
+        previous_filter: CardSetFilter
+    ) -> None:
         super().__init__(parent=parent, card_set=card_set,
                          previous_filter=previous_filter)
         self.setModal(False)
@@ -855,13 +861,12 @@ class CheckableListWidget(QListWidget):
 
 
 def main(argv: list):
-    """
-       Main Function for starting the card set picking and deck drafting
-       process.
+    """Main Function for starting the card set picking and deck drafting
+    process.
 
-       Args:
-            argv (list): For any arguments you want to pass from the command
-                line.
+    Args:
+        argv (list): For any arguments you want to pass from the command
+            line.
     """
     app_name = "YU-GI-OH Deck Creator"
 

@@ -118,6 +118,7 @@ class RaceType(enum.Enum):
 
 class CardType(enum.Enum):
     """Card Type Enumerations"""
+    MONSTER_CARD = enum.auto()
     EFFECT_MONSTER = enum.auto()
     FLIP_EFFECT_MONSTER = enum.auto()
     FLIP_TUNER_EFFECT_MONSTER = enum.auto()
@@ -591,7 +592,7 @@ class YugiObj:
                 taken from.
 
         Returns:
-            QPixmap | None: _description_
+            QPixmap | None: Converted pixmap if it exists, otherwise nothing.
         """
         image_store = Path(r"assets/images/set_art")
         image_store.mkdir(parents=True, exist_ok=True)
@@ -778,7 +779,7 @@ class YugiObj:
             card (CardModel): Card to be Checked
 
         Returns:
-            bool: checks if a card model variable in present in a class
+            bool: Checks if a card model variable in present in a class
                 constant.
         """
         return card.card_type in self.SIDE_DECK_TYPES
@@ -949,7 +950,6 @@ class ExtraSearch:
         parse_types: List of accepted side deck types.
         ENGINE: For simplifying plurals when checking for card type.
     """
-
     COMPARISONS: dict[str, str] = {
         "or more": "gte",
         "or higher": "gte",
@@ -1106,12 +1106,10 @@ class ExtraSearch:
         arche_patt = r'(?<=")([a-z0-9]{1}[a-z0-9- #\,\'\.]+[a-z0-9α]{1})(?:")'
         archetype_match = re.findall(arche_patt, text, re.I)
         checked_words.update(archetype_match)
-        data.update(
-            self.create_sub_material(
-                archetype_match,
-                last_check=True,
-                fuzzy=True
-                ))
+        data.update(self.create_sub_material(
+            archetype_match,
+            last_check=True,
+            fuzzy=True))
 
         monster_type_capture = r"(?<!non-)([a-z-]+)(?:(monster)(s?))"
         monster_match = re.findall(monster_type_capture, text, re.I)

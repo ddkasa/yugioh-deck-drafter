@@ -1083,6 +1083,7 @@ class CardButton(QPushButton):
         if menu.actions():
             menu.exec(pos)
             pass
+
         self.repaint()
 
     def drafting_menu(self, menu: QMenu) -> list[QAction]:
@@ -1870,10 +1871,11 @@ class CardSearch(QDialog):
 
     @pyqtSlot(int)
     def card_pick_setter(self, picked: int = 0) -> None:
-        """Slot for setting thbe
+        """Slot for setting the cards picked indicator.
 
         Args:
-            picked (int, optional): Total cards picked so far. Defaults to 0.
+            picked (int, optional): Total cards picked so far.
+                Defaults to 0.
         """
         txt = self.pick_text.format(count=self.extra_mats.count - picked)
         self.picks.setText(txt)
