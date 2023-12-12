@@ -27,6 +27,7 @@ ipykernel = "^6.26.0"
 pyinstaller = "^6.2.0"
 bandit = "^1.7.5"
 pylint = "^3.0.2"
+coverage = "^7.3.2"
 
 [build-system]
 requires = ["poetry-core"]
