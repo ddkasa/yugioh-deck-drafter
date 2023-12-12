@@ -21,6 +21,7 @@ import enum
 import logging
 import re
 import sys
+import shutil
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -275,7 +276,6 @@ class YugiObj:
         get_card_art: Collects card_art from Ygoprodeck or from local cache
             and slots them into a QPixmap.
         get_set_art: Collects the set art from Ygoprodeck or local if avaiable.
-        grab_arche_type_cards: Collects cards based on a singular type.
         grab_card: Collects a single card based on its name.
         create_card: Generates a card based on provided JSON data.
         to_ygodk_format: Converts a DeckModel to a exportable file format.
@@ -312,10 +312,10 @@ class YugiObj:
             "Super Rare": Qt.GlobalColor.lightGray,
             "Ultra Rare": Qt.GlobalColor.green,
             "Secret": Qt.GlobalColor.magenta,
-        },
+        }
     )
 
-    TYPE_MATCH = {
+    TYPE_MATCH: Final[dict[enum.Enum, set[enum.Enum]]] = {
         CardType.MONSTER_CARD: {
             CardType.MONSTER_CARD,
             CardType.EFFECT_MONSTER,
@@ -420,10 +420,11 @@ class YugiObj:
                 status.
         """
         self.total_requests += 1
-        if not request.from_cache:
+        if not hasattr(request, "from_cache") or not request.from_cache:
+            w, _ = shutil.get_terminal_size()
             self.out_going_requests += 1
-            logging.info("Made an outgoing requests. Total so far: %s",
-                         self.out_going_requests)
+            info = "Made an outgoing requests.Total so far: %s"
+            logging.info(info, self.out_going_requests)
 
         self.request_urls.append(request)
 
@@ -701,39 +702,6 @@ class YugiObj:
         image = util.get_or_insert(image_path, data=data)
 
         return image
-
-    def grab_arche_type_cards(
-        self,
-        card_arche: enum.Enum | str,
-        subtype: str = "archetype"
-    ) -> list[CardModel]:
-        """Filters out cards with the specfied subtype.
-
-        Queries YGOPRODECK for specified subtype(str) with archetype included.
-
-        Args:
-            card_arche (str): Actual name of the type of the subtype.
-            subtype (str, optional): Subtype of the Card.
-                                     Defaults to "archetype".
-
-        Returns:
-            list | None: Either returns None if the query is bad or converted
-                json data retrieved.
-        """
-        if isinstance(card_arche, enum.Enum):
-            card_arche = util.clean_enum_name(card_arche)  # type: ignore
-
-        url = "https://db.ygoprodeck.com/api/v7/cardinfo.php?{0}={1}"
-        request = self.CACHE.get(url.format(subtype, card_arche), timeout=10)
-
-        self.log_request(request)
-
-        if request.status_code != 200:
-            logging.warning("Failed to fetch card %s. Skipping!", subtype)
-            logging.warning("Status Code: %s", request.status_code)
-            return []
-
-        return self.convert_raw_to_card_model(None, request.json()["data"])
 
     def grab_card(self, name: str, fuzzy: bool = False) -> dict | None:
         """Collects card info for the given name(str).

@@ -875,12 +875,11 @@ def main():
     FMT = '%(relativepath)s:%(lineno)s | %(levelname)s: %(message)s'
 
     logger = logging.getLogger()
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(logging.INFO)
 
     handler = logging.StreamHandler()
     formatter = logging.Formatter(FMT)
 
-    handler.setLevel(logging.DEBUG)
     handler.setFormatter(formatter)
 
     handler.addFilter(util.PackagePathFilter())

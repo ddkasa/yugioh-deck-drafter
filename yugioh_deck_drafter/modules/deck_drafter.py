@@ -652,6 +652,8 @@ class DraftingDialog(QDialog):
         Returns:
             str: Breakdown seperated with newlines.
         """
+
+        logging.info("called")
         decks = {
             DeckType.MAIN: self.deck.main,
             DeckType.EXTRA: self.deck.extra,
@@ -824,7 +826,7 @@ class DraftingDialog(QDialog):
                 if mdl.isChecked():  # Exculdes discarded cards.
                     continue
                 mdl = mdl.card_model
-            if card_type in mdl.card_type.name:
+            if card_type.lower() in mdl.card_type.name.lower():
                 cnt += 1
 
         return cnt
