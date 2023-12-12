@@ -551,7 +551,7 @@ class DraftingDialog(QDialog):
                 continue
             self.update_item_selection(item)
 
-    def update_item_selection(self, item: CardButton) -> None:
+    def update_item_selection(self, item: 'CardButton') -> None:
         """Updates the given item selection status.
 
         Args:
@@ -576,8 +576,8 @@ class DraftingDialog(QDialog):
             elif not item_in and not fus_mon:
                 item.setChecked(False)
 
-            item.setDisabled(self.check_card_count(item.card_model) == 3
-                             and not item.isChecked())
+            item.setDisabled((self.check_card_count(item.card_model) == 3
+                             and not item.isChecked()) or item._assocc_added)
 
             self.update_counter_label()
 
@@ -768,6 +768,7 @@ class DraftingDialog(QDialog):
                 with QSignalBlocker(item):
                     item.setChecked(False)
                     item.setDisabled(False)
+                    item._assocc_added = False
                 item = item.card_model
 
         sel_left = self.drafting_model.selection_per_pack
@@ -897,6 +898,8 @@ class CardButton(QPushButton):
 
         self.setAccessibleName(data.name)
         self.setAccessibleDescription(data.description)
+
+        self._assocc_added = False
 
         self.construct_card_tooltip(data)
 
@@ -1287,9 +1290,7 @@ class CardButton(QPushButton):
                 items.append(poly)
 
         self.get_card(items)
-
-        self.setChecked(True)
-        self.setDisabled(True)
+        self.toggle_assocc()
 
     def add_assocc(self, card_name: str) -> None:
         """Adds a single assocciated card to the selected cards.
@@ -1298,9 +1299,18 @@ class CardButton(QPushButton):
             card_name (str): Which card to add to the deck as it will get
                 searched by subsequent functions.
         """
-        self.setChecked(True)
-        self.setDisabled(True)
         self.get_card(card_name)
+        self.toggle_assocc()
+
+    def toggle_assocc(self, toggl: bool = True) -> None:
+        """Assocciation toggle for checking if the card should stay disabled.
+
+        Args:
+            toggl (bool): Turn the item on or off
+        """
+        self._assocc_added = toggl
+        self.setChecked(toggl)
+        self.setDisabled(toggl)
 
     def get_card(self, card_name: str | list | set) -> None:
         """Collects a card with the help of a YGO data model object.
@@ -1323,8 +1333,7 @@ class CardButton(QPushButton):
 
         if data is None:
             logging.error("Card does not exist.")
-            self.setChecked(False)
-            self.setDisabled(False)
+            self.toggle_assocc(False)
             return
 
         logging.info("Adding %s to selection.", card_name)
