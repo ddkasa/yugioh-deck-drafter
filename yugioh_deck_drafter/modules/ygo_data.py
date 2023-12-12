@@ -19,25 +19,24 @@ Usage:
 """
 import enum
 import logging
+import re
 import sys
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
 from random import choice, randint
-from typing import Any, Final, NamedTuple, Optional, Generator, Iterable
+from typing import (Any, Final, Generator, Iterable, NamedTuple, Optional)
 from urllib.parse import quote
-import re
 
+import inflect
+import pydantic_core._pydantic_core
 import requests
 import requests_cache
-
-import pydantic_core._pydantic_core
-import inflect
-
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import QMessageBox
+
 
 from yugioh_deck_drafter import util
 
@@ -255,6 +254,10 @@ class YugiObj:
         CARD_CLASS_NAMES (list): Pre-formatted list of card classes.
         collection_type (CollectionType): Type of collection the cards belong.
             to. Defaults to None
+        total_requests: For monitoring total requests made.
+        out_going_requests: For monitoring requests that actully event to a
+            remote source.
+        request_urls: All request urls that were actually used.
 
     Methods:
         get_card_set: Gets a list of all card_sets for selection and filtering.
@@ -361,6 +364,11 @@ class YugiObj:
         collection_type: Optional[CollectionType] = None
     ) -> None:
         self._collection_type = collection_type
+
+        self.total_requests = 0
+        self.out_going_requests = 0
+        self.request_urls = []
+
         self.card_sets = self.get_card_set()
         self.arche_types = self.get_arche_type_list()
 
@@ -371,6 +379,7 @@ class YugiObj:
         """
         url = r"https://db.ygoprodeck.com/api/v7/cardsets.php"
         request = self.CACHE.get(url, timeout=20)
+        self.log_request(request)
         if request.status_code != 200:
             logging.critical("Failed to fetch Card Sets. Exiting!")
             logging.critical("Status Code: %s", request.status_code)
@@ -403,6 +412,21 @@ class YugiObj:
 
         return new_set
 
+    def log_request(self, request: requests_cache.AnyResponse) -> None:
+        """Logs request count and their urls.
+
+        Args:
+            request (AnyResponse): Requests object for checking url and cache
+                status.
+        """
+        self.total_requests += 1
+        if not request.from_cache:
+            self.out_going_requests += 1
+            logging.info("Made an outgoing requests. Total so far: %s",
+                         self.out_going_requests)
+
+        self.request_urls.append(request)
+
     def get_arche_type_list(self) -> tuple[str, ...]:
         """Grabs an archetype list from ygoprodeck and cleans the data
         structure.
@@ -412,6 +436,9 @@ class YugiObj:
         """
         url = "https://db.ygoprodeck.com/api/v7/archetypes.php"
         request = self.CACHE.get(url, timeout=20)
+
+        self.log_request(request)
+
         if request.status_code != 200:
             logging.critical("Failed to Archetype List. Exiting!")
             logging.critical("Status Code: %s", request.status_code)
@@ -492,6 +519,8 @@ class YugiObj:
         logging.debug("Requesting complex query with url %s", base_url)
         request = self.CACHE.get(base_url, timeout=20)
 
+        self.log_request(request)
+
         if request.status_code != 200:
             logging.critical("Failed to Archetype List. Exiting!")
             logging.critical("Status Code: %s", request.status_code)
@@ -530,6 +559,8 @@ class YugiObj:
         """Returns the cards contained within the given card set."""
         url = "https://db.ygoprodeck.com/api/v7/cardinfo.php?cardset={0}"
         request = self.CACHE.get(url.format(card_set.set_name), timeout=20)
+
+        self.log_request(request)
 
         data = request.json()
         if request.status_code != 200 or not isinstance(data, dict):
@@ -619,6 +650,8 @@ class YugiObj:
 
         url = f"https://images.ygoprodeck.com/images/cards/{card_art_id}.jpg"
         request = requests.get(url, timeout=10)
+        self.log_request(request)
+
         if request.status_code != 200:
             # Add a default image here in the future.
             logging.error("Failed to fetch card image. Using Default")
@@ -653,6 +686,8 @@ class YugiObj:
 
         url = "https://images.ygoprodeck.com/images/sets/{0}.jpg"
         request = requests.get(url.format(set_code), timeout=10)
+        self.log_request(request)
+
         if request.status_code != 200:
             # Add a default image here in the future.
             logging.error("Failed to fetch card image. Using Default")
@@ -691,6 +726,8 @@ class YugiObj:
         url = "https://db.ygoprodeck.com/api/v7/cardinfo.php?{0}={1}"
         request = self.CACHE.get(url.format(subtype, card_arche), timeout=10)
 
+        self.log_request(request)
+
         if request.status_code != 200:
             logging.warning("Failed to fetch card %s. Skipping!", subtype)
             logging.warning("Status Code: %s", request.status_code)
@@ -716,6 +753,8 @@ class YugiObj:
         name = quote(name.lower(), safe="/:?&")
         url = f"https://db.ygoprodeck.com/api/v7/cardinfo.php?{n}={name}"
         request = self.CACHE.get(url, timeout=10)
+
+        self.log_request(request)
 
         if request.status_code != 200:
             logging.warning("Failed to grab %s. Skipping!", name)
@@ -935,6 +974,7 @@ class YugiObj:
 
 
 class ExtraSubMaterial(NamedTuple):
+
     """Type of extra deck summoning material."""
     name: str | enum.Enum
     subtype: str
