@@ -870,6 +870,22 @@ def main():
     """
     app_name = "YU-GI-OH Deck Creator"
 
+    sys.excepthook = excepthook
+
+    FMT = '%(relativepath)s:%(lineno)s | %(levelname)s: %(message)s'
+
+    logger = logging.getLogger()
+    logger.setLevel(logging.DEBUG)
+
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter(FMT)
+
+    handler.setLevel(logging.DEBUG)
+    handler.setFormatter(formatter)
+
+    handler.addFilter(util.PackagePathFilter())
+    logger.addHandler(handler)
+
     logging.info("Starting %s!", app_name)
 
     app = QApplication(sys.argv)
@@ -916,20 +932,4 @@ def excepthook(type_, value, traceback_):
 
 
 if __name__ == "__main__":
-    sys.excepthook = excepthook
-
-    FMT = '%(relativepath)s:%(lineno)s | %(levelname)s: %(message)s'
-
-    logger = logging.getLogger()
-    logger.setLevel(logging.DEBUG)
-
-    handler = logging.StreamHandler()
-    formatter = logging.Formatter(FMT)
-
-    handler.setLevel(logging.DEBUG)
-    handler.setFormatter(formatter)
-
-    handler.addFilter(util.PackagePathFilter())
-    logger.addHandler(handler)
-
     main()

@@ -1115,7 +1115,11 @@ class CardButton(QPushButton):
 
         return actions
 
-    def add_all_assocc_action(self, actions: list[QAction], menu: QMenu) -> None:
+    def add_all_assocc_action(
+        self,
+        actions: list[QAction],
+        menu: QMenu
+    ) -> None:
         """Action for adding all named cards to the selection.
 
         Args:
@@ -1161,6 +1165,7 @@ class CardButton(QPushButton):
         """
         if isinstance(name, enum.Enum):
             name = name.name.replace("_", " ").title()
+
         action = QAction("Add " + name.title())
         action.triggered.connect(lambda: self.add_assocc(name))
         return action
@@ -1274,10 +1279,8 @@ class CardButton(QPushButton):
                 items.append(sub_item.name)
 
         if self.parent().ygo_data.check_extra_monster(self.card_model):
-            if self.card_model.card_type in {
-                CardType.FUSION_MONSTER,
-                CardType.PENDULUM_EFFECT_FUSION_MONSTER
-            }:
+            if (self.card_model.card_type
+               in self.parent().ygo_data.TYPE_MATCH[CardType.FUSION_MONSTER]):
                 poly = "Polymerization"
                 items.append(poly)
 

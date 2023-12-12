@@ -288,7 +288,7 @@ class YugiObj:
     CACHE = requests_cache.CachedSession(
         str(Path("cache/ygoprodeck.sqlite")),
         backend="sqlite",
-        allowable_codes=[200]
+        allowable_codes=[200, 400]
     )
 
     PROB: Final[defaultdict[str, float]] = defaultdict(
@@ -324,7 +324,6 @@ class YugiObj:
             CardType.PENDULUM_EFFECT_FUSION_MONSTER,
             CardType.PENDULUM_EFFECT_RITUAL_MONSTER,
             CardType.PENDULUM_FLIP_EFFECT_MONSTER,
-            CardType.PENDULUM_EFFECT_FUSION_MONSTER,
             CardType.RITUAL_EFFECT_MONSTER,
             CardType.RITUAL_MONSTER,
             CardType.SPIRIT_MONSTER,
@@ -349,6 +348,10 @@ class YugiObj:
             CardType.SYNCHRO_TUNER_MONSTER,
             CardType.XYZ_MONSTER,
             CardType.XYZ_PENDULUM_EFFECT_MONSTER,
+        },
+        CardType.FUSION_MONSTER: {
+            CardType.FUSION_MONSTER,
+            CardType.PENDULUM_EFFECT_FUSION_MONSTER
         }
     }
     CARD_CLASS_NAMES = util.enum_to_list(CardSetClass)
