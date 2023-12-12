@@ -1308,8 +1308,8 @@ class CardButton(QPushButton):
                 poly = "Polymerization"
                 items.append(poly)
 
-        self.get_card(items)
-        self.toggle_assocc()
+        if self.get_card(items):
+            self.toggle_assocc()
 
     def add_assocc(self, card_name: str) -> None:
         """Adds a single assocciated card to the selected cards.
@@ -1318,8 +1318,8 @@ class CardButton(QPushButton):
             card_name (str): Which card to add to the deck as it will get
                 searched by subsequent functions.
         """
-        self.get_card(card_name)
-        self.toggle_assocc()
+        if self.get_card(card_name):
+            self.toggle_assocc()
 
     def toggle_assocc(self, toggl: bool = True) -> None:
         """Assocciation toggle for checking if the card should stay disabled.
@@ -1331,7 +1331,7 @@ class CardButton(QPushButton):
         self.setChecked(toggl)
         self.setDisabled(toggl)
 
-    def get_card(self, card_name: str | list | set) -> None:
+    def get_card(self, card_name: str | list | set) -> bool:
         """Collects a card with the help of a YGO data model object.
 
         Args:
@@ -1345,15 +1345,16 @@ class CardButton(QPushButton):
 
         if isinstance(card_name, (list, set)):
             for item in card_name:
-                self.get_card(item)
-            return
+                if not self.get_card(item):
+                    return False
+            return True
 
         data = self.parent().ygo_data.grab_card(card_name)
 
         if data is None:
             logging.error("Card does not exist.")
             self.toggle_assocc(False)
-            return
+            return False
 
         logging.info("Adding %s to selection.", card_name)
 
@@ -1361,7 +1362,7 @@ class CardButton(QPushButton):
             card_set = self.card_model.card_set
             c_mdl = self.parent().ygo_data.create_card(data[0], card_set)
         except KeyError:
-            return
+            return False
 
         self.add_card(c_mdl)
 
