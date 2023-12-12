@@ -112,8 +112,11 @@ class DraftingDialog(QDialog):
     SET_ART_SIZE: Final[QSize] = QSize(400, 708)
     CARDS_PER_PACK: Final[int] = 9
 
-    def __init__(self, parent: MainWindow, deck_name: str,
-                 flags=Qt.WindowType.Dialog):
+    def __init__(
+        self,
+        parent: MainWindow, deck_name: str,
+        flags=Qt.WindowType.Dialog
+    ) -> None:
         super().__init__(parent, flags)
         self.setModal(not parent.debug)
 
@@ -628,8 +631,8 @@ class DraftingDialog(QDialog):
     def update_counter_label(self):
         """Updates the card count indicator labels in the GUI."""
 
-        remaining = f"Remaining Picks: {self.drafting_model.selections_left}"
-        self.card_picks_left.setText(remaining)
+        self.selections_left_label()
+
         picked = len(self.deck.main) + len(self.deck.side)
 
         self.cards_picked.setText(f"Card Total: {picked}")
@@ -639,6 +642,22 @@ class DraftingDialog(QDialog):
         tip += self.generate_breakdown_ttip(DeckType.SIDE)
 
         self.cards_picked.setToolTip(tip.strip())
+
+    def selections_left_label(self):
+        """Selections left indicator updater and selection list tooltip.
+        """
+        remaining = f"Remaining Picks: {self.drafting_model.selections_left}"
+        self.card_picks_left.setText(remaining)
+
+        tooltip = "Selected Cards\n"
+        for i, item in enumerate(self.drafting_model.selections):
+            if isinstance(item, CardButton):
+                item = item.card_model
+            tooltip += f"{i + 1}. {item.name}"
+            if i + 1 != len(self.drafting_model.selections):
+                tooltip += "\n"
+
+        self.card_picks_left.setToolTip(tooltip)
 
     def generate_breakdown_ttip(
         self,
@@ -653,7 +672,7 @@ class DraftingDialog(QDialog):
             str: Breakdown seperated with newlines.
         """
 
-        logging.info("called")
+        logging.debug("Generating Deck Breakdown")
         decks = {
             DeckType.MAIN: self.deck.main,
             DeckType.EXTRA: self.deck.extra,
