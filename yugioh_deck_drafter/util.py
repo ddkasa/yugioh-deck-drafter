@@ -26,7 +26,7 @@ Classes:
 """
 
 import logging
-from typing import Optional
+from typing import Optional, Any
 from pathlib import Path
 from json import JSONEncoder
 from datetime import date
@@ -43,8 +43,9 @@ from PyQt6.QtGui import QPixmap, QPixmapCache, QAction
 from PyQt6.QtWidgets import QLayout, QLayoutItem, QWidget, QMenu
 
 
-def get_or_insert(pixmap_path: str | Path, format: str = ".jpg",
-                  data: Optional[bytes] = None) -> QPixmap:
+def get_or_insert(
+    pixmap_path: str | Path, format: str = ".jpg", data: Optional[bytes] = None
+) -> QPixmap:
     """Manages loading and cache operations for QPixmaps.
 
     Args:
@@ -97,8 +98,11 @@ def new_line_text(text: str, max_line_length: int) -> str:
             if last_space == -1:
                 name_processed += "-\n"
             else:
-                name_processed = (name_processed[:last_space] + "\n"
-                                  + name_processed[last_space+1:])
+                name_processed = (
+                    name_processed[:last_space]
+                    + "\n"
+                    + name_processed[last_space + 1 :]
+                )
         name_processed += t
     return name_processed
 
@@ -171,25 +175,22 @@ def sanitize_file_path(name: str, max_len=255) -> Path:
         Path: A file path ready to be used for saving.
     """
     name = name.replace("[", "-").replace("]", "-")
-    sanitized_name = re.sub(r'[\\/:"*?<>|]', '', name)
-    sanitized_name = unicodedata.normalize('NFC', sanitized_name)
+    sanitized_name = re.sub(r'[\\/:"*?<>|]', "", name)
+    sanitized_name = unicodedata.normalize("NFC", sanitized_name)
     sanitized_name = sanitized_name[:max_len]
     return Path(sanitized_name)
 
 
 class DateSerializer(JSONEncoder):
     """Helper subclass for easier debugging of received API structures."""
-    def default(self, obj):
+
+    def default(self, obj: Any):
         if isinstance(obj, date):
             return obj.isoformat()
         return super().default(obj)
 
 
-def action_to_list_men(
-    action: QAction,
-    container: list,
-    menu: QMenu
-) -> None:
+def action_to_list_men(action: QAction, container: list, menu: QMenu) -> None:
     """Helper function to add a action to a menu + array in order to
     not lose it to scope.
 
@@ -197,7 +198,7 @@ def action_to_list_men(
         action (QAction): Precreated action to be added.
         container (list): Container to store the action in.
         menu (QMenu): Menu to add the action to.
-        """
+    """
     menu.addAction(action)
     container.append(action)
 
@@ -231,7 +232,9 @@ def enum_to_list(e_class: enum.EnumMeta) -> list[str]:
 
 
 class PackagePathFilter(logging.Filter):
-    def filter(self, record):
+    """Utility class for creating full debugging paths."""
+
+    def filter(self, record) -> bool:
         pathname = record.pathname
         record.relativepath = None
         abs_sys_paths = map(os.path.abspath, sys.path)

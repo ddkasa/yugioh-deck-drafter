@@ -269,13 +269,7 @@ class DraftingDialog(QDialog):
         the drafting session in general.
 
         1. Will check if there have been enough enough cards selected.
-        1a. Returns back to the selection with a warning popup.
-        2b. Otherwise it will add the selected cards to the deck.
-        3. Check if its a discard stage and trigger the dialog for that if the
-           pack count is divisable by 10.
-        4. Checks everytime if there have been 4 discard stages and ask the
-           user if they want to preview the deck and continue on to save the
-           deck.
+        1a. Returns back to the selection with a warnisave
         5. Removes the current cards from the layout.
         6. Selects the next pack and decrements the count.
         7. Generates the probabilities for the base cards in the set.
@@ -352,6 +346,8 @@ class DraftingDialog(QDialog):
 
         if set_data.count == 0:
             self.drafting_model.opened_set_packs += 1
+
+        return None
 
     def proceed_set_check(self) -> bool:
         """Checks if the drafter can proceed to the next stage of drafting.

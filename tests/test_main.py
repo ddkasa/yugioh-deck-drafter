@@ -15,8 +15,12 @@ def main_window_fill():
     main_window = main.MainWindow(debug=True)
     main_window.show()
 
-    TEST_DATA = ("Legend of Blue Eyes White Dragon", "Pharaoh's Servant",
-                 "Spell Ruler", "Magic Ruler")
+    TEST_DATA = (
+        "Legend of Blue Eyes White Dragon",
+        "Pharaoh's Servant",
+        "Spell Ruler",
+        "Magic Ruler",
+    )
 
     for item in TEST_DATA:
         main_window.select_pack.setCurrentText(item)
@@ -104,7 +108,6 @@ def test_card_picks(main_window_fill: main.MainWindow, qtbot: QtBot):
 
         move_cnt = 0
         for item in main_deck_items:
-
             if item.isChecked():
                 continue
 

@@ -21,13 +21,12 @@ import enum
 import logging
 import re
 import sys
-import shutil
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
 from random import choice, randint
-from typing import (Any, Final, Generator, Iterable, NamedTuple, Optional)
+from typing import Any, Final, Generator, Iterable, NamedTuple, Optional
 from urllib.parse import quote
 
 import inflect
@@ -45,6 +44,7 @@ from yugioh_deck_drafter import util
 class CardSetClass(enum.Enum):
     """Enumeration for filtering and selecting specfic types of card
     sets. Matched against the names of sets to allow for categorising."""
+
     BOOSTER_PACK = enum.auto()
     PROMOTIONAL = enum.auto()
     STARTER_DECK = enum.auto()
@@ -118,6 +118,7 @@ class RaceType(enum.Enum):
 
 class CardType(enum.Enum):
     """Card Type Enumerations"""
+
     MONSTER_CARD = enum.auto()
     EFFECT_MONSTER = enum.auto()
     FLIP_EFFECT_MONSTER = enum.auto()
@@ -153,6 +154,7 @@ class CardType(enum.Enum):
 
 class AttributeType(enum.Enum):
     """Monster element type enumeration."""
+
     DARK = enum.auto()
     EARTH = enum.auto()
     FIRE = enum.auto()
@@ -164,6 +166,7 @@ class AttributeType(enum.Enum):
 
 class CollectionType(enum.Enum):
     """Enumerations for the type of collection."""
+
     OCG = enum.auto()
     TCG = enum.auto()
 
@@ -176,6 +179,7 @@ class CardSetModel:
     carrying the list of weights for random choices.
 
     """
+
     set_name: str = field()
     set_code: str = field()
     set_date: date = field()
@@ -231,9 +235,7 @@ class CardSetFilter:
 
     card_count: int = field(default=3)
     set_date: date = field(default_factory=date.today)
-    set_classes: set[CardSetClass] = field(
-        default_factory=lambda: {s for s in CardSetClass}
-    )
+    set_classes: set[CardSetClass] = field(default_factory=lambda: set(CardSetClass))
 
 
 class YugiObj:
@@ -291,7 +293,7 @@ class YugiObj:
     CACHE = requests_cache.CachedSession(
         str(Path("cache/ygoprodeck.sqlite")),
         backend="sqlite",
-        allowable_codes=[200, 400]
+        allowable_codes=[200, 400],
     )
 
     PROB: Final[defaultdict[str, float]] = defaultdict(
@@ -312,7 +314,7 @@ class YugiObj:
             "Super Rare": Qt.GlobalColor.lightGray,
             "Ultra Rare": Qt.GlobalColor.green,
             "Secret": Qt.GlobalColor.magenta,
-        }
+        },
     )
 
     TYPE_MATCH: Final[dict[enum.Enum, set[enum.Enum]]] = {
@@ -340,7 +342,7 @@ class YugiObj:
             CardType.SYNCHRO_TUNER_MONSTER,
             CardType.XYZ_MONSTER,
             CardType.XYZ_PENDULUM_EFFECT_MONSTER,
-            CardType.EXTRA_MONSTER
+            CardType.EXTRA_MONSTER,
         },
         DeckType.EXTRA: {
             CardType.FUSION_MONSTER,
@@ -354,21 +356,17 @@ class YugiObj:
         },
         CardType.FUSION_MONSTER: {
             CardType.FUSION_MONSTER,
-            CardType.PENDULUM_EFFECT_FUSION_MONSTER
-        }
+            CardType.PENDULUM_EFFECT_FUSION_MONSTER,
+        },
     }
     CARD_CLASS_NAMES = util.enum_to_list(CardSetClass)
 
-    def __init__(
-        self,
-        collection_type: Optional[CollectionType] = None
-    ) -> None:
+    def __init__(self, collection_type: Optional[CollectionType] = None) -> None:
         self._collection_type = collection_type
 
         self.total_requests = 0
         self.out_going_requests = 0
-        self.request_urls = []
-
+        self.request_urls: list[str] = []
         self.card_sets = self.get_card_set()
         self.arche_types = self.get_arche_type_list()
 
@@ -412,7 +410,7 @@ class YugiObj:
 
         return new_set
 
-    def log_request(self, request: requests_cache.AnyResponse) -> None:
+    def log_request(self, sent_request: requests_cache.AnyResponse) -> None:
         """Logs request count and their urls.
 
         Args:
@@ -420,13 +418,12 @@ class YugiObj:
                 status.
         """
         self.total_requests += 1
-        if not hasattr(request, "from_cache") or not request.from_cache:
-            w, _ = shutil.get_terminal_size()
+        if not hasattr(sent_request, "from_cache") or not sent_request.from_cache:
             self.out_going_requests += 1
             info = "Made an outgoing requests.Total so far: %s"
             logging.info(info, self.out_going_requests)
 
-        self.request_urls.append(request)
+        self.request_urls.append(sent_request.url)
 
     def get_arche_type_list(self) -> tuple[str, ...]:
         """Grabs an archetype list from ygoprodeck and cleans the data
@@ -479,7 +476,7 @@ class YugiObj:
     def complex_search(
         self,
         material: "ExtraMaterial",
-        card_type: CardType | DeckType = CardType.MONSTER_CARD
+        card_type: CardType | DeckType = CardType.MONSTER_CARD,
     ) -> list[CardModel]:
         """Search method for looking niche types of cards.
 
@@ -492,9 +489,7 @@ class YugiObj:
         Returns:
             list[CardModel]: List of cards fomatted into a datamodel.
         """
-        PROP_MATCH = {
-            "card_type": "type"
-        }
+        PROP_MATCH = {"card_type": "type"}
 
         base_url = "https://db.ygoprodeck.com/api/v7/cardinfo.php?"
 
@@ -512,7 +507,7 @@ class YugiObj:
                 base_url += "&"
             name = item.name
             if isinstance(name, enum.Enum):
-                name = re.sub(r'([\-\_])', " ", name.name.lower())
+                name = re.sub(r"([\-\_])", " ", name.name.lower())
 
             sub_type = PROP_MATCH.get(item.subtype, item.subtype)
             base_url += f"{sub_type}={name}"
@@ -528,7 +523,7 @@ class YugiObj:
             QMessageBox.critical(
                 None,
                 "Critical",
-                "Failed to fetch remote Complex Query. "\
+                "Failed to fetch remote Complex Query. "
                 f"Retry Later. \nURL: {base_url}",
             )
             return []
@@ -602,9 +597,9 @@ class YugiObj:
 
     def filter_cards(
         self,
-        search_material: 'ExtraMaterial',
+        search_material: "ExtraMaterial",
         cards: list[CardModel],
-        subtype: CardType | DeckType
+        subtype: CardType | DeckType,
     ) -> None:
         """Filters out cards based on the supplied arguments.
 
@@ -615,16 +610,14 @@ class YugiObj:
             subtype (CardType): A general list of subtypes to keep.
         """
         stype_list = self.TYPE_MATCH.get(
-            subtype,
-            self.TYPE_MATCH[CardType.MONSTER_CARD])
+            subtype, self.TYPE_MATCH[CardType.MONSTER_CARD]
+        )
 
         for item in search_material.materials:
             if isinstance(item, DamageValues) or item.polarity:
                 continue
             for card in list(cards):
-
-                if (card[item.subtype] == item.name
-                   or card.card_type not in stype_list):
+                if card[item.subtype] == item.name or card.card_type not in stype_list:
                     idx = cards.index(card)
                     cards.pop(idx)
 
@@ -693,7 +686,7 @@ class YugiObj:
             # Add a default image here in the future.
             logging.error("Failed to fetch card image. Using Default")
             logging.error("Status Code: %s", request.status_code)
-            return
+            return None
 
         data = request.content
         with image_path.open("wb") as image_file:
@@ -727,14 +720,12 @@ class YugiObj:
         if request.status_code != 200:
             logging.warning("Failed to grab %s. Skipping!", name)
             logging.warning("Status Code: %s", request.status_code)
-            return
+            return None
 
         return request.json()["data"]
 
     def create_card(
-        self,
-        data: dict,
-        set_data: Optional[CardSetModel] = None
+        self, data: dict, set_data: Optional[CardSetModel] = None
     ) -> CardModel:
         """Create a card datamodel from given JSON Data.
 
@@ -840,10 +831,7 @@ class YugiObj:
         """
         return card.card_type in self.TYPE_MATCH[DeckType.EXTRA]
 
-    def find_extra_materials(
-        self,
-        card: CardModel
-    ) -> tuple["ExtraMaterial", ...]:
+    def find_extra_materials(self, card: CardModel) -> tuple["ExtraMaterial", ...]:
         """Parses the given cards description in order to find the extra
         summoning materials.
 
@@ -859,10 +847,7 @@ class YugiObj:
         return material
 
     def generate_weights(
-        self,
-        card_set_name: str,
-        data: list[CardModel],
-        extra: bool = False
+        self, card_set_name: str, data: list[CardModel], extra: bool = False
     ) -> tuple[int, ...]:
         """Generate a list of integers depeding on the weight denoting the
         index of an item inside the set cards.
@@ -898,10 +883,7 @@ class YugiObj:
         return tuple(probabilities)
 
     def select_random_packs(
-        self,
-        pack_set: list[CardSetModel],
-        count_range: range,
-        max_packs: int = 40
+        self, pack_set: list[CardSetModel], count_range: range, max_packs: int = 40
     ) -> list[CardSetModel]:
         """Selects random packs based on the supplied criteria.
         Args:
@@ -944,6 +926,7 @@ class YugiObj:
 class ExtraSubMaterial(NamedTuple):
 
     """Type of extra deck summoning material."""
+
     name: str | enum.Enum
     subtype: str
     polarity: bool = True
@@ -951,12 +934,13 @@ class ExtraSubMaterial(NamedTuple):
     def __hash__(self) -> int:
         return hash(str(self.name) + self.subtype)
 
-    def __eq__(self, other: 'ExtraSubMaterial'):
+    def __eq__(self, other: "ExtraSubMaterial"):
         return hash(self) == hash(other)
 
 
 class DamageValues(NamedTuple):
     """Data structure for holding required def & attack values."""
+
     subtype: str = "damage"
     comparison: str = ""
     attack: int = -1
@@ -966,11 +950,11 @@ class DamageValues(NamedTuple):
 @dataclass()
 class ExtraMaterial:
     """Extra Material Info for Special Summons Types."""
+
     level: int = field(default=-1)
     comparison: str = field(default="")
     count: int = field(default=1)
-    materials: list[ExtraSubMaterial | DamageValues]\
-        = field(default_factory=list)
+    materials: list[ExtraSubMaterial | DamageValues] = field(default_factory=list)
 
     def __getitem__(self, item):
         return getattr(self, item)
@@ -1007,6 +991,7 @@ class ExtraSearch:
         parse_types: List of accepted side deck types.
         ENGINE: For simplifying plurals when checking for card type.
     """
+
     COMPARISONS: dict[str, str] = {
         "or more": "gte",
         "or higher": "gte",
@@ -1087,11 +1072,11 @@ class ExtraSearch:
         start = 0
         patt = re.compile(r"((,)?(including ))|( \+ )|(?<=\")( , )(?:\")")
         for m in re.finditer(patt, desc):
-            chunk = desc[start:m.span()[0]]
+            chunk = desc[start : m.span()[0]]
             yield chunk
             start = m.span()[1]
 
-        yield desc[start:len(desc)]
+        yield desc[start : len(desc)]
 
     def find_extra_material(self, desc: str) -> ExtraMaterial:
         """Create the final extra material data structure which the search
@@ -1110,11 +1095,11 @@ class ExtraSearch:
         extra_mat.comparison = self.find_comparison(desc)
 
         if "special summon" in desc.lower():
-            if '\"Mask Change\"' in desc:
+            if '"Mask Change"' in desc:
                 monster_cap = [ExtraSubMaterial("mask change", "name")]
-            elif '\"NEX\"' in desc:
+            elif '"NEX"' in desc:
                 monster_cap = [ExtraSubMaterial("nex", "name")]
-            elif '\"The Claw of Hermos\"' in desc:
+            elif '"The Claw of Hermos"' in desc:
                 monster_cap = [ExtraSubMaterial("the claw of hermos", "name")]
             extra_mat.count = 1
         elif self.card_model.name == "Phantasmal Lord Ultimitl Bishbaalkin":
@@ -1153,7 +1138,7 @@ class ExtraSearch:
         Returns:
             list[str]: A set with all the types with the none elements removed.
         """
-        logging.debug("Look for monsters in \"%s\"", text)
+        logging.debug('Look for monsters in "%s"', text)
         data: set[ExtraSubMaterial] = set()
         checked_words = set()
 
@@ -1163,10 +1148,9 @@ class ExtraSearch:
         arche_patt = r'(?<=")([a-z0-9]{1}[a-z0-9- #\,\'\.]+[a-z0-9α]{1})(?:")'
         archetype_match = re.findall(arche_patt, text, re.I)
         checked_words.update(archetype_match)
-        data.update(self.create_sub_material(
-            archetype_match,
-            last_check=True,
-            fuzzy=True))
+        data.update(
+            self.create_sub_material(archetype_match, last_check=True, fuzzy=True)
+        )
 
         monster_type_capture = r"(?<!non-)([a-z-]+)(?:(monster)(s?))"
         monster_match = re.findall(monster_type_capture, text, re.I)
@@ -1218,7 +1202,7 @@ class ExtraSearch:
         data: Iterable,
         polarity: bool = True,
         last_check: bool = True,
-        fuzzy: bool = False
+        fuzzy: bool = False,
     ) -> list[ExtraSubMaterial]:
         """Creates sub material NamedTuples.
 
@@ -1245,7 +1229,8 @@ class ExtraSearch:
                 logging.info("%s | %s: item", k, item)
                 if " " in item:
                     mat = self.create_sub_material(
-                        item.split(), polarity, last_check, fuzzy)
+                        item.split(), polarity, last_check, fuzzy
+                    )
                     sub_mats.extend(mat)
                 continue
 
@@ -1265,7 +1250,7 @@ class ExtraSearch:
         Returns:
             bool: If its a negative item it will be detected as False.
         """
-        whole_desc = re.sub('\"', '', self.card_model.description).lower()
+        whole_desc = re.sub('"', "", self.card_model.description).lower()
 
         if "except " + text in whole_desc:
             return False
@@ -1300,7 +1285,7 @@ class ExtraSearch:
             DamageValues: Filled in values with the required statistics.
                 Most values will default to -1 if none existant.
         """
-        logging.debug("Checking \"%s\" for attribute values.", text)
+        logging.debug('Checking "%s" for attribute values.', text)
         label_pattern = re.compile(r"ATK|DEF")
         labels = re.findall(label_pattern, text)
 
@@ -1310,15 +1295,11 @@ class ExtraSearch:
         amount_pattern = re.compile(r"(?=(?<=with.)*(\d{4,}).*)")
         values = re.findall(amount_pattern, text)
 
-        data = defaultdict(lambda: -1,
-                           map(lambda key, val: (key, val), labels, values))
+        data = defaultdict(lambda: -1, map(lambda key, val: (key, val), labels, values))
 
         comp = self.find_comparison(text, "Stat")
 
-        dvalues = DamageValues(
-            comparison=comp,
-            attack=data["ATK"],
-            defense=data["DEF"])
+        dvalues = DamageValues(comparison=comp, attack=data["ATK"], defense=data["DEF"])
 
         return dvalues
 
@@ -1346,10 +1327,7 @@ class ExtraSearch:
         return count
 
     def check_subtype(
-        self,
-        target: str,
-        last_check: bool = True,
-        fuzzy: bool = True
+        self, target: str, last_check: bool = True, fuzzy: bool = True
     ) -> tuple[str, enum.Enum | str]:
         """Checks Enums and other type lists and returns a subtype if it
         matches.
@@ -1381,7 +1359,7 @@ class ExtraSearch:
             return "archetype", target
 
         if target == "d/d/d":
-            return "archetype",  "d/d"
+            return "archetype", "d/d"
         if target == "flip":
             target += " effect"
 
@@ -1394,7 +1372,7 @@ class ExtraSearch:
             return "race", RaceType[clean_target.upper().replace(" ", "_")]
         elif clean_target + " monster" in ETL(CardType):
             clean_target = clean_target + " monster"
-            return "card_type", CardType[clean_target.upper().replace(" ", "_")]
+            return ("card_type", CardType[clean_target.upper().replace(" ", "_")])
 
         if last_check:
             # Should change this to query local items in the future as it calls
@@ -1477,7 +1455,6 @@ def test_assocciated_cards() -> None:
 
 
 if __name__ == "__main__":
-
     fmt = "%(levelname)s | .\\yugioh_deck_drafter"
     fmt += "\\%(module)s.py:%(lineno)d -> %(message)s"
     logging.basicConfig(stream=sys.stderr, level=logging.DEBUG, format=fmt)

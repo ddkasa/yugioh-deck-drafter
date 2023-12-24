@@ -28,18 +28,38 @@ from typing import Final, Optional
 import pyperclip as clipboard
 from PyQt6.QtCore import QSignalBlocker, Qt, pyqtSlot
 from PyQt6.QtGui import QAction, QCursor, QPixmapCache
-from PyQt6.QtWidgets import (QApplication, QComboBox, QDateEdit, QDialog,
-                             QFileDialog, QFormLayout, QHBoxLayout,
-                             QInputDialog, QLabel, QListWidget,
-                             QListWidgetItem, QMainWindow, QMenu, QMessageBox,
-                             QPushButton, QSizePolicy, QSlider, QSpinBox,
-                             QVBoxLayout, QWidget)
+from PyQt6.QtWidgets import (
+    QApplication,
+    QComboBox,
+    QDateEdit,
+    QDialog,
+    QFileDialog,
+    QFormLayout,
+    QHBoxLayout,
+    QInputDialog,
+    QLabel,
+    QListWidget,
+    QListWidgetItem,
+    QMainWindow,
+    QMenu,
+    QMessageBox,
+    QPushButton,
+    QSizePolicy,
+    QSlider,
+    QSpinBox,
+    QVBoxLayout,
+    QWidget,
+)
 
 from yugioh_deck_drafter import util
 from yugioh_deck_drafter.modules.deck_drafter import DraftingDialog
-from yugioh_deck_drafter.modules.ygo_data import (CardSetClass, CardSetFilter,
-                                                  CardSetModel, DeckModel,
-                                                  YugiObj)
+from yugioh_deck_drafter.modules.ygo_data import (
+    CardSetClass,
+    CardSetFilter,
+    CardSetModel,
+    DeckModel,
+    YugiObj,
+)
 
 
 class MainWindow(QMainWindow):
@@ -122,8 +142,11 @@ class MainWindow(QMainWindow):
         self.select_pack = QComboBox()
         self.select_layout.addWidget(self.select_pack, 3)
         self.select_pack.setContextMenuPolicy(CMP)
-        (self.select_pack.customContextMenuRequested
-         .connect(self.pack_list_context_menu))
+        (
+            self.select_pack.customContextMenuRequested.connect(
+                self.pack_list_context_menu
+            )
+        )
 
         self.select_layout.addStretch(1)
 
@@ -139,8 +162,7 @@ class MainWindow(QMainWindow):
         self.no_packs.setMaximum(self.PACK_MAX)
         self.select_layout.addWidget(self.no_packs, 1)
         self.no_packs.setContextMenuPolicy(CMP)
-        (self.no_packs.customContextMenuRequested
-         .connect(self.pack_list_context_menu))
+        (self.no_packs.customContextMenuRequested.connect(self.pack_list_context_menu))
 
         self.no_pack_indi = QSpinBox()
         self.no_pack_indi.setValue(self.DEFAULT_PACK_COUNT)
@@ -149,13 +171,19 @@ class MainWindow(QMainWindow):
         self.no_pack_indi.setMaximum(self.PACK_MAX)
         self.select_layout.addWidget(self.no_pack_indi, 1)
         self.no_pack_indi.setContextMenuPolicy(CMP)
-        (self.no_pack_indi.customContextMenuRequested
-         .connect(self.pack_list_context_menu))
+        (
+            self.no_pack_indi.customContextMenuRequested.connect(
+                self.pack_list_context_menu
+            )
+        )
 
         self.sel_card_set_list = QListWidget()
         self.sel_card_set_list.setContextMenuPolicy(CMP)
-        (self.sel_card_set_list.customContextMenuRequested
-         .connect(self.list_context_menu))
+        (
+            self.sel_card_set_list.customContextMenuRequested.connect(
+                self.list_context_menu
+            )
+        )
         self.main_layout.addWidget(self.sel_card_set_list)
 
         self.button_layout = QHBoxLayout()
@@ -249,14 +277,12 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot()
     def pack_list_context_menu(self):
-        """Filtering and selection options for the set pack dropdown menu.
-        """
+        """Filtering and selection options for the set pack dropdown menu."""
         pos = QCursor().pos()
         menu = QMenu(self.select_pack)
 
         reset_dropdwn = QAction("Reset Dropdown")
-        (reset_dropdwn.triggered
-         .connect(lambda: self.select_pack.setCurrentIndex(-1)))
+        (reset_dropdwn.triggered.connect(lambda: self.select_pack.setCurrentIndex(-1)))
         reset_dropdwn.setDisabled(self.select_pack.currentIndex() == -1)
         menu.addAction(reset_dropdwn)
 
@@ -339,21 +365,21 @@ class MainWindow(QMainWindow):
 
         self.update_pack_count()
 
-    def retrieve_set_list_info(self, item: QListWidgetItem | str
-                               ) -> tuple[str, int]:
+    def retrieve_set_list_info(self, item: QListWidgetItem | str) -> tuple[str, int]:
         """Reformats a string with a count and the name of the set back
-        into a int and str.
+          into a int and str.
 
-        Args:
-            item (QListWidgetItem | str): Item to be checked, either can
-                be a list item to be extracted or a ready string.
+          Args:
+              item (QListWidgetItem | str): Item to be checked, either can
+                  be a list item to be extracted or a ready string.
 
-        Raises:
-            ValueError: If the item is not a valid str it raises an
-                error.
+        10 ▎   ▎   ▎   self.DEFAULT_IMPORT.exists()                                      ┃
+          Raises:
+              ValueError: If the item is not a valid str it raises an
+                  error.
 
-        Returns:
-            tuple[str, int]: Name of the pack and pack count in a tuple.
+          Returns:
+              tuple[str, int]: Name of the pack and pack count in a tuple.
         """
         text = item
         if isinstance(text, QListWidgetItem):
@@ -371,14 +397,13 @@ class MainWindow(QMainWindow):
         Args:
             value (int): the updated value set by the widget.
         """
-        with (QSignalBlocker(self.no_packs)
-             and QSignalBlocker(self.no_pack_indi)):
+        with QSignalBlocker(self.no_packs) and QSignalBlocker(self.no_pack_indi):
             self.no_packs.setValue(value)
             self.no_pack_indi.setValue(value)
 
     def update_pack_count(self) -> None:
         """Updates pack count of the selected packs when the values are
-           changed.
+        changed.
         """
         self.p_count = 0
         for pack in self.selected_packs:
@@ -397,8 +422,7 @@ class MainWindow(QMainWindow):
 
         if self.p_count != self.PACK_MAX:
             msg = "Make sure you have {0} packs selected."
-            QMessageBox.information(self, "Not Enough Packs",
-                                    msg.format(self.PACK_MAX))
+            QMessageBox.information(self, "Not Enough Packs", msg.format(self.PACK_MAX))
             return
 
         name_dia = QInputDialog(self)
@@ -443,20 +467,19 @@ class MainWindow(QMainWindow):
         with default_path.open("w", encoding="utf-8") as file:
             file.write(deck_file)
 
-        message_box = QMessageBox(QMessageBox.Icon.Question,
-                                  "Save Location",
-                                  "Where would you like to save?")
+        message_box = QMessageBox(
+            QMessageBox.Icon.Question, "Save Location", "Where would you like to save?"
+        )
 
-        message_box.addButton("Default",
-                              QMessageBox.ButtonRole.ActionRole)
+        message_box.addButton("Default", QMessageBox.ButtonRole.ActionRole)
         cust_button = message_box.addButton(
-            "Custom Location",
-            QMessageBox.ButtonRole.ActionRole)
+            "Custom Location", QMessageBox.ButtonRole.ActionRole
+        )
         import_button = None
         if self.DEFAULT_IMPORT.exists():
             import_button = message_box.addButton(
-                "Imports Folder",
-                QMessageBox.ButtonRole.ActionRole)
+                "Imports Folder", QMessageBox.ButtonRole.ActionRole
+            )
 
         message_box.exec()
 
@@ -473,8 +496,10 @@ class MainWindow(QMainWindow):
             file_dia.selectFile(deck.name + ".ygo")
             file_path = Path(str(file_dia.directory().path())) / file_name
 
-        elif (self.DEFAULT_IMPORT.exists()
-              and message_box.clickedButton() == import_button):
+        elif (
+            self.DEFAULT_IMPORT.exists()
+            and message_box.clickedButton() == import_button
+        ):
             file_path = self.DEFAULT_IMPORT / file_name
 
         else:
@@ -486,9 +511,12 @@ class MainWindow(QMainWindow):
         except FileNotFoundError:
             return self.save_deck_dialog(deck)
 
-        QMessageBox.information(self, "File Saved",
-                                f"File was saved to {file_path}!",
-                                QMessageBox.StandardButton.Ok)
+        return QMessageBox.information(
+            self,
+            "File Saved",
+            f"File was saved to {file_path}!",
+            QMessageBox.StandardButton.Ok,
+        )
 
     @pyqtSlot()
     def reset_selection(self) -> None:
@@ -550,8 +578,7 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot()
     def copy_pack_selection(self) -> None:
-        """Copies current pack selection into clipboard for sharing or saving.
-        """
+        """Copies current pack selection into clipboard for sharing or saving."""
         logging.debug("Copying text to clipboard.")
         copied_text = ""
         count = self.sel_card_set_list.count()
@@ -580,7 +607,7 @@ class MainWindow(QMainWindow):
         """
         logging.debug("Pasting packs in clipboard into QListWidget")
         self.reset_selection()
-        patt = re.compile(r'[\r]')
+        patt = re.compile(r"[\r]")
         clip_data = re.sub(patt, "", clip_data)
         text = clip_data.split("\n")
 
@@ -641,11 +668,12 @@ class PackFilterDialog(QDialog):
         filter_cards: Filters out card sets based on the supplied filter.
 
     """
+
     def __init__(
         self,
         parent: MainWindow,
         card_set: list[CardSetModel],
-        previous_filter: CardSetFilter
+        previous_filter: CardSetFilter,
     ) -> None:
         super().__init__(parent=parent)
         self.setWindowTitle("Filter Sets")
@@ -660,8 +688,7 @@ class PackFilterDialog(QDialog):
         self.min_card_count = QSpinBox()
         self.min_card_count.setMinimum(3)
         self.min_card_count.setValue(previous_filter.card_count)
-        (self.min_card_count
-         .setToolTip("Minimum card threshold allowed inside a set."))
+        (self.min_card_count.setToolTip("Minimum card threshold allowed inside a set."))
         self.form.addRow("Minimum Cards", self.min_card_count)
 
         self.max_date = QDateEdit()
@@ -670,8 +697,7 @@ class PackFilterDialog(QDialog):
         self.form.addRow("Max Date", self.max_date)
 
         self.checkable_items = CheckableListWidget()
-        self.checkable_items.add_items(CardSetClass,
-                                       previous_filter.set_classes)
+        self.checkable_items.add_items(CardSetClass, previous_filter.set_classes)
         self.form.addRow("Card Sets", self.checkable_items)
 
         self.button_layout = QHBoxLayout()
@@ -704,9 +730,9 @@ class PackFilterDialog(QDialog):
             enum_item = CardSetClass[item.replace(" ", "_")]
             checked_enums.add(enum_item)
 
-        card_filter = CardSetFilter(self.min_card_count.value(),
-                                    self.max_date.date().toPyDate(),
-                                    checked_enums)
+        card_filter = CardSetFilter(
+            self.min_card_count.value(), self.max_date.date().toPyDate(), checked_enums
+        )
         return card_filter
 
     def filter_cards(self, pack_filter: CardSetFilter) -> list[CardSetModel]:
@@ -719,8 +745,9 @@ class PackFilterDialog(QDialog):
         Returns:
             list[CardSetModel]: A list of Card Set as per filter.
         """
-        filt_func = partial(self.parent().yugi_pro.filter_out_card_sets,
-                            set_filter=pack_filter)
+        filt_func = partial(
+            self.parent().yugi_pro.filter_out_card_sets, set_filter=pack_filter
+        )
         new_sets = filter(filt_func, self.card_set)
 
         return list(new_sets)
@@ -751,14 +778,16 @@ class RandomPacks(PackFilterDialog):
         randomise_packs: Randomises pack selection depending on the filter
             settings that are set.
     """
+
     def __init__(
         self,
         parent: MainWindow,
         card_set: list[CardSetModel],
-        previous_filter: CardSetFilter
+        previous_filter: CardSetFilter,
     ) -> None:
-        super().__init__(parent=parent, card_set=card_set,
-                         previous_filter=previous_filter)
+        super().__init__(
+            parent=parent, card_set=card_set, previous_filter=previous_filter
+        )
         self.setModal(False)
         self.setWindowTitle("Randomise Sets")
 
@@ -767,8 +796,7 @@ class RandomPacks(PackFilterDialog):
         self.total_packs.setMinimum(1)
         self.total_packs.setMaximum(40)
         self.total_packs.setSingleStep(1)
-        (self.total_packs
-         .setToolTip("Total packs to be added to the selection."))
+        (self.total_packs.setToolTip("Total packs to be added to the selection."))
         self.form.addRow("Total Packs", self.total_packs)
 
         self.pack_increments = QSpinBox()
@@ -792,8 +820,9 @@ class RandomPacks(PackFilterDialog):
         count_range = range(5, self.pack_increments.value())
         total_packs = self.total_packs.value()
 
-        packs = (self.parent().yugi_pro
-                 .select_random_packs(card_set, count_range, total_packs))
+        packs = self.parent().yugi_pro.select_random_packs(
+            card_set, count_range, total_packs
+        )
 
         self.parent().reset_selection()
 
@@ -811,9 +840,7 @@ class CheckableListWidget(QListWidget):
     """
 
     def add_items(
-        self,
-        items: set[str] | enum.EnumMeta,
-        set_classes: set[CardSetClass]
+        self, items: set[str] | enum.EnumMeta, set_classes: set[CardSetClass]
     ) -> None:
         """Extra addItems method for quick adding Enums as a list ontop of
         strings
@@ -833,8 +860,7 @@ class CheckableListWidget(QListWidget):
                 name = name.name.replace("_", " ").title()
 
             list_item = QListWidgetItem(name)  # type: ignore
-            list_item.setFlags(list_item.flags() |
-                               Qt.ItemFlag.ItemIsUserCheckable)
+            list_item.setFlags(list_item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
 
             check_state = Qt.CheckState.Unchecked
             if item in set_classes:
@@ -872,7 +898,7 @@ def main():
 
     sys.excepthook = excepthook
 
-    FMT = '%(relativepath)s:%(lineno)s | %(levelname)s: %(message)s'
+    FMT = "%(relativepath)s:%(lineno)s | %(levelname)s: %(message)s"
 
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
