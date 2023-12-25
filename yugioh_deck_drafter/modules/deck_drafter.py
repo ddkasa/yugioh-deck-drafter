@@ -32,25 +32,69 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from functools import partial
 
-from PyQt6.QtCore import (QMimeData, QPoint, QRect, QRectF, QSignalBlocker,
-                          QSize, Qt, pyqtSignal, pyqtSlot)
+from PyQt6.QtCore import (
+    QMimeData,
+    QPoint,
+    QRect,
+    QRectF,
+    QSignalBlocker,
+    QSize,
+    Qt,
+    pyqtSignal,
+    pyqtSlot,
+)
 
-from PyQt6.QtGui import (QBrush, QCursor, QDrag, QDragEnterEvent, QCloseEvent,
-                         QDropEvent, QFont, QImage, QKeyEvent, QMouseEvent,
-                         QPainter, QPaintEvent, QPen, QPixmap, QAction)
+from PyQt6.QtGui import (
+    QBrush,
+    QCursor,
+    QDrag,
+    QDragEnterEvent,
+    QCloseEvent,
+    QDropEvent,
+    QFont,
+    QImage,
+    QKeyEvent,
+    QMouseEvent,
+    QPainter,
+    QPaintEvent,
+    QPen,
+    QPixmap,
+    QAction,
+)
 
-from PyQt6.QtWidgets import (QApplication, QCompleter, QDialog, QHBoxLayout,
-                             QLabel, QLayout, QLayoutItem, QLineEdit, QMenu,
-                             QMessageBox, QProgressBar, QPushButton,
-                             QScrollArea, QSizePolicy, QWidget, QStackedWidget,
-                             QStyle, QStyleOptionButton, QVBoxLayout,
-                             QProgressDialog)
+from PyQt6.QtWidgets import (
+    QApplication,
+    QCompleter,
+    QDialog,
+    QHBoxLayout,
+    QLabel,
+    QLayout,
+    QLayoutItem,
+    QLineEdit,
+    QMenu,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QScrollArea,
+    QSizePolicy,
+    QWidget,
+    QStackedWidget,
+    QStyle,
+    QStyleOptionButton,
+    QVBoxLayout,
+    QProgressDialog,
+)
 
 from yugioh_deck_drafter import util
-from yugioh_deck_drafter.modules.ygo_data import (CardModel, CardSetModel,
-                                                  DeckModel, DeckType,
-                                                  CardType, ExtraMaterial,
-                                                  DamageValues)
+from yugioh_deck_drafter.modules.ygo_data import (
+    CardModel,
+    CardSetModel,
+    DeckModel,
+    DeckType,
+    CardType,
+    ExtraMaterial,
+    DamageValues,
+)
 
 if TYPE_CHECKING:
     from yugioh_deck_drafter.__main__ import MainWindow
@@ -58,6 +102,7 @@ if TYPE_CHECKING:
 
 class AspectRatio(NamedTuple):
     """Aspect ratio for resizing widgets properly."""
+
     width: float = 1.0
     height: float = 1.0
 
@@ -71,7 +116,7 @@ class PackOpeningState:
             opened so far.
         total_packs (int): The total number of packs that have been opened so
             far.
-        selection_per_pack (int): How many max selections the current pack has.
+        selections_per_pack (int): How many max selections the current pack has.
         selections_left (int): Counter for how many selections the drafter
             has left for the current pack. Must be 0 or less to proceed through
             the drafting process.
@@ -80,9 +125,10 @@ class PackOpeningState:
         selection (list): Where the current selections are stored and delegated
             from later on.
     """
+
     opened_set_packs: int = field(default=0)
     total_packs: int = field(default=0)
-    selection_per_pack: int = field(default=0)
+    selections_per_pack: int = field(default=0)
     selections_left: int = field(default=0)
     discard_stage_cnt: int = field(default=0)
     selections: list[CardButton | CardModel] = field(default_factory=list)
@@ -99,23 +145,26 @@ class DraftingDialog(QDialog):
             tranferring between widgets.
         drafting_model (DeckModel): Holds important drafting information for
             checking different stages of the drafting process.
+        SET_ART_SIZE (QSize): For having a consistent size for set art when
+            loading.
 
     Args:
         parent (MainWindow): For retrieving, managing and finalzing the
             drafting data.
         deck_name (str): Name of deck set by the user used for save pathh name
             later on.
-        flags (Optional[WindowType]): Mostly for debugging.
-        SET_ART_SIZE (QSize): For having a consistent size for set art when
-            loading.
+        flags (Optional[WindowType]): Mostly for debugging and testing the
+            class.
     """
+
     SET_ART_SIZE: Final[QSize] = QSize(400, 708)
     CARDS_PER_PACK: Final[int] = 9
 
     def __init__(
         self,
-        parent: MainWindow, deck_name: str,
-        flags=Qt.WindowType.Dialog
+        parent: MainWindow,
+        deck_name: str,
+        flags: Qt.WindowType = Qt.WindowType.Dialog,
     ) -> None:
         super().__init__(parent, flags)
         self.setModal(not parent.debug)
@@ -126,8 +175,7 @@ class DraftingDialog(QDialog):
 
         self.deck = DeckModel(deck_name)
         self.drafting_model = PackOpeningState()
-        self.setSizePolicy(QSizePolicy.Policy.Minimum,
-                           QSizePolicy.Policy.Minimum)
+        self.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
         self.resize(self.minimumSize())
 
         self.init_ui()
@@ -164,8 +212,9 @@ class DraftingDialog(QDialog):
         self.set_layout = QVBoxLayout()
 
         self.set_art_widget = QLabel()
-        self.set_art_widget.setSizePolicy(QSizePolicy.Policy.Minimum,
-                                          QSizePolicy.Policy.Minimum)
+        self.set_art_widget.setSizePolicy(
+            QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum
+        )
         self.set_art_widget.setAlignment(QAF.AlignHCenter | QAF.AlignBottom)
         self.set_layout.addWidget(self.set_art_widget, 70)
         self.set_art_widget.setMaximumSize(self.SET_ART_SIZE)
@@ -188,8 +237,9 @@ class DraftingDialog(QDialog):
         self.loading_bar.setAlignment(QAF.AlignCenter)
         self.loading_bar.setMinimum(0)
         self.loading_bar.setMaximum(9)
-        self.loading_bar.setSizePolicy(QSizePolicy.Policy.Expanding,
-                                       QSizePolicy.Policy.Preferred)
+        self.loading_bar.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
+        )
         self.progess_layout.addWidget(self.loading_bar, 50, QAF.AlignTop)
 
         self.loading_layout.addLayout(self.progess_layout, 70)
@@ -310,7 +360,8 @@ class DraftingDialog(QDialog):
                 self,
                 "Deck Drafting Complete",
                 "Would you like to preview the deck?",
-                (mbutton.No | mbutton.Yes))
+                (mbutton.No | mbutton.Yes),
+            )
 
             if ms_box == mbutton.Yes:
                 self.preview_deck()
@@ -327,15 +378,13 @@ class DraftingDialog(QDialog):
 
         self.drafting_model.total_packs += 1
 
-        (self.packs_opened
-         .setText(f"Pack No.: {self.drafting_model.total_packs}"))
+        (self.packs_opened.setText(f"Pack No.: {self.drafting_model.total_packs}"))
         self.current_pack.setText(f"Current Pack: {set_data.set_name}")
 
         if not set_data.probabilities:
             card_data = self.ygo_data.get_card_set_info(set_data)
             set_data.card_set = tuple(card_data)
-            probabilities = self.ygo_data.generate_weights(set_data.set_name,
-                                                           card_data)
+            probabilities = self.ygo_data.generate_weights(set_data.set_name, card_data)
             set_data.probabilities = tuple(probabilities)
 
         if self.check_discard_stage():
@@ -373,7 +422,7 @@ class DraftingDialog(QDialog):
                 continue
 
         actual_selection = self.CARDS_PER_PACK
-        actual_selection -= (extra_card_types + duplicates)
+        actual_selection -= extra_card_types + duplicates
 
         if actual_selection < self.drafting_model.selections_left:
             return True
@@ -381,8 +430,9 @@ class DraftingDialog(QDialog):
         text = "Select at least {0} more cards."
         text = text.format(self.drafting_model.selections_left)
         logging.info(text)
-        QMessageBox.warning(self, "Select More Cards", text,
-                            QMessageBox.StandardButton.Ok)
+        QMessageBox.warning(
+            self, "Select More Cards", text, QMessageBox.StandardButton.Ok
+        )
         return False
 
     def load_set_art(self) -> None:
@@ -395,9 +445,11 @@ class DraftingDialog(QDialog):
         self.set_name_label.setText(set_data.set_name)
         set_art = self.parent().yugi_pro.get_set_art(set_data)
         if set_art is not None:
-            set_art = set_art.scaled(self.SET_ART_SIZE.width() // 2,
-                                     self.SET_ART_SIZE.height() // 2,
-                                     Qt.AspectRatioMode.KeepAspectRatio)
+            set_art = set_art.scaled(
+                self.SET_ART_SIZE.width() // 2,
+                self.SET_ART_SIZE.height() // 2,
+                Qt.AspectRatioMode.KeepAspectRatio,
+            )
             self.set_art_widget.setPixmap(set_art)
 
     def check_discard_stage(self) -> bool:
@@ -454,7 +506,7 @@ class DraftingDialog(QDialog):
         return card.rarity != "Common"
 
     def open_pack(self, set_data: CardSetModel) -> None:
-        """ Opens a pack with probablities supplied and adds its to the layout.
+        """Opens a pack with probablities supplied and adds its to the layout.
 
         The last card get new probabilities as its atleast a rare.
 
@@ -467,9 +519,10 @@ class DraftingDialog(QDialog):
 
         self.drafting_model.selections_left += 2
         sel_left = self.drafting_model.selections_left
-        self.drafting_model.selection_per_pack = sel_left
-        logging.debug("%s Card Selection(s) Available.",
-                      self.drafting_model.selection_per_pack)
+        self.drafting_model.selections_per_pack = sel_left
+        logging.debug(
+            "%s Card Selection(s) Available.", self.drafting_model.selections_per_pack
+        )
 
         self.update_counter_label()
 
@@ -493,11 +546,7 @@ class DraftingDialog(QDialog):
         self.view_widget.setCurrentWidget(self.drafting_widget)
         self.loading_bar.setValue(0)
 
-    def select_pack_card(
-        self,
-        set_data: CardSetModel,
-        pack_index: int
-    ) -> CardModel:
+    def select_pack_card(self, set_data: CardSetModel, pack_index: int) -> CardModel:
         """Selects a random card based on the weights previously generated.
 
         Will select a rare or higher if its the 8 + 1 column, unless there are
@@ -516,9 +565,9 @@ class DraftingDialog(QDialog):
         prob = set_data.probabilities
         if pack_index == 8:
             rare_cards = list(filter(self.filter_common, card_set))
-            rprob = self.ygo_data.generate_weights(set_data.set_name,
-                                                   rare_cards,
-                                                   extra=True)
+            rprob = self.ygo_data.generate_weights(
+                set_data.set_name, rare_cards, extra=True
+            )
             try:
                 card_data = random.choices(rare_cards, weights=rprob, k=1)[0]
             except (IndexError, ValueError):
@@ -550,7 +599,7 @@ class DraftingDialog(QDialog):
                 continue
             self.update_item_selection(item)
 
-    def update_item_selection(self, item: 'CardButton') -> None:
+    def update_item_selection(self, item: "CardButton") -> None:
         """Updates the given item selection status.
 
         Args:
@@ -560,10 +609,11 @@ class DraftingDialog(QDialog):
             item_in = item in self.drafting_model.selections
             fus_mon = self.ygo_data.check_extra_monster(item.card_model)
 
-            if (item.isChecked()
-               and not self.check_card_count(item.card_model) == 3
-               and (self.drafting_model.selections_left > 0 or fus_mon)):
-
+            if (
+                item.isChecked()
+                and not self.check_card_count(item.card_model) == 3
+                and (self.drafting_model.selections_left > 0 or fus_mon)
+            ):
                 if not item_in:
                     logging.debug("Adding card %s", item.accessibleName())
                     self.add_card_to_selection(item)
@@ -575,17 +625,16 @@ class DraftingDialog(QDialog):
             elif not item_in and not fus_mon:
                 item.setChecked(False)
 
-            item.setDisabled((self.check_card_count(item.card_model) == 3
-                             and not item.isChecked()) or item._assocc_added)
+            item.setDisabled(
+                (self.check_card_count(item.card_model) == 3 and not item.isChecked())
+                or item._assocc_added
+            )
 
             self.update_counter_label()
 
         QApplication.processEvents()
 
-    def add_card_to_selection(
-        self,
-        card_model: CardModel | CardButton
-    ) -> None:
+    def add_card_to_selection(self, card_model: CardModel | CardButton) -> None:
         """Adds a card to selection and decrements selections left in the
         current pack.
 
@@ -603,10 +652,7 @@ class DraftingDialog(QDialog):
 
         self.update_counter_label()
 
-    def remove_card_from_selection(
-        self,
-        card_model: CardModel | CardButton
-    ) -> None:
+    def remove_card_from_selection(self, card_model: CardModel | CardButton) -> None:
         """Removes a card from selection and increments the selection if
         the card is not a extra deck monster.
 
@@ -640,8 +686,7 @@ class DraftingDialog(QDialog):
         self.cards_picked.setToolTip(tip.strip())
 
     def selections_left_label(self):
-        """Selections left indicator updater and selection list tooltip.
-        """
+        """Selections left indicator updater and selection list tooltip."""
         remaining = f"Remaining Picks: {self.drafting_model.selections_left}"
         self.card_picks_left.setText(remaining)
 
@@ -672,7 +717,7 @@ class DraftingDialog(QDialog):
         decks = {
             DeckType.MAIN: self.deck.main,
             DeckType.EXTRA: self.deck.extra,
-            DeckType.SIDE: self.deck.side
+            DeckType.SIDE: self.deck.side,
         }
         sel_deck = decks[deck] if isinstance(deck, DeckType) else deck
         monster_total = self.count_card_type("Monster", sel_deck)
@@ -733,7 +778,7 @@ class DraftingDialog(QDialog):
         """
 
         discard = self.drafting_model.total_packs
-        discard += (self.drafting_model.total_packs // 5)
+        discard += self.drafting_model.total_packs // 5
         dialog = DeckViewer(self, discard)
 
         dialog.setWindowTitle("Card Removal Stage")
@@ -767,8 +812,8 @@ class DraftingDialog(QDialog):
             return super().keyPressEvent(event)
 
         KEY = Qt.Key
-        if (event.key() in {KEY.Key_Escape, KEY.Key_Space}):
-            return
+        if event.key() in {KEY.Key_Escape, KEY.Key_Space}:
+            return None
 
         return super().keyPressEvent(event)
 
@@ -784,9 +829,10 @@ class DraftingDialog(QDialog):
                     item.setChecked(False)
                     item.setDisabled(False)
                     item._assocc_added = False
+
                 item = item.card_model
 
-        sel_left = self.drafting_model.selection_per_pack
+        sel_left = self.drafting_model.selections_per_pack
         self.drafting_model.selections_left = sel_left
 
         self.update_counter_label()
@@ -799,7 +845,7 @@ class DraftingDialog(QDialog):
         """
         return QSize(1344, 824)
 
-    def closeEvent(self, event: QCloseEvent | None):
+    def closeEvent(self, event: QCloseEvent | None) -> None:
         """Overriden closeEvent to catch closing out the window as an
         accidental closing can lose a lot of progress.
 
@@ -812,17 +858,18 @@ class DraftingDialog(QDialog):
             self,
             "Quit",
             "Are you sure want to quit the drafting process?",
-            (QMessageBox.StandardButton.No | QMessageBox.StandardButton.Yes))
+            (QMessageBox.StandardButton.No | QMessageBox.StandardButton.Yes),
+        )
 
         if close == QMessageBox.StandardButton.Yes:
             event.accept()
         else:
             event.ignore()
 
+        return
+
     def count_card_type(
-        self,
-        card_type: str,
-        group: list[CardModel] | list[CardButton]
+        self, card_type: str, group: list[CardModel] | list[CardButton]
     ) -> int:
         """Counts the target card_type inside the container provided.
 
@@ -870,25 +917,26 @@ class DraftingDialog(QDialog):
 class CardButton(QPushButton):
     """Card class used for displaying, deleting and containg cards.
 
-        Has some functions to search and locate assocciated cards aswell.
-        Future refactor might include moving some functions out and refining
-        the paint event.
+    Has some functions to search and locate assocciated cards aswell.
+    Future refactor might include moving some functions out and refining
+    the paint event.
 
-        Attributes:
-            BASE_SIZE (QSize): Minimum size of the card for readibility.
-            ASPECT_RATION (float): Ratio of the card that allows for smooth
-                scaling.
-            card_model (YGOCard): Holds all the metadata of the card itself.
-            image (QPixmap): Holds the cover art inside an image.
+    Attributes:
+        BASE_SIZE (QSize): Minimum size of the card for readibility.
+        ASPECT_RATION (float): Ratio of the card that allows for smooth
+            scaling.
+        card_model (YGOCard): Holds all the metadata of the card itself.
+        image (QPixmap): Holds the cover art inside an image.
 
-        Args:
-            data (YGOCard): Card data itself with the set_data prefilled.
-            parent (DraftingDialog): Dialog where the drafting is being done
-                for accessing additonal information.
-            viwer (DeckViewer): Optional argument if slotting it into a
-                DeckViewer dialog, which enables different functionality
-                in terms of menu and draggability.
+    Args:
+        data (YGOCard): Card data itself with the set_data prefilled.
+        parent (DraftingDialog): Dialog where the drafting is being done
+            for accessing additonal information.
+        viwer (DeckViewer): Optional argument if slotting it into a
+            DeckViewer dialog, which enables different functionality
+            in terms of menu and draggability.
     """
+
     BASE_SIZE = QSize(164, 242)
     ASPECT_RATIO = AspectRatio(0.650793651, 1.4756097561)
 
@@ -896,8 +944,8 @@ class CardButton(QPushButton):
         self,
         data: CardModel,
         parent: DraftingDialog,
-        viewer: Optional['DeckViewer'] = None,
-        sub_deck: Optional[DeckType] = None
+        viewer: Optional["DeckViewer"] = None,
+        sub_deck: Optional[DeckType] = None,
     ) -> None:
         super().__init__(parent=parent)
 
@@ -964,10 +1012,7 @@ class CardButton(QPushButton):
         """
         return self.minimumSize()
 
-    def filter_assocciated(
-        self,
-        card_model: CardModel
-    ) -> tuple[ExtraMaterial, ...]:
+    def filter_assocciated(self, card_model: CardModel) -> tuple[ExtraMaterial, ...]:
         """Filters out asscciated cards for quick adding with the submenu.
 
         Also checks if the items in the card are actually accessible in the
@@ -1002,9 +1047,12 @@ class CardButton(QPushButton):
         painter = QPainter(self)
         HINT = QPainter.RenderHint
         painter.setRenderHints(HINT.LosslessImageRendering)
-        image = self.image.scaled(self.width(), self.height(),
-                                  Qt.AspectRatioMode.KeepAspectRatio,
-                                  Qt.TransformationMode.SmoothTransformation)
+        image = self.image.scaled(
+            self.width(),
+            self.height(),
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
 
         if not self.isEnabled():
             image = image.toImage()
@@ -1068,10 +1116,12 @@ class CardButton(QPushButton):
                 properly.
         """
         pen_half = pen_width / 2
-        new_rect = QRectF(og_rect.x() + pen_half,
-                          og_rect.y() + pen_half,
-                          og_rect.width() - pen_width,
-                          og_rect.height() - pen_width)
+        new_rect = QRectF(
+            og_rect.x() + pen_half,
+            og_rect.y() + pen_half,
+            og_rect.width() - pen_width,
+            og_rect.height() - pen_width,
+        )
         return new_rect
 
     def show_menu(self) -> None:
@@ -1125,8 +1175,7 @@ class CardButton(QPushButton):
             for item in self.assocc:
                 for card in item.materials:
                     print(card)
-                    if (card.subtype != "name"
-                       or isinstance(card, DamageValues)):
+                    if card.subtype != "name" or isinstance(card, DamageValues):
                         continue
                     action = self.create_add_action(str(card.name))
                     util.action_to_list_men(action, actions, menu)
@@ -1135,11 +1184,7 @@ class CardButton(QPushButton):
 
         return actions
 
-    def add_all_assocc_action(
-        self,
-        actions: list[QAction],
-        menu: QMenu
-    ) -> None:
+    def add_all_assocc_action(self, actions: list[QAction], menu: QMenu) -> None:
         """Action for adding all named cards to the selection.
 
         Args:
@@ -1148,7 +1193,7 @@ class CardButton(QPushButton):
         """
 
         non_search = actions and any("Search" not in a.text() for a in actions)
-        if (self.parent().drafting_model.selections_left > 1 and non_search):
+        if self.parent().drafting_model.selections_left > 1 and non_search:
             acc = QAction("Add all Assocciated")
             acc.triggered.connect(self.add_all_assocc)
             util.action_to_list_men(acc, actions, menu)
@@ -1299,8 +1344,10 @@ class CardButton(QPushButton):
                 items.append(sub_item.name)
 
         if self.parent().ygo_data.check_extra_monster(self.card_model):
-            if (self.card_model.card_type
-               in self.parent().ygo_data.TYPE_MATCH[CardType.FUSION_MONSTER]):
+            if (
+                self.card_model.card_type
+                in self.parent().ygo_data.TYPE_MATCH[CardType.FUSION_MONSTER]
+            ):
                 poly = "Polymerization"
                 items.append(poly)
 
@@ -1385,8 +1432,7 @@ class CardButton(QPushButton):
         data: ExtraMaterial,
         label: str,
     ) -> None:
-        """Starts a search dialog with the instances target subtype.
-        """
+        """Starts a search dialog with the instances target subtype."""
 
         dialog = CardSearch(self.card_model, data, self.parent(), label)
 
@@ -1454,6 +1500,7 @@ class DeckViewer(QDialog):
         discard (int): How many cards should be discounted.
             Used as a boolean to decide what type of viewer it is.
     """
+
     MAX_COLUMNS: Final[int] = 10
 
     def __init__(self, parent: DraftingDialog, discard: int = 0) -> None:
@@ -1462,7 +1509,7 @@ class DeckViewer(QDialog):
         self.setWindowTitle("Deck Viewer")
         self.resize(1745, 860)  # Base on 1080 ratio
 
-        self.discard = discard
+        self.discard: int = discard
         self.side_length = len(parent.deck.side) + 2
 
         self.main_layout = QVBoxLayout()
@@ -1528,28 +1575,31 @@ class DeckViewer(QDialog):
         Args:
             widget (DeckSlider): Widget to take the signal from.
         """
-        (widget.main_widget.order_changed
-         .connect(self.main_deck_widget.main_widget.repaint))
-        (widget.main_widget.order_changed
-         .connect(self.side_deck_widget.main_widget.repaint))
+        (
+            widget.main_widget.order_changed.connect(
+                self.main_deck_widget.main_widget.repaint
+            )
+        )
+        (
+            widget.main_widget.order_changed.connect(
+                self.side_deck_widget.main_widget.repaint
+            )
+        )
 
     def fill_deck(
-        self,
-        cards: list[CardModel],
-        scroll_bar: 'DeckSlider',
-        check: bool = False
+        self, cards: list[CardModel], scroll_bar: "DeckSlider", check: bool = False
     ) -> None:
         """Fills the deck preview with the list of given list[YGOCards].
 
-            Also checks if an item has been previously checked as the func
-                is used for moving cards between main and side decks as well.
+        Also checks if an item has been previously checked as the func
+            is used for moving cards between main and side decks as well.
 
-            Args:
-                cards (list): The list of cards to be added to the layout
-                container (list): Where to put the Card Widgets for storage.
-                scrollbar (QScrollView): What widget the cards will be added to
-                    *Will extract the scrollvbars and layout from the widget.
-                check (bool): If moving whether to recheck the QPushButton.
+        Args:
+            cards (list): The list of cards to be added to the layout
+            container (list): Where to put the Card Widgets for storage.
+            scrollbar (QScrollView): What widget the cards will be added to
+                *Will extract the scrollvbars and layout from the widget.
+            check (bool): If moving whether to recheck the QPushButton.
         """
 
         layout = scroll_bar.main_layout
@@ -1565,8 +1615,7 @@ class DeckViewer(QDialog):
 
             card = cards.pop(0)
 
-            card_button = CardButton(card, self.parent(), self,
-                                     scroll_bar.deck_type)
+            card_button = CardButton(card, self.parent(), self, scroll_bar.deck_type)
 
             self.connect_scroll_bar(scroll_bar, card_button)
 
@@ -1582,9 +1631,7 @@ class DeckViewer(QDialog):
             column += 1
 
     def connect_scroll_bar(
-        self,
-        scroll_bar: QScrollArea,
-        card_button: CardButton
+        self, scroll_bar: QScrollArea, card_button: CardButton
     ) -> None:
         """Connects scrolling signal to a repaint function of the cards in
         order to avoid render artifacting.
@@ -1605,12 +1652,12 @@ class DeckViewer(QDialog):
     def mv_card(self, card: CardButton, deck: DeckType) -> None:
         """Moves a card[CardButton] between the side and main deck.
 
-           To be called from the card (CardButton):show_menu method itself
-           and assigns itself for movement.
+        To be called from the card (CardButton):show_menu method itself
+        and assigns itself for movement.
 
-           Args:
-                card (CardButton): The card to be moved.
-                deck (CardButton): Which deck the card will be moved to.
+        Args:
+             card (CardButton): The card to be moved.
+             deck (CardButton): Which deck the card will be moved to.
         """
 
         if deck == DeckType.MAIN:
@@ -1628,27 +1675,32 @@ class DeckViewer(QDialog):
 
     def keyPressEvent(self, event: QKeyEvent | None) -> None:
         """Overriden to prevent the user from accidently quitting the
-           application if there are a lot of random keystrokes."""
+        application if there are a lot of random keystrokes.
+
+        Args:
+            event (event | None): Event object for detecting what keys were
+                pressed.
+        """
 
         if event is None:
             return super().keyPressEvent(event)
 
         KEY = Qt.Key
-        if (event.key() in {KEY.Key_Escape, KEY.Key_Space} and self.discard):
+        if event.key() in {KEY.Key_Escape, KEY.Key_Space} and self.discard:
             return None
 
         return super().keyPressEvent(event)
 
     def count(self, target: Optional[DeckType] = None) -> int:
         """Returns the count of the deck picked > target[str] with the
-           checked cards marked for removal as discarded.
+        checked cards marked for removal as discarded.
 
-            Args:
-                target (str): If just checking for just one deck count this is
-                    used to filter those out.
+         Args:
+             target (str): If just checking for just one deck count this is
+                 used to filter those out.
 
-            Returns:
-                int: Target count as an in value.
+         Returns:
+             int: Target count as an in value.
         """
 
         def cnt(layout: CardLayout):
@@ -1719,12 +1771,9 @@ class DeckViewer(QDialog):
 
                 item.deleteLater()
 
-        logging.debug("Deck Cards: %s",
-                      self.main_deck_widget.main_layout.count())
-        logging.debug("Extra Cards: %s",
-                      self.extra_deck_widget.main_layout.count())
-        logging.debug("Side Cards: %s",
-                      self.side_deck_widget.main_layout.count())
+        logging.debug("Deck Cards: %s", self.main_deck_widget.main_layout.count())
+        logging.debug("Extra Cards: %s", self.extra_deck_widget.main_layout.count())
+        logging.debug("Side Cards: %s", self.side_deck_widget.main_layout.count())
 
         count = self.count()
         logging.debug("Actual Count: %s", count)
@@ -1733,12 +1782,15 @@ class DeckViewer(QDialog):
             cnt = count - self.discard
             operation, cnt = util.get_operation(cnt)
 
-            QMessageBox.warning(self, f"{operation} More Cards",
-                                f"{operation} {cnt} more card(s)",
-                                QMessageBox.StandardButton.Ok)
+            QMessageBox.warning(
+                self,
+                f"{operation} More Cards",
+                f"{operation} {cnt} more card(s)",
+                QMessageBox.StandardButton.Ok,
+            )
             return
 
-        elif self.count(DeckType.SIDE) != self.side_length:
+        if self.count(DeckType.SIDE) != self.side_length:
             cnt = self.count(DeckType.SIDE) - self.side_length
             operation, cnt = util.get_operation(cnt)
             msg = f"{operation} {cnt} more card(s) to the Side Deck"
@@ -1746,8 +1798,9 @@ class DeckViewer(QDialog):
             if operation == "Remove":
                 msg = f"{operation} {cnt} more card(s) from the Side Deck"
 
-            QMessageBox.warning(self, "Adjust Side Deck", msg,
-                                QMessageBox.StandardButton.Ok)
+            QMessageBox.warning(
+                self, "Adjust Side Deck", msg, QMessageBox.StandardButton.Ok
+            )
             return
 
         self.new_deck = DeckModel(self.parent().deck.name)
@@ -1783,7 +1836,7 @@ class CardSearch(QDialog):
         card: CardModel,
         extra_material: ExtraMaterial,
         parent: DraftingDialog,
-        label: str
+        label: str,
     ) -> None:
         super().__init__(parent)
         self.card = card
@@ -1849,12 +1902,13 @@ class CardSearch(QDialog):
         self.load_more_cards()
 
     def load_more_cards(self):
-        """Loads the next set of maximum 20 cards.
-        """
+        """Loads the next set of maximum 20 cards."""
         self.data: list
+
         max_files = min(20, len(self.data))
-        progress_dialog = QProgressDialog("Loading Cards", None, 0, max_files,
-                                          self.parent())
+        progress_dialog = QProgressDialog(
+            "Loading Cards", None, 0, max_files, self.parent()
+        )
         progress_dialog.show()
         label = "Loading Cards {card_name}"
         for i in range(20):
@@ -1873,11 +1927,7 @@ class CardSearch(QDialog):
         progress_dialog.close()
         progress_dialog.deleteLater()
 
-    def load_cardbutton(
-        self,
-        index: int = 0,
-        check: bool = False
-    ) -> CardButton:
+    def load_cardbutton(self, index: int = 0, check: bool = False) -> CardButton:
         """Loads the next single card from the saved data.
 
         Args:
@@ -1889,9 +1939,9 @@ class CardSearch(QDialog):
             CardButton: For scrolling the view to the item.
         """
         CMP = Qt.ContextMenuPolicy
-        card_button = CardButton(self.data.pop(index),
-                                 self.parent(),
-                                 sub_deck=DeckType.SEARCH)
+        card_button = CardButton(
+            self.data.pop(index), self.parent(), sub_deck=DeckType.SEARCH
+        )
         card_button.setContextMenuPolicy(CMP.NoContextMenu)
         card_button.setChecked(check)
         card_button.toggled.connect(self.check_picks)
@@ -1932,8 +1982,11 @@ class CardSearch(QDialog):
         completer.setCompletionMode(QCompleter.CompletionMode.InlineCompletion)
 
         self.search_box.setCompleter(completer)
-        (self.search_box.editingFinished
-         .connect(lambda: self.highlight_search(self.search_box.text())))
+        (
+            self.search_box.editingFinished.connect(
+                lambda: self.highlight_search(self.search_box.text())
+            )
+        )
 
     def highlight_search(self, name: str) -> None:
         """Hightlights the item searched for inside the search box and toggls
@@ -1981,16 +2034,12 @@ class CardSearch(QDialog):
 
         self.chosen_items = self.check_picks()
         if not self.chosen_items:
-            QMessageBox.warning(
-                self,
-                "Select more cards.",
-                "Select at least one card.")
+            QMessageBox.warning(self, "Select more cards.", "Select at least one card.")
             return
         elif len(self.chosen_items) > self.extra_mats.count:
             QMessageBox.warning(
-                self,
-                "Too Many Cards",
-                f"Maximum {len(self.chosen_items)} Allowed")
+                self, "Too Many Cards", f"Maximum {len(self.chosen_items)} Allowed"
+            )
             return
 
         return super().accept()
@@ -2035,7 +2084,7 @@ class DeckSlider(QScrollArea):
             self.setHorizontalScrollBarPolicy(SBP.ScrollBarAlwaysOn)
             self.main_widget.setSizePolicy(QSP.MinimumExpanding, QSP.Expanding)
 
-        self.main_layout = self.main_widget.main_layout
+        self.main_layout: CardLayout = self.main_widget.main_layout
 
         self.setWidget(self.main_widget)
 
@@ -2056,14 +2105,15 @@ class DeckWidget(QWidget):
 
     Args:
         deck_type (str): Type of Deck {Side/Extra/Main} for label purposes.
-        parent (DeckSlider): to access and manage the layout within the
-                             DeckViewer and allow scrolling the layout
+        parent (DeckSlider): to access and manage the layout within
+            DeckViewer and allow scrolling the layout
         main_layout (CardLayout): Varied card layout depending on the deck
             type.
     """
+
     order_changed = pyqtSignal()
 
-    def __init__(self, deck_type: DeckType | None, parent: DeckSlider):
+    def __init__(self, deck_type: DeckType | None, parent: DeckSlider) -> None:
         super().__init__(parent)
 
         self.scroll_area = parent
@@ -2072,18 +2122,16 @@ class DeckWidget(QWidget):
         if isinstance(deck_type, DeckType):
             self.name = deck_type.name.title() + " Deck"
 
-        if (deck_type != DeckType.EXTRA
-           and not isinstance(parent.parent(), CardSearch)):
+        if deck_type != DeckType.EXTRA and not isinstance(parent.parent(), CardSearch):
             self.setAcceptDrops(True)
 
         if deck_type == DeckType.MAIN:
             self.main_layout = CardLayout(parent=self, scroll=(True, False))
         else:
-            self.main_layout = CardLayout(rows=1, parent=self,
-                                          scroll=(False, True))
+            self.main_layout = CardLayout(rows=1, parent=self, scroll=(False, True))
         self.setLayout(self.main_layout)
 
-    def paintEvent(self, event: QPaintEvent | None):
+    def paintEvent(self, event: QPaintEvent | None) -> None:
         """Draws the basic paint event of the widget.
 
         Extended with a QPainter in order to draw the deck name on the
@@ -2121,20 +2169,25 @@ class DeckWidget(QWidget):
 
         painter.setOpacity(0.1)
         painter.setPen(Qt.GlobalColor.white)
-        painter.drawText(new_rect, (Qt.TextFlag.TextWordWrap
-                         | Qt.AlignmentFlag.AlignCenter), self.name)
+        painter.drawText(
+            new_rect,
+            (Qt.TextFlag.TextWordWrap | Qt.AlignmentFlag.AlignCenter),
+            self.name,
+        )
 
-    def dragEnterEvent(self, event: QDragEnterEvent):
+    def dragEnterEvent(self, event: QDragEnterEvent | None) -> None:
         """Event Manager for a widget dragged around the layout."""
+        if event is None:
+            return
         event.acceptProposedAction()
 
-    def dropEvent(self, event: QDropEvent | None):
+    def dropEvent(self, event: QDropEvent | None) -> None:
         """Checks for a drop event and the position in order to choose where
         to put the widget.
 
         Args:
             event (QDropEvent): Event produced by the widget getting dragged
-                                around.
+                around.
         """
 
         if event is None:
@@ -2248,20 +2301,18 @@ class CardLayout(QLayout):
         return QSize(width, height)
 
     def itemAt(self, index: int) -> QLayoutItem | None:
-        """Overriden abstract method in order to select items in the layout.
-        """
+        """Overriden abstract method in order to select items in the layout."""
         try:
             return self._card_items[index]
         except IndexError:
-            return
+            return None
 
     def takeAt(self, index: int) -> QLayoutItem | None:
-        """Overriden abstract method in order to remove items from the layout.
-        """
+        """Overriden abstract method in order to remove items from the layout."""
         try:
             return self._card_items.pop(index)
         except IndexError:
-            return
+            return None
 
     def count(self) -> int:
         """For checking the size of the layout and managing sizes.
@@ -2325,11 +2376,7 @@ class CardLayout(QLayout):
             item.setGeometry(QRect(pt, size))
             pt.setX(pt.x() + width + hor_spacing)
 
-    def sizing(
-        self,
-        rect: QRect,
-        spacing: int
-    ) -> tuple[int, int, int, int]:
+    def sizing(self, rect: QRect, spacing: int) -> tuple[int, int, int, int]:
         """This calculates the sizing for the layout iself and spaces it out
         accordingly.
 
@@ -2360,8 +2407,8 @@ class CardLayout(QLayout):
             height = self.heightForWidth(width)
 
         else:
-            full_height -= (spacing * 2)
-            full_width -= (spacing * 2)
+            full_height -= spacing * 2
+            full_width -= spacing * 2
             height = full_height // self.rows()
             width = self.widthForHeight(height)
             height = self.heightForWidth(width)

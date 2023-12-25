@@ -111,7 +111,7 @@ def clean_layout(layout: QLayout):
     """Removes and deletes widgets from the supplied layout.
 
     Args:
-        layout (QLayout): Any type of Qt Layout with widgets inserted.
+        layout (QLayout): Any type of Qt item Layout.
     """
     for i in range(layout.count()):
         item = layout.itemAt(i)
@@ -132,10 +132,10 @@ def check_item_validation(item: QLayoutItem | None) -> QWidget | None:
         QWidget | None: Either return None or the widget if it exists.
     """
     if item is None:
-        return
+        return None
     widget = item.widget()
     if widget is None:
-        return
+        return None
     return widget
 
 
