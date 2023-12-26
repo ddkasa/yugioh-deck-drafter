@@ -37,7 +37,6 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import QMessageBox
 
-
 from yugioh_deck_drafter import util
 
 
@@ -934,7 +933,7 @@ class ExtraSubMaterial(NamedTuple):
     def __hash__(self) -> int:
         return hash(str(self.name) + self.subtype)
 
-    def __eq__(self, other: "ExtraSubMaterial"):
+    def __eq__(self, other: 'ExtraSubMaterial') -> bool:
         return hash(self) == hash(other)
 
 

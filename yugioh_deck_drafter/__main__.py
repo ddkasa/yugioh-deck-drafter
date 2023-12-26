@@ -28,38 +28,18 @@ from typing import Final, Optional
 import pyperclip as clipboard
 from PyQt6.QtCore import QSignalBlocker, Qt, pyqtSlot
 from PyQt6.QtGui import QAction, QCursor, QPixmapCache
-from PyQt6.QtWidgets import (
-    QApplication,
-    QComboBox,
-    QDateEdit,
-    QDialog,
-    QFileDialog,
-    QFormLayout,
-    QHBoxLayout,
-    QInputDialog,
-    QLabel,
-    QListWidget,
-    QListWidgetItem,
-    QMainWindow,
-    QMenu,
-    QMessageBox,
-    QPushButton,
-    QSizePolicy,
-    QSlider,
-    QSpinBox,
-    QVBoxLayout,
-    QWidget,
-)
+from PyQt6.QtWidgets import (QApplication, QComboBox, QDateEdit, QDialog,
+                             QFileDialog, QFormLayout, QHBoxLayout,
+                             QInputDialog, QLabel, QListWidget,
+                             QListWidgetItem, QMainWindow, QMenu, QMessageBox,
+                             QPushButton, QSizePolicy, QSlider, QSpinBox,
+                             QVBoxLayout, QWidget)
 
 from yugioh_deck_drafter import util
 from yugioh_deck_drafter.modules.deck_drafter import DraftingDialog
-from yugioh_deck_drafter.modules.ygo_data import (
-    CardSetClass,
-    CardSetFilter,
-    CardSetModel,
-    DeckModel,
-    YugiObj,
-)
+from yugioh_deck_drafter.modules.ygo_data import (CardSetClass, CardSetFilter,
+                                                  CardSetModel, DeckModel,
+                                                  YugiObj)
 
 
 class MainWindow(QMainWindow):
