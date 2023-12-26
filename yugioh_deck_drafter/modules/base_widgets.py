@@ -1,4 +1,4 @@
-"""base_widgets.py
+"base_widgets.py
 
 All custom widgets and layouts for use when drafting the deck.
 """
@@ -48,7 +48,7 @@ class CardButton(QPushButton):
 
     Attributes:
         BASE_SIZE (QSize): Minimum size of the card for readibility.
-        ASPECT_RATION (float): Ratio of the card that allows for smooth
+        aspect_ration (float): ratio of the card that allows for smooth
             scaling.
         card_model (YGOCard): Holds all the metadata of the card itself.
         image (QPixmap): Holds the cover art inside an image.

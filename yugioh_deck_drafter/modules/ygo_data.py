@@ -18,6 +18,7 @@ Usage:
 
 """
 import enum
+import json
 import logging
 import re
 import sys
@@ -68,7 +69,7 @@ class CardSetClass(enum.Enum):
 
 
 class DeckType(enum.Enum):
-    """Enumeration for the DeckType"""
+    """Enumeration for the DeckType card are inserted into."""
 
     MAIN = enum.auto()
     EXTRA = enum.auto()
@@ -409,7 +410,7 @@ class YugiObj:
 
         return new_set
 
-    def log_request(self, sent_request: requests_cache.AnyResponse) -> None:
+    def log_request(self, sent_request: requests_cache.Response) -> None:
         """Logs request count and their urls.
 
         Args:
@@ -417,7 +418,8 @@ class YugiObj:
                 status.
         """
         self.total_requests += 1
-        if not hasattr(sent_request, "from_cache") or not sent_request.from_cache:
+        if (not hasattr(sent_request, "from_cache")
+            or not sent_request.from_cache):  # pyright: ignore[reportGeneralTypeIssues]
             self.out_going_requests += 1
             info = "Made an outgoing requests.Total so far: %s"
             logging.info(info, self.out_going_requests)
@@ -882,7 +884,10 @@ class YugiObj:
         return tuple(probabilities)
 
     def select_random_packs(
-        self, pack_set: list[CardSetModel], count_range: range, max_packs: int = 40
+        self,
+        pack_set: list[CardSetModel],
+        count_range: range,
+        max_packs: int = 40
     ) -> list[CardSetModel]:
         """Selects random packs based on the supplied criteria.
         Args:
@@ -933,7 +938,7 @@ class ExtraSubMaterial(NamedTuple):
     def __hash__(self) -> int:
         return hash(str(self.name) + self.subtype)
 
-    def __eq__(self, other: 'ExtraSubMaterial') -> bool:
+    def __eq__(self, other) -> bool:
         return hash(self) == hash(other)
 
 
@@ -1348,8 +1353,8 @@ class ExtraSearch:
         target = og_target
         try:
             singular = self.ENGINE.singular_noun(target)
-        except pydantic_core._pydantic_core.ValidationError:
-            raise KeyError(f"{target} not found in any subtype.")
+        except pydantic_core._pydantic_core.ValidationError:  # pylint: disable=protected-access
+            raise KeyError(f"{target} not found in any subtype.")  # py
 
         if isinstance(singular, str):
             target = singular
@@ -1457,6 +1462,5 @@ if __name__ == "__main__":
     fmt = "%(levelname)s | .\\yugioh_deck_drafter"
     fmt += "\\%(module)s.py:%(lineno)d -> %(message)s"
     logging.basicConfig(stream=sys.stderr, level=logging.DEBUG, format=fmt)
-    import json
 
     test_assocciated_cards()

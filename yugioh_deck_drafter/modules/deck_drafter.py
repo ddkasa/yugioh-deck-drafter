@@ -2,7 +2,6 @@
 
 Main GUI modules that manages information display and drafting rules.
 
-
 Classes:
     AspectRatio: Basic NamedTuple for storing card aspect ratio.
     PackOpeningState: Main DataModel for storing drafting information and
@@ -75,7 +74,7 @@ class PackOpeningState:
     selections: list[CardButton | CardModel] = field(default_factory=list)
 
 
-class DraftingDialog(QDialog):
+class DraftingDialog(QDialog):  # pylint: ignore[too-many-pulbic-methods]
     """Dialog for opening packs and managing drafting in general, as it has a
     core function that cycles and keep track of whats been added and removed in
     the meanwhile.
@@ -1029,6 +1028,8 @@ class CardSearch(QDialog):
                 lambda: self.highlight_search(self.search_box.text())
             )
         )
+
+        return None
 
     def highlight_search(self, name: str) -> None:
         """Hightlights the item searched for inside the search box and toggls
