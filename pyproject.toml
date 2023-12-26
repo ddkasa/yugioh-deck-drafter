@@ -30,6 +30,7 @@ bandit = "^1.7.5"
 pylint = "^3.0.2"
 coverage = "^7.3.2"
 pylint-venv = "^3.0.3"
+types-requests = "^2.31.0.10"
 
 [poetry.virtualenvs]
 in-project = true
