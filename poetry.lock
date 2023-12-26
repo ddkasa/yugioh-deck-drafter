@@ -1241,6 +1241,17 @@ spelling = ["pyenchant (>=3.2,<4.0)"]
 testutils = ["gitpython (>3)"]
 
 [[package]]
+name = "pylint-venv"
+version = "3.0.3"
+description = "pylint-venv provides a Pylint init-hook to use the same Pylint installation with different virtual environments."
+optional = false
+python-versions = ">=3.7.2,<4.0.0"
+files = [
+    {file = "pylint_venv-3.0.3-py3-none-any.whl", hash = "sha256:3650960aa8dc93fad2377df66a616f41242d37c03178a34964ebb927ca83e1f7"},
+    {file = "pylint_venv-3.0.3.tar.gz", hash = "sha256:df12a17fca39a94acc1c9a0f1dcf68141e90fe685569d78c046695c67c4e55fa"},
+]
+
+[[package]]
 name = "pyperclip"
 version = "1.8.2"
 description = "A cross-platform clipboard module for Python. (Only handles plain text for now.)"
@@ -1801,4 +1812,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = "3.12"
-content-hash = "660c8fda6f85b85c68e24e61ef801600796722edcc53efa6d07171338ed7211d"
+content-hash = "859084ffcb0d4be5b4f85b07ba0381adacb2ee722f02673db3c32a59ef9cb41b"

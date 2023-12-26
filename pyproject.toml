@@ -28,6 +28,10 @@ pyinstaller = "^6.2.0"
 bandit = "^1.7.5"
 pylint = "^3.0.2"
 coverage = "^7.3.2"
+pylint-venv = "^3.0.3"
+
+[poetry.virtualenvs]
+in-project = true
 
 [build-system]
 requires = ["poetry-core"]
