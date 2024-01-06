@@ -1,8 +1,18 @@
-"base_widgets.py
+"""base_widgets.py
 
 All custom widgets and layouts for use when drafting the deck.
-"""
 
+Classes:
+    AspectRatio: General data structure for keeping aspect ratio for widgets.
+    CardButton: Responsible for handling anything todo with a single card,
+        such as display, and related card search.
+    DeckViewer: Widget & Dialog for viewing and managing deck viewer.
+    CardLayout: Custom layout class for managing cards and keeping them in the
+        right aspect ratio.
+    DeckSlider: Widget for displaying decks in a scrollable format.
+    DeckWidget: Widget that contains the layout with in the DeckSlider.
+    CardSearch: Widget for search specific card subtypes and adding them.
+"""
 
 from __future__ import annotations
 
@@ -11,22 +21,64 @@ import logging
 import math
 from typing import TYPE_CHECKING, Final, NamedTuple, Optional
 
-from PyQt6.QtCore import (QMimeData, QPoint, QRect, QRectF, QSignalBlocker,
-                          QSize, Qt, pyqtSignal, pyqtSlot)
-from PyQt6.QtGui import (QAction, QBrush, QCursor, QDrag, QDragEnterEvent,
-                         QDropEvent, QFont, QImage, QKeyEvent, QMouseEvent,
-                         QPainter, QPaintEvent, QPen, QPixmap)
-from PyQt6.QtWidgets import (QApplication, QCompleter, QDialog, QHBoxLayout,
-                             QLabel, QLayout, QLayoutItem, QLineEdit, QMenu,
-                             QMessageBox, QProgressDialog, QPushButton,
-                             QScrollArea, QSizePolicy, QStyle,
-                             QStyleOptionButton, QVBoxLayout, QWidget)
+from PyQt6.QtCore import (
+    QMimeData,
+    QPoint,
+    QRect,
+    QRectF,
+    QSignalBlocker,
+    QSize,
+    Qt,
+    pyqtSignal,
+    pyqtSlot,
+)
+from PyQt6.QtGui import (
+    QAction,
+    QBrush,
+    QCursor,
+    QDrag,
+    QDragEnterEvent,
+    QDropEvent,
+    QFont,
+    QImage,
+    QKeyEvent,
+    QMouseEvent,
+    QPainter,
+    QPaintEvent,
+    QPen,
+    QPixmap,
+)
+from PyQt6.QtWidgets import (
+    QApplication,
+    QCompleter,
+    QDialog,
+    QHBoxLayout,
+    QLabel,
+    QLayout,
+    QLayoutItem,
+    QLineEdit,
+    QMenu,
+    QMessageBox,
+    QProgressDialog,
+    QPushButton,
+    QScrollArea,
+    QSizePolicy,
+    QStyle,
+    QStyleOptionButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 from yugioh_deck_drafter import util
-from yugioh_deck_drafter.modules.ygo_data import (CardModel, CardType,
-                                                  DamageValues, DeckModel,
-                                                  DeckType, ExtraMaterial,
-                                                  ExtraSubMaterial)
+from yugioh_deck_drafter.modules.ygo_data import (
+    CardModel,
+    CardType,
+    DamageValues,
+    DeckModel,
+    DeckType,
+    ExtraMaterial,
+    ExtraSubMaterial,
+)
 
 if TYPE_CHECKING:
     from yugioh_deck_drafter.modules.deck_drafter import DraftingDialog
@@ -150,7 +202,9 @@ class CardButton(QPushButton):
 
         return assocc_data
 
-    def paintEvent(self, event: QPaintEvent | None) -> None:  # pyright: ignore[reportIncompatibleMethodOverride]
+    def paintEvent(
+        self, event: QPaintEvent | None
+    ) -> None:  # pyright: ignore[reportIncompatibleMethodOverride]
         """Overriden PaintEvent for painting the card art and additonal
         effects.
 
@@ -219,8 +273,7 @@ class CardButton(QPushButton):
         if not self.isChecked():
             return
 
-        if (isinstance(self.viewer, DeckViewer)
-            and self.viewer.discard):
+        if isinstance(self.viewer, DeckViewer) and self.viewer.discard:
             rect = self.rect()
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             painter.drawLine(rect.topLeft(), rect.bottomRight())
@@ -335,10 +388,11 @@ class CardButton(QPushButton):
             if not assocc.materials and assocc.count == -1:
                 continue
 
-            if (assocc.materials
+            if (
+                assocc.materials
                 and isinstance(assocc.materials[0], ExtraSubMaterial)
-                and assocc.materials[0].subtype == "name"):
-
+                and assocc.materials[0].subtype == "name"
+            ):
                 action = self.create_add_action(assocc.materials[0].name)
             else:
                 action = self.search_menu(assocc)
@@ -469,8 +523,10 @@ class CardButton(QPushButton):
         items = []
         for item in self.assocc:
             for sub_item in item.materials:
-                if (not isinstance(sub_item, ExtraSubMaterial)
-                   or sub_item.subtype != "name"):
+                if (
+                    not isinstance(sub_item, ExtraSubMaterial)
+                    or sub_item.subtype != "name"
+                ):
                     continue
                 items.append(sub_item.name)
 
@@ -573,8 +629,9 @@ class CardButton(QPushButton):
             self.setChecked(True)
             self.setDisabled(True)
 
-    def mouseMoveEvent(self, event: QMouseEvent | None) -> None:  # pyright: ignore[reportIncompatibleMethodOverride]
-
+    def mouseMoveEvent(
+        self, event: QMouseEvent | None
+    ) -> None:  # pyright: ignore[reportIncompatibleMethodOverride]
         """Movement function for when dragging cards between decks."""
         if event is None:
             return
@@ -805,7 +862,9 @@ class DeckViewer(QDialog):
         """Overriden to avoid type hint issues."""
         return super().parent()  # type: ignore
 
-    def keyPressEvent(self, event: QKeyEvent | None) -> None:   # pyright: ignore[reportIncompatibleMethodOverride]
+    def keyPressEvent(
+        self, event: QKeyEvent | None
+    ) -> None:  # pyright: ignore[reportIncompatibleMethodOverride]
         """Overriden to prevent the user from accidently quitting the
         application if there are a lot of random keystrokes.
 
@@ -986,8 +1045,9 @@ class CardLayout(QLayout):
         marg = self.spacing()
         self.setContentsMargins(marg, marg, marg, marg)
 
-    def addItem(self, cards: QLayoutItem | None) -> None:  # pyright: ignore[reportIncompatibleMethodOverride]
-
+    def addItem(
+        self, cards: QLayoutItem | None
+    ) -> None:  # pyright: ignore[reportIncompatibleMethodOverride]
         """Overriden abstract method for adding item to the list.
 
         Args:
@@ -1056,15 +1116,16 @@ class CardLayout(QLayout):
         reimplemented in the future."""
         return self.sizeHint()
 
-    def heightForWidth(self, width: int) -> int:  # pyright: ignore[reportIncompatibleMethodOverride]
-
+    def heightForWidth(
+        self, width: int
+    ) -> int:  # pyright: ignore[reportIncompatibleMethodOverride]
         """Returns the height in ratio of the given width.
 
         Args:
             width (int): Width of the current item.
 
         Returns:
-            int: Height of the item scaled on the preset ratio.
+            int: Height of the item scaled on the preset ratio.Yu-Gi-Oh
         """
         return math.ceil(width * self._aspect_ratio.height)
 
@@ -1079,8 +1140,9 @@ class CardLayout(QLayout):
         """
         return math.ceil(height * self._aspect_ratio.width)
 
-    def setGeometry(self, rect: QRect) -> None:  # pyright: ignore[reportIncompatibleMethodOverride]
-
+    def setGeometry(
+        self, rect: QRect
+    ) -> None:  # pyright: ignore[reportIncompatibleMethodOverride]
         """Main function of the layout which determines the sizing, direction
         and positioning of each layout item.
 
@@ -1179,7 +1241,7 @@ class CardLayout(QLayout):
             return self._rows
         return math.ceil(self.count() / self._columns)
 
-    def insert_item(self, item: QLayoutItem | None, index: int):
+    def insert_item(self, item: QLayoutItem | None, index: int) -> None:
         """Moves an item to the given index.
 
         Args:
@@ -1290,8 +1352,9 @@ class DeckWidget(QWidget):
             self.main_layout = CardLayout(rows=1, parent=self, scroll=(False, True))
         self.setLayout(self.main_layout)
 
-    def paintEvent(self, event: QPaintEvent | None) -> None:  # pyright: ignore[reportIncompatibleMethodOverride]
-
+    def paintEvent(
+        self, event: QPaintEvent | None
+    ) -> None:  # pyright: ignore[reportIncompatibleMethodOverride]
         """Draws the basic paint event of the widget.
 
         Extended with a QPainter in order to draw the deck name on the
@@ -1335,15 +1398,17 @@ class DeckWidget(QWidget):
             self.name,
         )
 
-    def dragEnterEvent(self, event: QDragEnterEvent | None) -> None:  # pyright: ignore[reportIncompatibleMethodOverride]
-
+    def dragEnterEvent(
+        self, event: QDragEnterEvent | None
+    ) -> None:  # pyright: ignore[reportIncompatibleMethodOverride]
         """Event Manager for a widget dragged around the layout."""
         if event is None:
             return
         event.acceptProposedAction()
 
-    def dropEvent(self, event: QDropEvent | None) -> None:  # pyright: ignore[reportIncompatibleMethodOverride]
-
+    def dropEvent(
+        self, event: QDropEvent | None
+    ) -> None:  # pyright: ignore[reportIncompatibleMethodOverride]
         """Checks for a drop event and the position in order to choose where
         to put the widget.
 
