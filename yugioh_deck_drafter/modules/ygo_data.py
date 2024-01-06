@@ -418,8 +418,9 @@ class YugiObj:
                 status.
         """
         self.total_requests += 1
-        if (not hasattr(sent_request, "from_cache")
-            or not sent_request.from_cache):  # pyright: ignore[reportGeneralTypeIssues]
+        if (
+            not hasattr(sent_request, "from_cache") or not sent_request.from_cache
+        ):  # pyright: ignore[reportGeneralTypeIssues]
             self.out_going_requests += 1
             info = "Made an outgoing requests.Total so far: %s"
             logging.info(info, self.out_going_requests)
@@ -884,10 +885,7 @@ class YugiObj:
         return tuple(probabilities)
 
     def select_random_packs(
-        self,
-        pack_set: list[CardSetModel],
-        count_range: range,
-        max_packs: int = 40
+        self, pack_set: list[CardSetModel], count_range: range, max_packs: int = 40
     ) -> list[CardSetModel]:
         """Selects random packs based on the supplied criteria.
         Args:
@@ -1353,7 +1351,9 @@ class ExtraSearch:
         target = og_target
         try:
             singular = self.ENGINE.singular_noun(target)
-        except pydantic_core._pydantic_core.ValidationError:  # pylint: disable=protected-access
+        except (
+            pydantic_core._pydantic_core.ValidationError
+        ):  # pylint: disable=protected-access
             raise KeyError(f"{target} not found in any subtype.")  # py
 
         if isinstance(singular, str):
@@ -1372,9 +1372,11 @@ class ExtraSearch:
 
         if clean_target in ETL(AttributeType):
             return "attribute", AttributeType[clean_target.upper()]
-        elif clean_target in ETL(RaceType):
+
+        if clean_target in ETL(RaceType):
             return "race", RaceType[clean_target.upper().replace(" ", "_")]
-        elif clean_target + " monster" in ETL(CardType):
+
+        if clean_target + " monster" in ETL(CardType):
             clean_target = clean_target + " monster"
             return ("card_type", CardType[clean_target.upper().replace(" ", "_")])
 
@@ -1408,7 +1410,7 @@ class ExtraSearch:
         for k, v in self.COMPARISONS.items():
             if f"Level {self.req_level} " + k in desc:
                 return v
-            elif element != "Level" and k in desc:
+            if element != "Level" and k in desc:
                 return v
 
         return ""
@@ -1426,7 +1428,7 @@ def test_assocciated_cards() -> None:
         d = json.loads(file.read())
 
     checked_extra = Path("cache/checked_cards.json")
-    with checked_extra.open("r") as file:
+    with checked_extra.open("r", encoding="utf-8") as file:
         check_cards = json.loads(file.read())
 
     checked_desc = set()
@@ -1454,7 +1456,7 @@ def test_assocciated_cards() -> None:
             check_cards[model.name] = False
         checked_desc.add(desc)
 
-        with checked_extra.open("w") as file:
+        with checked_extra.open("w", encoding="utf-8") as file:
             file.write(json.dumps(check_cards))
 
 
