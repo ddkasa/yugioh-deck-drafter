@@ -369,6 +369,7 @@ class YugiObj:
         self.request_urls: list[str] = []
         self.card_sets = self.get_card_set()
         self.arche_types = self.get_arche_type_list()
+        self.all_card = self.request_all_cards()
 
     def get_card_set(self) -> list[CardSetModel]:
         """Collects all card sets for selection.
@@ -409,6 +410,24 @@ class YugiObj:
         new_set.sort(key=lambda x: x.set_name)
 
         return new_set
+
+    def request_all_cards(self) -> tuple[CardModel, ...]:
+        logging.info("Requests all cards from YGOProDeck")
+        endpoint = "https://db.ygoprodeck.com/api/v7/cardinfo.php"
+
+        request = self.CACHE.get(endpoint, timeout=30)
+        self.log_request(request)
+        if request.status_code != 200:
+            logging.critical("Failed to fetch all cards. Exiting")
+            logging.critical("Status Code: %s", request.status_code)
+            QMessageBox.critical(
+                None, "Critical", "Failed to Grab Card Sets. Retry Later"
+            )
+            sys.exit()
+
+        data = self.convert_raw_to_card_model(None, request.json()["data"])
+
+        return tuple(data)
 
     def log_request(self, sent_request: requests_cache.Response) -> None:
         """Logs request count and their urls.
@@ -1417,8 +1436,9 @@ class ExtraSearch:
 
 
 def test_assocciated_cards() -> None:
-    """Testing function for assccoiated card parsing. Requires a json import to
-    function
+    """UtilityTesting function for assccoiated card parsing.
+
+    Requires the json module to be imported in order to work.
     """
     ygo_data = YugiObj()
 
