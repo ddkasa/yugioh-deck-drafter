@@ -1,17 +1,29 @@
-import pytest
-from pytestqt.qtbot import QtBot
+"""Module for testing main functions of the app testing most of the process.
+
+Tests most of the functions require for crafting a deck except search
+    and more detailed assocciated card additions.
+"""
+
+
 from random import choice
+from typing import Generator
 
+import pytest
 from PyQt6.QtCore import Qt
-
-from PyQt6.QtWidgets import QInputDialog, QWidget, QApplication
+from PyQt6.QtWidgets import QInputDialog, QWidget
+from pytestqt.qtbot import QtBot
 
 from yugioh_deck_drafter import __main__ as main
 from yugioh_deck_drafter.modules import deck_drafter, ygo_data
 
 
 @pytest.fixture()
-def main_window_fill():
+def main_window_fill() -> Generator:
+    """Main window function that returns the main window with prefilled sets.
+
+    Yields:
+        MainWindow: Returns the widget with a bunch of sets prefilled.
+    """
     main_window = main.MainWindow(debug=True)
     main_window.show()
 
@@ -28,7 +40,21 @@ def main_window_fill():
     yield main_window
 
 
-def find_dialog(parent: QWidget, dialog: type):
+def find_dialog(parent: QWidget, dialog: type) -> QWidget:
+    """Looks for modal dialog that is parented to a widget.
+
+    Args:
+        parent (QWidget): Parent widget where the target widget type should
+            be located.
+        dialog (Type): Target Dialog type that should be attached to the
+            widget.
+
+    Returns:
+        QDialog: If the widget is present and parented.
+
+    Raises:
+        AttributeError: If the target widget type is not present.
+    """
     children = parent.children()
     for item in children:
         if isinstance(item, dialog):
@@ -38,7 +64,16 @@ def find_dialog(parent: QWidget, dialog: type):
         raise AttributeError("No Dialog present in children.")
 
 
-def test_main_win_functionality(main_window_fill: main.MainWindow, qtbot):
+def test_main_win_functionality(
+    main_window_fill: main.MainWindow, qtbot: QtBot
+) -> None:
+    """Tests if the main window was filled correctly with sets.
+
+    Args:
+        main_window_fill (MainWindow): Helper function to prefill the main
+            window with sets.
+        qtbot (QtBot): QtBot for managing the widget while testing.
+    """
     main_window = main_window_fill
     main_window.show()
 
@@ -47,7 +82,13 @@ def test_main_win_functionality(main_window_fill: main.MainWindow, qtbot):
     assert main_window.sel_card_set_list.count() == 4
 
 
-def test_dialog(main_window_fill: main.MainWindow, qtbot):
+def test_dialog(main_window_fill: main.MainWindow, qtbot: QtBot) -> None:
+    """Tests if the drafting dialog spawns if the conditions are met for it.
+
+    Args:
+        main_window_fill (MainWindow): Prefilled MainWindow ready for testing.
+        qtbot (QtBot): QtBot Instance for testing the widget.
+    """
     main_window = main_window_fill
     qtbot.addWidget(main_window)
     main_window.show()
@@ -62,7 +103,21 @@ def test_dialog(main_window_fill: main.MainWindow, qtbot):
     assert isinstance(dia, main.DraftingDialog)
 
 
-def test_card_picks(main_window_fill: main.MainWindow, qtbot: QtBot):
+def test_card_picks(main_window_fill: main.MainWindow, qtbot: QtBot) -> None:
+    """Tests the basic drafting process start to end.
+
+    Misses out on more advanced functions like searching and adding assocciated
+        cards.
+
+    Generally will run through most of it smoothly, but need to be careful with
+        this test and possible precache for it in the future as otherwise it
+        might be rate limited.
+
+    Args:
+        main_window_fill (MainWindow): Pre-filled main for testing the drafting
+            process with.
+        qtbot (QtBot): For managing the widgets used for testing.
+    """
     pack_count = 40
 
     main_window = main_window_fill
