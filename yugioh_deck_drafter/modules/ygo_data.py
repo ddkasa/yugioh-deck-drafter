@@ -412,6 +412,11 @@ class YugiObj:
         return new_set
 
     def request_all_cards(self) -> tuple[CardModel, ...]:
+        """Method for requesting all cards for easier requests and querying.
+
+        Returns:
+            tuple: A tuple of all cards converted into dataclasses.
+        """
         logging.info("Requests all cards from YGOProDeck")
         endpoint = "https://db.ygoprodeck.com/api/v7/cardinfo.php"
 
