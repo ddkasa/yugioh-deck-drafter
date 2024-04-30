@@ -1,14 +1,12 @@
 # Yu-Gi-Oh Custom Deck Drafter
 
-Python app built on top of PyQt for drafting custom decks with a custom rule set.
-
-## Idea
+> Python app built on top of PyQt for drafting custom decks with a custom rule set.
 
 Me and a few friends played the YGO TCG with a more relaxed drafting rule set. Which is supposed to create more varied and interesting games. This app is supposed speed that up by working out the drafting rules for you and generating the right packs and exporting the final deck to a format compatible with [YGO Omega](https://omega.duelistsunite.org) | [Repo](https://github.com/duelists-unite/omega-releases).
 
 ---
 
-# Usage
+## Usage
 
 1. Download the latest/relevant launcher from [Releases](https://github.com/ddkasa/yugioh-deck-drafter/releases)
 2. Load the application. It will generate some folders on the first start for caching and autosaving purposes.
@@ -30,13 +28,28 @@ Me and a few friends played the YGO TCG with a more relaxed drafting rule set. W
 - A card is picked if its highlighted in a red outline or if in the discard stage its also crossed out.
 
 ---
+## Development
 
-# API
+Development is run through [Poetry](https://github.com/python-poetry/poetry).
+
+### Basic Environment
+1. `$ poetry shell` to add/launch a virtual environment.
+2. `$ poetry install` to install the dependencies.
+3. `$ poetry run project` to launch the application.
+
+### Testing
+1. `$ poetry run pytest` to run tests. *Warning: No rate limiting is implemented at the moment.*
+
+### Distribution
+1. `$ poetry run build` to build the executable for the current platform.
+
+
+## API
 
 This is the API that get used for retrieving set/card information/art:
 [YGOPRODECK](https://ygoprodeck.com/api-guide/)
 
-# License
+## License
 
 The literal and graphical information presented in this application about Yu-Gi-Oh!, including card images, booster pack art and card text/information, is copyright 4K Media Inc, a subsidiary of Konami Digital Entertainment, Inc. This application is not produced by, endorsed by, supported by, or affiliated with 4k Media or Konami Digital Entertainment.
 
