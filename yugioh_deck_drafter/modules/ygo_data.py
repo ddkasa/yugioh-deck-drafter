@@ -17,6 +17,7 @@ Usage:
         randomise selections.
 
 """
+
 import enum
 import json
 import logging
@@ -394,7 +395,12 @@ class YugiObj:
             d = item.get("tcg_date")
             if d is None:
                 continue
-            new_date = datetime.strptime(d, "%Y-%m-%d").date()
+            try:
+                new_date = datetime.strptime(d, "%Y-%m-%d").date()
+            except ValueError:
+                logging.exception("%s")
+                new_date = datetime.today().date()
+
             name = item["set_name"]
             set_class = self.infer_set_types(name)
             set_model = CardSetModel(
@@ -442,9 +448,7 @@ class YugiObj:
                 status.
         """
         self.total_requests += 1
-        if (
-            not hasattr(sent_request, "from_cache") or not sent_request.from_cache
-        ):  # pyright: ignore[reportGeneralTypeIssues]
+        if not hasattr(sent_request, "from_cache") or not sent_request.from_cache:  # pyright: ignore[reportGeneralTypeIssues]
             self.out_going_requests += 1
             info = "Made an outgoing requests.Total so far: %s"
             logging.info(info, self.out_going_requests)
@@ -950,7 +954,6 @@ class YugiObj:
 
 
 class ExtraSubMaterial(NamedTuple):
-
     """Type of extra deck summoning material."""
 
     name: str | enum.Enum
@@ -1375,9 +1378,7 @@ class ExtraSearch:
         target = og_target
         try:
             singular = self.ENGINE.singular_noun(target)
-        except (
-            pydantic_core._pydantic_core.ValidationError
-        ):  # pylint: disable=protected-access
+        except pydantic_core._pydantic_core.ValidationError:  # pylint: disable=protected-access
             raise KeyError(f"{target} not found in any subtype.")  # py
 
         if isinstance(singular, str):
